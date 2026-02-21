@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.database import init_db
-from app.api.routes import prices, items
+from app.api.routes import prices, items, inventory, youpin
 
 app = FastAPI(
     title="CS2 Inventory Manager",
@@ -21,6 +21,8 @@ app.add_middleware(
 
 app.include_router(prices.router, prefix="/api/prices", tags=["prices"])
 app.include_router(items.router, prefix="/api/items", tags=["items"])
+app.include_router(inventory.router, prefix="/api/inventory", tags=["inventory"])
+app.include_router(youpin.router, prefix="/api/youpin", tags=["youpin"])
 
 
 @app.on_event("startup")

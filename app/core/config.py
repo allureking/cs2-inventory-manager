@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     steam_api_key: str = ""
     steam_steam_id: str = ""
 
+    # Steam 登录 Cookie（用于访问完整库存，含7天保护期物品）
+    # 获取方式见 .env.example
+    steam_login_secure: str = ""
+    steam_session_id: str = ""
+
     database_url: str = "sqlite+aiosqlite:///./cs2_inventory.db"
 
     host: str = "0.0.0.0"
@@ -19,6 +24,10 @@ class Settings(BaseSettings):
 
     # SteamDT API
     steamdt_base_url: str = "https://open.steamdt.com"
+
+    # 悠悠有品
+    youpin_token: str = ""
+    youpin_device_id: str = ""
 
 
 settings = Settings()
