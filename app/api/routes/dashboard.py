@@ -76,7 +76,7 @@ async def _get_latest_prices(
                     PriceSnapshot.snapshot_minute == latest_subq.c.latest_minute,
                 ),
             )
-            .where(PriceSnapshot.sell_price.isnot(None))
+            .where(PriceSnapshot.sell_price.isnot(None), PriceSnapshot.sell_price > 0)
             .group_by(PriceSnapshot.market_hash_name)
         )
     ).all()
@@ -149,18 +149,23 @@ async def _run_price_refresh() -> None:
 
 @router.post("/refresh-prices")
 async def trigger_refresh_prices():
-    """触发后台市价全量刷新（同一时刻只允许一个任务运行）。"""
-    if _refresh_state["status"] == "running":
-        return {"started": False, "message": "已有刷新任务正在运行", "state": _refresh_state}
-
-    asyncio.create_task(_run_price_refresh())
-    return {"started": True, "message": "价格刷新已启动", "state": _refresh_state}
+    """
+    触发市价全量刷新（优先使用悠悠官方市价 API，fallback SteamDT）。
+    前端请改用 /api/youpin/market/refresh（直接调悠悠 API，数据更准确）。
+    此接口保留兼容性，内部转发至悠悠市价刷新。
+    """
+    from app.services.youpin import market_refresh_state, bulk_refresh_market_prices
+    if market_refresh_state["status"] == "running":
+        return {"started": False, "message": "已有刷新任务正在运行", "state": market_refresh_state}
+    asyncio.create_task(bulk_refresh_market_prices(None))
+    return {"started": True, "message": "价格刷新已启动（悠悠有品官方价格）", "state": market_refresh_state}
 
 
 @router.get("/refresh-prices/status")
 async def get_refresh_status():
     """查询当前刷新进度（供前端轮询）。"""
-    return _refresh_state
+    from app.services.youpin import market_refresh_state
+    return market_refresh_state
 
 
 @router.get("/overview")
@@ -298,6 +303,11 @@ async def get_overview(db: AsyncSession = Depends(get_db)):
         except ValueError:
             pass
 
+    # --- Token 状态（快速检测，不强制等待）---
+    from app.services.youpin import market_refresh_state
+    price_refresh_status = market_refresh_state["status"]
+    price_refresh_progress = market_refresh_state["progress"]
+
     return {
         "total_active": active_count,
         "status_breakdown": {
@@ -321,8 +331,8 @@ async def get_overview(db: AsyncSession = Depends(get_db)):
         "pnl": round(pnl, 2) if pnl is not None else None,
         "pnl_pct": round(pnl_pct, 2) if pnl_pct is not None else None,
         "price_updated_at": price_updated_at,
-        "price_refresh_status": _refresh_state["status"],
-        "price_refresh_progress": _refresh_state["progress"],
+        "price_refresh_status": price_refresh_status,
+        "price_refresh_progress": price_refresh_progress,
     }
 
 

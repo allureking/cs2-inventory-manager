@@ -92,16 +92,12 @@
     }
     .tbl-row {
       border-bottom: 1px solid rgba(51,65,85,0.15);
-      transition: background 0.12s;
+      transition: background 0.15s, box-shadow 0.15s;
       cursor: pointer;
-      position: relative;
     }
-    .tbl-row:hover { background: rgba(59,130,246,0.04); }
-    .tbl-row:hover::before {
-      content: '';
-      position: absolute;
-      left: 0; top: 0; bottom: 0; width: 2px;
-      background: linear-gradient(180deg, #3b82f6, #8b5cf6);
+    .tbl-row:hover {
+      background: rgba(59,130,246,0.07);
+      box-shadow: inset 3px 0 0 rgba(99,102,241,0.55), 0 1px 10px rgba(0,0,0,0.22);
     }
 
     /* ── Stat card hover ─────────────────────────────────────────────── */
@@ -201,6 +197,11 @@
           :class="activeTab==='overview' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'">
           资产概览
         </button>
+        <button @click="activeTab='listing'; loadShelf()"
+          class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
+          :class="activeTab==='listing' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'">
+          上架管理
+        </button>
       </nav>
 
       <!-- Right side -->
@@ -250,8 +251,25 @@
     </div>
   </header>
 
+  <!-- ── Token 过期警告横幅 ─────────────────────────────────────────────── -->
+  <template x-teleport="body">
+    <div x-show="tokenExpired" x-cloak
+      class="fixed top-14 left-0 right-0 z-30 flex items-center justify-between px-6 py-2.5 text-sm"
+      style="background: rgba(185,28,28,0.95); border-bottom: 1px solid rgba(239,68,68,0.4);">
+      <div class="flex items-center gap-2.5">
+        <svg class="w-4 h-4 text-red-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+        <span class="text-red-100 font-medium">悠悠有品 Token 已过期，所有同步/上架功能不可用</span>
+        <span class="text-red-300 text-xs">→ 登录 www.youpin898.com → DevTools → Network → 复制 Authorization header 中的 Bearer Token → 更新 .env 重启服务</span>
+      </div>
+      <button @click="tokenExpired=false" class="text-red-300 hover:text-white text-lg leading-none ml-4">✕</button>
+    </div>
+  </template>
+
   <!-- ── Main ───────────────────────────────────────────────────────────── -->
-  <main class="max-w-[1800px] mx-auto px-6 py-6">
+  <main class="max-w-[1800px] mx-auto px-6 py-6" :class="tokenExpired ? 'pt-14' : ''"  >
 
     <!-- ════════════ OVERVIEW TAB ════════════ -->
     <div x-show="activeTab==='overview'" class="fade-up">
@@ -459,6 +477,212 @@
             <span class="font-mono text-purple-300 ml-1" x-text="overview.status_breakdown?.in_storage??0"></span>
             (<span x-text="pct(overview.status_breakdown?.in_storage,overview.total_active)+'%'"></span>)
           </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════ LISTING TAB ════════════ -->
+    <div x-show="activeTab==='listing'" class="fade-up">
+
+      <!-- Sub-tab bar -->
+      <div class="flex items-center gap-3 mb-4">
+        <div class="flex gap-0.5 p-1 rounded-xl" style="background: rgba(20,30,48,0.7); border: 1px solid rgba(51,65,85,0.3)">
+          <button @click="shelfTab='sell'; loadShelf()"
+            class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+            :class="shelfTab==='sell' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'">
+            出售货架 <span class="font-mono ml-1 text-slate-400" x-text="sellShelf.total??0"></span>
+          </button>
+          <button @click="shelfTab='lease'; loadShelf()"
+            class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+            :class="shelfTab==='lease' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'">
+            出租货架 <span class="font-mono ml-1 text-slate-400" x-text="leaseShelf.total??0"></span>
+          </button>
+        </div>
+
+        <button @click="loadShelf()" :disabled="shelfLoading"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs transition-all disabled:opacity-40"
+          style="background:rgba(51,65,85,0.3); border:1px solid rgba(51,65,85,0.4); color:#94a3b8">
+          <svg class="w-3 h-3" :class="shelfLoading?'animate-spin':''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          刷新货架
+        </button>
+
+        <div class="ml-auto text-[11px] text-slate-700">
+          智能上架功能需先完成「同步数据」→「同步模板ID」以获取市场定价参考
+        </div>
+      </div>
+
+      <!-- Template ID sync reminder (if needed) -->
+      <div x-show="!shelfLoading && (sellShelf.total === 0 && leaseShelf.total === 0)" x-cloak
+        class="card p-5 mb-4 text-center">
+        <p class="text-slate-500 text-sm mb-3">货架为空，或尚未同步模板ID（用于市场定价）</p>
+        <button @click="syncTemplateIds()" :disabled="syncing"
+          class="px-5 py-2 rounded-xl text-sm font-medium text-white transition-all disabled:opacity-40"
+          style="background:linear-gradient(135deg,#7c3aed,#6d28d9); box-shadow:0 0 16px rgba(124,58,237,0.25)">
+          <span x-show="!syncing">同步模板ID（用于市场定价）</span>
+          <span x-show="syncing" x-cloak>同步中…</span>
+        </button>
+      </div>
+
+      <!-- Shelf table -->
+      <div class="card overflow-hidden">
+        <div class="tbl-wrap">
+          <table class="w-full text-xs" style="border-collapse: separate; border-spacing: 0;">
+            <thead>
+              <tr style="border-bottom: 1px solid rgba(51,65,85,0.3);">
+                <th class="py-3 px-4 text-left font-normal text-slate-700 uppercase tracking-wider">饰品</th>
+                <template x-if="shelfTab==='sell'">
+                  <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">出售价</th>
+                </template>
+                <template x-if="shelfTab==='lease'">
+                  <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">日租金</th>
+                </template>
+                <template x-if="shelfTab==='lease'">
+                  <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">押金</th>
+                </template>
+                <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">磨损</th>
+                <th class="py-3 px-3 text-left font-normal text-slate-700 uppercase tracking-wider">状态</th>
+                <th class="py-3 px-4 w-24 text-center font-normal text-slate-700 uppercase tracking-wider">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-if="shelfLoading">
+                <tr><td colspan="6" class="py-16 text-center" style="color:#334155">
+                  <div class="flex flex-col items-center gap-2">
+                    <div class="w-5 h-5 rounded-full border-2 animate-spin" style="border-color:rgba(51,65,85,0.4);border-top-color:#3b82f6"></div>
+                    <span class="text-xs">加载货架…</span>
+                  </div>
+                </td></tr>
+              </template>
+              <template x-if="!shelfLoading && currentShelf.length === 0">
+                <tr><td colspan="6" class="py-16 text-center text-xs" style="color:#334155">货架为空</td></tr>
+              </template>
+              <template x-for="item in currentShelf" :key="item.commodityId || item.CommodityId">
+                <tr class="tbl-row">
+                  <td class="py-2.5 px-4">
+                    <div class="flex items-center gap-2.5">
+                      <div class="min-w-0">
+                        <p class="text-slate-100 font-medium leading-tight truncate" style="max-width:300px"
+                          x-text="item.commodityHashName || item.marketHashName || item.market_hash_name || '—'"></p>
+                        <p class="text-[11px] mt-0.5 truncate" style="color:#334155; max-width:300px"
+                          x-text="item.name || item.Name || ''"></p>
+                      </div>
+                    </div>
+                  </td>
+                  <template x-if="shelfTab==='sell'">
+                    <td class="py-2.5 px-3 text-right font-semibold text-slate-100"
+                      x-text="'¥' + fmt(item.price || item.Price || item.sellPrice)"></td>
+                  </template>
+                  <template x-if="shelfTab==='lease'">
+                    <td class="py-2.5 px-3 text-right font-semibold text-emerald-300"
+                      x-text="'¥' + fmt(item.leaseUnitPrice || item.LeaseUnitPrice) + '/天'"></td>
+                  </template>
+                  <template x-if="shelfTab==='lease'">
+                    <td class="py-2.5 px-3 text-right font-mono text-slate-400"
+                      x-text="'¥' + fmt(item.leaseDeposit || item.LeaseDeposit)"></td>
+                  </template>
+                  <td class="py-2.5 px-3 text-right font-mono" style="color:#475569"
+                    x-text="(item.abrade || item.Abrade) != null ? parseFloat(item.abrade || item.Abrade).toFixed(4) : '—'"></td>
+                  <td class="py-2.5 px-3">
+                    <span class="px-2 py-0.5 rounded-full text-[11px]"
+                      style="background:rgba(34,197,94,0.1); color:#4ade80">在售</span>
+                  </td>
+                  <td class="py-2.5 px-4 text-center">
+                    <button @click="delistItem(item.commodityId || item.CommodityId)"
+                      class="text-[11px] px-2 py-1 rounded-lg transition-all"
+                      style="background:rgba(239,68,68,0.08); color:rgba(239,68,68,0.6); border:1px solid rgba(239,68,68,0.15)"
+                      @mouseenter="$el.style.background='rgba(239,68,68,0.15)'"
+                      @mouseleave="$el.style.background='rgba(239,68,68,0.08)'">
+                      下架
+                    </button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Smart List panel (from inventory) -->
+      <div class="card p-5 mt-4">
+        <p class="text-[11px] text-slate-600 uppercase tracking-widest mb-3">从持仓快速上架</p>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+          <div>
+            <p class="text-[11px] text-slate-600 mb-1">Asset ID</p>
+            <input x-model="quickList.assetId" type="text" placeholder="Steam Asset ID"
+              class="w-full px-3 py-2 rounded-xl text-xs border" />
+          </div>
+          <div>
+            <p class="text-[11px] text-slate-600 mb-1">Template ID</p>
+            <input x-model.number="quickList.templateId" type="number" placeholder="悠悠模板ID"
+              class="w-full px-3 py-2 rounded-xl text-xs border" />
+          </div>
+          <div>
+            <p class="text-[11px] text-slate-600 mb-1">上架模式</p>
+            <select x-model="quickList.mode" class="w-full py-2 pl-3 rounded-xl text-xs border">
+              <option value="sell">仅出售</option>
+              <option value="lease">仅出租</option>
+              <option value="both">可租可售</option>
+            </select>
+          </div>
+          <div>
+            <p class="text-[11px] text-slate-600 mb-1">购入价（止盈用）</p>
+            <input x-model.number="quickList.buyPrice" type="number" placeholder="元" step="0.01"
+              class="w-full px-3 py-2 rounded-xl text-xs border" />
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex items-center gap-2">
+            <span class="text-[11px] text-slate-600">止盈率</span>
+            <input x-model.number="quickList.takeProfitRatio" type="number" placeholder="0 = 不启用" step="0.01" min="0"
+              class="w-24 px-2 py-1.5 rounded-lg text-xs border" />
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-[11px] text-slate-600">低一分</span>
+            <label class="pill-toggle" :class="quickList.useUndercut ? 'active-blue' : ''"
+              @click="quickList.useUndercut = !quickList.useUndercut">
+              <div class="relative toggle-track" :style="quickList.useUndercut ? 'background:#1d4ed8' : 'background:#1e293b'">
+                <div class="toggle-thumb" :style="quickList.useUndercut ? 'transform:translateX(12px)' : ''"></div>
+              </div>
+            </label>
+          </div>
+          <button @click="previewListPrice()" :disabled="!quickList.templateId || quickList.previewing"
+            class="px-4 py-2 rounded-xl text-xs font-medium transition-all disabled:opacity-40"
+            style="background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.2); color:#a5b4fc">
+            预览定价
+          </button>
+          <button @click="smartListItem()" :disabled="!quickList.assetId || !quickList.templateId || quickList.listing"
+            class="px-4 py-2 rounded-xl text-xs font-semibold text-white transition-all disabled:opacity-40"
+            style="background:linear-gradient(135deg,#059669,#047857); box-shadow:0 0 14px rgba(5,150,105,0.2)">
+            <span x-show="!quickList.listing">智能上架</span>
+            <span x-show="quickList.listing" x-cloak>上架中…</span>
+          </button>
+        </div>
+        <!-- Preview result -->
+        <div x-show="quickList.preview" x-cloak class="mt-3 p-3 rounded-xl text-xs"
+          style="background:rgba(10,18,35,0.7); border:1px solid rgba(51,65,85,0.25)">
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <p class="text-slate-600 mb-0.5">建议出售价</p>
+              <p class="font-semibold text-slate-100" x-text="quickList.preview?.suggested_sell ? '¥'+fmt(quickList.preview.suggested_sell) : '—'"></p>
+            </div>
+            <div x-show="quickList.preview?.suggested_lease">
+              <p class="text-slate-600 mb-0.5">建议租金/押金</p>
+              <p class="font-semibold text-emerald-300"
+                x-text="quickList.preview?.suggested_lease ? '¥'+fmt(quickList.preview.suggested_lease.lease_unit)+'/天  押金¥'+fmt(quickList.preview.suggested_lease.deposit) : '—'"></p>
+            </div>
+          </div>
+          <div class="mt-2" x-show="quickList.preview?.market_sell_top5?.length">
+            <p class="text-slate-700 mb-1">市场前5档</p>
+            <div class="flex gap-2 flex-wrap">
+              <template x-for="p in (quickList.preview?.market_sell_top5||[])" :key="p.price">
+                <span class="px-2 py-0.5 rounded-full text-[11px]" style="background:rgba(51,65,85,0.3); color:#94a3b8"
+                  x-text="'¥'+fmt(p.price)"></span>
+              </template>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -917,6 +1141,20 @@
         refreshProgress: 0,
         _refreshPollTimer: null,
 
+        tokenExpired: false,
+        syncing: false,
+
+        // Listing tab
+        shelfTab: 'sell',
+        shelfLoading: false,
+        sellShelf: { items: [], total: 0 },
+        leaseShelf: { items: [], total: 0 },
+        quickList: {
+          assetId: '', templateId: null, mode: 'sell',
+          buyPrice: 0, takeProfitRatio: 0, useUndercut: true,
+          previewing: false, listing: false, preview: null,
+        },
+
         toast: { msg: '', type: 'success' },
 
         // ── Computed page numbers ──────────────────────────────────────
@@ -932,8 +1170,10 @@
         // ── Init ──────────────────────────────────────────────────────
         async init() {
           await this.loadAll();
+          // 检查 token 状态
+          this._checkToken();
           // 如果服务器上已有刷新任务在跑，接续轮询
-          const r = await fetch('/api/dashboard/refresh-prices/status');
+          const r = await fetch('/api/youpin/market/status');
           if (r.ok) {
             const s = await r.json();
             if (s.status === 'running') {
@@ -942,6 +1182,20 @@
               this._startRefreshPoll();
             }
           }
+        },
+
+        async _checkToken() {
+          try {
+            const r = await fetch('/api/youpin/token/status');
+            if (r.ok) {
+              const s = await r.json();
+              this.tokenExpired = !s.valid;
+            }
+          } catch {}
+        },
+
+        get currentShelf() {
+          return this.shelfTab === 'sell' ? (this.sellShelf.items || []) : (this.leaseShelf.items || []);
         },
 
         async loadAll() {
@@ -1072,22 +1326,117 @@
           clearInterval(this._refreshPollTimer);
           this._refreshPollTimer = setInterval(async () => {
             try {
-              const r = await fetch('/api/dashboard/refresh-prices/status');
+              const r = await fetch('/api/youpin/market/status');
               if (!r.ok) return;
               const s = await r.json();
               this.refreshProgress = s.progress;
-              if (s.status === 'done' || s.status === 'error') {
+              if (s.status === 'done' || s.status === 'error' || s.status === 'token_expired') {
                 clearInterval(this._refreshPollTimer);
                 this.refreshing = false;
                 if (s.status === 'done') {
                   this.showToast('市价刷新完成 ✓');
                   await this.loadAll();
+                } else if (s.status === 'token_expired') {
+                  this.tokenExpired = true;
+                  this.showToast('Token 已过期，市价刷新中断', 'error');
                 } else {
                   this.showToast('市价刷新失败：' + (s.error || '未知错误'), 'error');
                 }
               }
             } catch {}
           }, 2500);
+        },
+
+        // ── Listing tab ───────────────────────────────────────────────────
+        async loadShelf() {
+          this.shelfLoading = true;
+          try {
+            const [sr, lr] = await Promise.all([
+              fetch('/api/listing/shelf/sell?page_size=100'),
+              fetch('/api/listing/shelf/lease?page_size=100'),
+            ]);
+            if (sr.ok) this.sellShelf = await sr.json();
+            if (lr.ok) this.leaseShelf = await lr.json();
+          } catch {}
+          finally { this.shelfLoading = false; }
+        },
+
+        async syncTemplateIds() {
+          this.syncing = true;
+          try {
+            const r = await fetch('/api/youpin/sync/template-ids', { method: 'POST' });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.detail || '同步失败');
+            this.showToast(`模板ID同步完成：更新 ${d.synced} 件，映射 ${d.unique_names_mapped || 0} 个品类`);
+          } catch (e) {
+            this.showToast('同步失败：' + e.message, 'error');
+          }
+          finally { this.syncing = false; }
+        },
+
+        async delistItem(commodityId) {
+          if (!commodityId || !confirm('确认下架该物品？')) return;
+          try {
+            const r = await fetch(`/api/listing/${commodityId}`, { method: 'DELETE' });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.detail || '下架失败');
+            this.showToast('下架成功');
+            await this.loadShelf();
+          } catch (e) {
+            this.showToast('下架失败：' + e.message, 'error');
+          }
+        },
+
+        async previewListPrice() {
+          if (!this.quickList.templateId) return;
+          this.quickList.previewing = true;
+          try {
+            const p = new URLSearchParams({
+              template_id: this.quickList.templateId,
+              buy_price: this.quickList.buyPrice || 0,
+              take_profit_ratio: this.quickList.takeProfitRatio || 0,
+            });
+            if (this.quickList.abrade) p.set('abrade', this.quickList.abrade);
+            const r = await fetch('/api/listing/preview?' + p);
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.detail || '预览失败');
+            this.quickList.preview = d;
+          } catch (e) {
+            this.showToast('预览失败：' + e.message, 'error');
+          }
+          finally { this.quickList.previewing = false; }
+        },
+
+        async smartListItem() {
+          if (!this.quickList.assetId || !this.quickList.templateId) return;
+          this.quickList.listing = true;
+          try {
+            const r = await fetch('/api/listing/smart', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                asset_id: this.quickList.assetId,
+                template_id: this.quickList.templateId,
+                mode: this.quickList.mode,
+                buy_price: this.quickList.buyPrice || 0,
+                take_profit_ratio: this.quickList.takeProfitRatio || 0,
+                use_undercut: this.quickList.useUndercut,
+              }),
+            });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.detail || '上架失败');
+            if (d.ok) {
+              const priceInfo = d.sell_price ? `出售价 ¥${this.fmt(d.sell_price)}` : `租金 ¥${this.fmt(d.lease_info?.lease_unit)}/天`;
+              this.showToast(`上架成功 ${priceInfo}`);
+              this.quickList.assetId = '';
+              await this.loadShelf();
+            } else {
+              this.showToast(d.error || '上架失败', 'error');
+            }
+          } catch (e) {
+            this.showToast('上架失败：' + e.message, 'error');
+          }
+          finally { this.quickList.listing = false; }
         },
 
         // ── Import ────────────────────────────────────────────────────

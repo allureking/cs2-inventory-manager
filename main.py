@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.database import init_db
-from app.api.routes import prices, items, inventory, youpin
+from app.api.routes import prices, items, inventory, youpin, listing
 from app.api.routes import dashboard
 
 # ── 定时任务（部署到服务器后取消注释）──────────────────────────────────────────
@@ -65,6 +65,7 @@ app.include_router(prices.router, prefix="/api/prices", tags=["prices"])
 app.include_router(items.router, prefix="/api/items", tags=["items"])
 app.include_router(inventory.router, prefix="/api/inventory", tags=["inventory"])
 app.include_router(youpin.router, prefix="/api/youpin", tags=["youpin"])
+app.include_router(listing.router, prefix="/api/listing", tags=["listing"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
