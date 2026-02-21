@@ -26,3 +26,6 @@ __pycache__/
 
 # Logs
 *.log
+
+# Local dev notes (personal session notes, not for repo)
+DEV_NOTES.md
