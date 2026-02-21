@@ -133,6 +133,9 @@ class InventoryItem(Base):
     youpin_order_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     youpin_commodity_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True, index=True)
 
+    # 磨损值（用于精确匹配买入记录，0.0 ~ 1.0，无磨损物品为 None）
+    abrade: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
     # 成本（Phase 3）
     purchase_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     purchase_date: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)

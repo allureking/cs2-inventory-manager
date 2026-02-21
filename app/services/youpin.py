@@ -29,7 +29,7 @@ import httpx
 from Crypto.Cipher import AES, PKCS1_v1_5
 from Crypto.PublicKey import RSA
 from Crypto.Util.Padding import pad, unpad
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -217,6 +217,22 @@ def _parse_hash_name(record: dict) -> Optional[str]:
     return detail.get("commodityHashName") or None
 
 
+def _parse_abrade(record: dict) -> Optional[float]:
+    """
+    从 productDetail.abrade / productDetail.commodityAbrade 提取磨损值。
+    无磨损物品（印花/武器箱/钥匙等）返回 None。
+    """
+    detail = record.get("productDetail") or {}
+    raw = detail.get("abrade") or detail.get("commodityAbrade")
+    if raw:
+        try:
+            v = float(raw)
+            return v if v > 0 else None
+        except (TypeError, ValueError):
+            pass
+    return None
+
+
 def _parse_price(record: dict) -> Optional[float]:
     """totalAmount 单位为分（1/100 元），转换为元"""
     v = record.get("totalAmount")
@@ -293,6 +309,16 @@ async def import_stock_records(db: AsyncSession) -> dict:
         is_merge = int(rec.get("isMerge") or 0)
         merge_count = int(rec.get("assetMergeCount") or 1) or 1
 
+        # 磨损值（直接从顶层 abrade 字段读取，inventory/list 不走 productDetail）
+        abrade: Optional[float] = None
+        raw_abrade = rec.get("abrade")
+        if raw_abrade:
+            try:
+                v = float(raw_abrade)
+                abrade = v if v > 0 else None
+            except (TypeError, ValueError):
+                pass
+
         if not asset_id or not hash_name:
             skipped.append({"asset_id": asset_id, "hash_name": hash_name})
             continue
@@ -312,6 +338,7 @@ async def import_stock_records(db: AsyncSession) -> dict:
             item.asset_id = asset_id
             item.market_hash_name = hash_name
             item.name = name_cn
+            item.abrade = abrade
             # 不覆盖 purchase_price：由 import_buy_records 根据真实买入记录写入
         else:
             item = InventoryItem(
@@ -324,6 +351,7 @@ async def import_stock_records(db: AsyncSession) -> dict:
                 tradable=False,   # 保护期内不可交易
                 marketable=True,
                 status="in_steam",
+                abrade=abrade,
                 # purchase_price 留空，由 import_buy_records 填入
             )
             db.add(item)
@@ -331,6 +359,7 @@ async def import_stock_records(db: AsyncSession) -> dict:
         upserted.append({
             "asset_id": asset_id,
             "market_hash_name": hash_name,
+            "abrade": abrade,
             "is_merge": is_merge,
             "merge_count": merge_count,
         })
@@ -379,18 +408,68 @@ async def import_buy_records(db: AsyncSession) -> dict:
             continue
         price = _parse_price(rec)
         date_str = _parse_date(rec)
+        buy_abrade = _parse_abrade(rec)
+        detail = rec.get("productDetail") or {}
+        buy_commodity_id = detail.get("commodityId")
+        buy_asset_id = str(detail.get("assertId") or "").strip()
 
-        # 找未录入购入价的同名 inventory_item
-        result = await db.execute(
-            select(InventoryItem)
-            .where(
-                InventoryItem.market_hash_name == hash_name,
-                InventoryItem.purchase_price.is_(None),
-                InventoryItem.status.in_(["in_steam", "rented_out", "in_storage"]),
+        item = None
+
+        # ── 第一优先：commodityId 精确匹配（租出物品，唯一对应 youpin_commodity_id）──
+        if buy_commodity_id:
+            result = await db.execute(
+                select(InventoryItem)
+                .where(
+                    InventoryItem.youpin_commodity_id == buy_commodity_id,
+                    InventoryItem.purchase_price.is_(None),
+                    InventoryItem.status.in_(["in_steam", "rented_out", "in_storage"]),
+                )
+                .limit(1)
             )
-            .limit(1)
-        )
-        item = result.scalar_one_or_none()
+            item = result.scalar_one_or_none()
+
+        # ── 第二优先：steamAssetId 精确匹配（在库存物品，买入时的 asset_id 不变）──
+        if not item and buy_asset_id:
+            result = await db.execute(
+                select(InventoryItem)
+                .where(
+                    InventoryItem.asset_id == buy_asset_id,
+                    InventoryItem.class_id == "STEAM_PROTECTED",
+                    InventoryItem.purchase_price.is_(None),
+                    InventoryItem.status.in_(["in_steam", "rented_out", "in_storage"]),
+                )
+                .limit(1)
+            )
+            item = result.scalar_one_or_none()
+
+        # ── 第三优先：market_hash_name + 磨损值精确匹配（1e-8 容差，唯一识别物品）──
+        if not item and buy_abrade is not None:
+            result = await db.execute(
+                select(InventoryItem)
+                .where(
+                    InventoryItem.market_hash_name == hash_name,
+                    InventoryItem.purchase_price.is_(None),
+                    InventoryItem.status.in_(["in_steam", "rented_out", "in_storage"]),
+                    InventoryItem.abrade.isnot(None),
+                    func.abs(InventoryItem.abrade - buy_abrade) < 1e-8,
+                )
+                .limit(1)
+            )
+            item = result.scalar_one_or_none()
+
+        # ── 第四优先（降级）：market_hash_name 匹配（印花/武器箱等无磨损物品）──
+        if not item:
+            result = await db.execute(
+                select(InventoryItem)
+                .where(
+                    InventoryItem.market_hash_name == hash_name,
+                    InventoryItem.purchase_price.is_(None),
+                    InventoryItem.status.in_(["in_steam", "rented_out", "in_storage"]),
+                    InventoryItem.abrade.is_(None),
+                )
+                .limit(1)
+            )
+            item = result.scalar_one_or_none()
 
         if not item:
             not_found.append(hash_name)
@@ -527,6 +606,16 @@ async def import_lease_records(db: AsyncSession) -> dict:
         order_id = rec.get("orderId") or rec.get("orderNo")
         name_cn = info.get("name", hash_name or "")
 
+        # 磨损值
+        abrade: Optional[float] = None
+        raw_abrade = info.get("abrade")
+        if raw_abrade:
+            try:
+                v = float(raw_abrade)
+                abrade = v if v > 0 else None
+            except (TypeError, ValueError):
+                pass
+
         if not commodity_id or not hash_name:
             skipped.append(order_id)
             continue
@@ -538,10 +627,11 @@ async def import_lease_records(db: AsyncSession) -> dict:
         item = result.scalar_one_or_none()
 
         if item:
-            # 更新当前租出订单号和状态
+            # 更新当前租出订单号、状态和磨损值
             item.youpin_order_id = str(order_id) if order_id else item.youpin_order_id
             item.status = "rented_out"
             item.market_hash_name = hash_name
+            item.abrade = abrade
         else:
             # 新建（以 YOUPIN 为合成 class_id，commodity_id 为 instance_id）
             item = InventoryItem(
@@ -556,6 +646,7 @@ async def import_lease_records(db: AsyncSession) -> dict:
                 status="rented_out",
                 youpin_order_id=str(order_id) if order_id else None,
                 youpin_commodity_id=commodity_id,
+                abrade=abrade,
             )
             db.add(item)
 
