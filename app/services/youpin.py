@@ -246,10 +246,14 @@ async def import_stock_records(db: AsyncSession) -> dict:
 
     数据来源：POST /api/youpin/pc/inventory/list
     唯一键：class_id="STEAM_PROTECTED", instance_id=steamAssetId
-    purchase_price 来自 assetBuyPrice（每件单价，单位：元）
+
+    注意：不使用 assetBuyPrice 作为 purchase_price。
+    assetBuyPrice 是悠悠平台对同类型饰品计算的估算价（同一 market_hash_name
+    下所有物品共享同一价格，忽略 phase/pattern 差异），不准确。
+    purchase_price 由后续 import_buy_records 根据真实买入记录（buy/list）
+    按 market_hash_name（饰品类型+磨损）逐条匹配写入。
 
     isMerge=1 说明该行代表多件同款，assetMergeCount 为实际件数。
-    仅存储一条代表记录（purchase_price 为单件价格），如需展开可后续扩展。
     """
     from app.core.config import settings
 
@@ -286,20 +290,12 @@ async def import_stock_records(db: AsyncSession) -> dict:
         asset_id = str(rec.get("steamAssetId") or "").strip()
         hash_name = (rec.get("marketHashName") or "").strip()
         name_cn = (rec.get("name") or hash_name).strip()
-        buy_price_raw = rec.get("assetBuyPrice")
         is_merge = int(rec.get("isMerge") or 0)
         merge_count = int(rec.get("assetMergeCount") or 1) or 1
 
         if not asset_id or not hash_name:
             skipped.append({"asset_id": asset_id, "hash_name": hash_name})
             continue
-
-        purchase_price: Optional[float] = None
-        if buy_price_raw is not None:
-            try:
-                purchase_price = float(buy_price_raw)
-            except (TypeError, ValueError):
-                pass
 
         # upsert：以 (steam_id, "STEAM_PROTECTED", asset_id) 为唯一指纹
         result = await db.execute(
@@ -316,9 +312,7 @@ async def import_stock_records(db: AsyncSession) -> dict:
             item.asset_id = asset_id
             item.market_hash_name = hash_name
             item.name = name_cn
-            if purchase_price is not None and item.purchase_price is None:
-                item.purchase_price = purchase_price
-                item.purchase_platform = "YOUPIN"
+            # 不覆盖 purchase_price：由 import_buy_records 根据真实买入记录写入
         else:
             item = InventoryItem(
                 steam_id=steam_id,
@@ -330,15 +324,13 @@ async def import_stock_records(db: AsyncSession) -> dict:
                 tradable=False,   # 保护期内不可交易
                 marketable=True,
                 status="in_steam",
-                purchase_price=purchase_price,
-                purchase_platform="YOUPIN" if purchase_price is not None else None,
+                # purchase_price 留空，由 import_buy_records 填入
             )
             db.add(item)
 
         upserted.append({
             "asset_id": asset_id,
             "market_hash_name": hash_name,
-            "purchase_price": purchase_price,
             "is_merge": is_merge,
             "merge_count": merge_count,
         })
