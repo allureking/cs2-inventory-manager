@@ -2,10 +2,14 @@
 悠悠有品 PC-Web API 集成服务
 
 功能：
-  fetch_buy_records()   → 拉取购买记录
-  fetch_sell_records()  → 拉取出售记录
-  import_buy_records()  → 匹配 inventory_item，写入 purchase_price / purchase_date
-  import_sell_records() → 匹配 inventory_item，标记 status=sold
+  fetch_stock_records()  → 拉取在库存（Steam 保护期）物品
+  fetch_lease_records()  → 拉取租出中订单
+  fetch_buy_records()    → 拉取购买记录
+  fetch_sell_records()   → 拉取出售记录
+  import_stock_records() → 导入在库存物品（status=in_steam，写入 purchase_price）
+  import_lease_records() → 导入租出物品（status=rented_out）
+  import_buy_records()   → 匹配 inventory_item，写入 purchase_price / purchase_date
+  import_sell_records()  → 匹配 inventory_item，标记 status=sold
 
 Token 刷新：每次登录 PC 网页版后从 DevTools 复制新 token 写入 .env
 """
@@ -180,6 +184,31 @@ async def fetch_sell_records(page: int = 1, page_size: int = 30) -> list:
     return []
 
 
+async def fetch_stock_records(page: int = 1, page_size: int = 100) -> tuple:
+    """
+    拉取在库存（Steam 保护期）物品列表。
+    返回 (records: list, total_count: int, valuation: str)
+
+    端点：POST /api/youpin/pc/inventory/list
+    """
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            f"{YOUPIN_API}/api/youpin/pc/inventory/list",
+            headers=_headers(),
+            json={"pageIndex": page, "pageSize": page_size},
+        )
+    resp.raise_for_status()
+    body = resp.json()
+    code = body.get("Code", body.get("code"))
+    if code != 0:
+        raise RuntimeError(f"悠悠库存接口错误: {body.get('Msg', body.get('msg'))}")
+    data = body.get("Data", body.get("data")) or {}
+    records = data.get("itemsInfos", []) if isinstance(data, dict) else []
+    total_count = data.get("totalCount", 0) if isinstance(data, dict) else 0
+    valuation = data.get("valuation", "") if isinstance(data, dict) else ""
+    return records or [], total_count, valuation
+
+
 # ── DB 写入逻辑 ────────────────────────────────────────────────────────────
 
 def _parse_hash_name(record: dict) -> Optional[str]:
@@ -209,6 +238,119 @@ def _parse_date(record: dict) -> Optional[str]:
             except (TypeError, ValueError, OSError):
                 pass
     return None
+
+
+async def import_stock_records(db: AsyncSession) -> dict:
+    """
+    全量拉取在库存物品（Steam 保护期），写入 inventory_item（status=in_steam）。
+
+    数据来源：POST /api/youpin/pc/inventory/list
+    唯一键：class_id="STEAM_PROTECTED", instance_id=steamAssetId
+    purchase_price 来自 assetBuyPrice（每件单价，单位：元）
+
+    isMerge=1 说明该行代表多件同款，assetMergeCount 为实际件数。
+    仅存储一条代表记录（purchase_price 为单件价格），如需展开可后续扩展。
+    """
+    from app.core.config import settings
+
+    all_records: List[dict] = []
+    page = 1
+    PAGE_SIZE = 100
+    valuation = ""
+
+    try:
+        batch, total_count, valuation = await fetch_stock_records(page=1, page_size=PAGE_SIZE)
+    except Exception as e:
+        raise RuntimeError(f"拉取在库存记录失败: {e}")
+
+    all_records.extend(batch)
+    logger.info("在库存物品 totalCount=%d，开始分页拉取…", total_count)
+
+    # 继续拉取剩余页（以 batch 为空作为终止条件，因 totalCount 统计的是实际件数而非分页行数）
+    for page in range(2, 50):  # 上限 50 页（100 件/页 = 5000 件，远超实际）
+        try:
+            batch, _, _ = await fetch_stock_records(page=page, page_size=PAGE_SIZE)
+        except Exception as e:
+            logger.error("拉取在库存记录第 %d 页失败: %s", page, e)
+            break
+        if not batch:
+            break
+        all_records.extend(batch)
+
+    logger.info("共拉取在库存物品 %d 条记录", len(all_records))
+
+    steam_id = settings.steam_steam_id or "unknown"
+    upserted, skipped = [], []
+
+    for rec in all_records:
+        asset_id = str(rec.get("steamAssetId") or "").strip()
+        hash_name = (rec.get("marketHashName") or "").strip()
+        name_cn = (rec.get("name") or hash_name).strip()
+        buy_price_raw = rec.get("assetBuyPrice")
+        is_merge = int(rec.get("isMerge") or 0)
+        merge_count = int(rec.get("assetMergeCount") or 1) or 1
+
+        if not asset_id or not hash_name:
+            skipped.append({"asset_id": asset_id, "hash_name": hash_name})
+            continue
+
+        purchase_price: Optional[float] = None
+        if buy_price_raw is not None:
+            try:
+                purchase_price = float(buy_price_raw)
+            except (TypeError, ValueError):
+                pass
+
+        # upsert：以 (steam_id, "STEAM_PROTECTED", asset_id) 为唯一指纹
+        result = await db.execute(
+            select(InventoryItem).where(
+                InventoryItem.steam_id == steam_id,
+                InventoryItem.class_id == "STEAM_PROTECTED",
+                InventoryItem.instance_id == asset_id,
+            )
+        )
+        item = result.scalar_one_or_none()
+
+        if item:
+            item.status = "in_steam"
+            item.asset_id = asset_id
+            item.market_hash_name = hash_name
+            item.name = name_cn
+            if purchase_price is not None and item.purchase_price is None:
+                item.purchase_price = purchase_price
+                item.purchase_platform = "YOUPIN"
+        else:
+            item = InventoryItem(
+                steam_id=steam_id,
+                asset_id=asset_id,
+                class_id="STEAM_PROTECTED",
+                instance_id=asset_id,
+                market_hash_name=hash_name,
+                name=name_cn,
+                tradable=False,   # 保护期内不可交易
+                marketable=True,
+                status="in_steam",
+                purchase_price=purchase_price,
+                purchase_platform="YOUPIN" if purchase_price is not None else None,
+            )
+            db.add(item)
+
+        upserted.append({
+            "asset_id": asset_id,
+            "market_hash_name": hash_name,
+            "purchase_price": purchase_price,
+            "is_merge": is_merge,
+            "merge_count": merge_count,
+        })
+
+    await db.commit()
+
+    return {
+        "valuation": valuation,
+        "total_fetched": len(all_records),
+        "upserted": len(upserted),
+        "skipped": len(skipped),
+    }
 
 
 async def import_buy_records(db: AsyncSession) -> dict:
