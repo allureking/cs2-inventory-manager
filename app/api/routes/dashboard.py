@@ -130,6 +130,7 @@ async def list_items(
     search: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     priced_filter: Optional[str] = Query(None),  # "priced" | "unpriced"
+    exclude_sold: bool = Query(False),
     sort_by: str = Query("first_seen_at"),
     sort_order: str = Query("desc"),
     db: AsyncSession = Depends(get_db),
@@ -150,6 +151,8 @@ async def list_items(
     # 状态过滤
     if status:
         q = q.where(InventoryItem.status == status)
+    elif exclude_sold:
+        q = q.where(InventoryItem.status != "sold")
 
     # 定价过滤
     if priced_filter == "priced":
