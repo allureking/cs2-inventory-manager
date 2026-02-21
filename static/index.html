@@ -205,6 +205,7 @@
 
       <!-- Right side -->
       <div class="ml-auto flex items-center gap-3">
+        <!-- Import status -->
         <div x-show="importing" x-cloak class="flex items-center gap-2 text-xs text-slate-500">
           <span class="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse inline-block"></span>
           同步中，请耐心等待…
@@ -213,6 +214,27 @@
           上次同步 <span class="text-slate-500" x-text="lastImportAt"></span>
         </span>
 
+        <!-- Refresh Prices button -->
+        <div class="flex items-center gap-2">
+          <button @click="triggerRefreshPrices()" :disabled="refreshing"
+            class="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+            style="background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.2); color:#6ee7b7"
+            @mouseenter="if(!refreshing) $el.style.background='rgba(16,185,129,0.2)'"
+            @mouseleave="$el.style.background='rgba(16,185,129,0.12)'">
+            <svg class="w-3 h-3 flex-shrink-0" :class="refreshing?'animate-spin':''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span x-show="!refreshing">刷新市价</span>
+            <span x-show="refreshing" x-cloak x-text="refreshProgress + '%'"></span>
+          </button>
+          <span x-show="overview.price_updated_at && !refreshing" x-cloak
+            class="text-[10px] text-slate-700 hidden lg:block">
+            市价 <span class="text-slate-600" x-text="overview.price_updated_at"></span>
+          </span>
+        </div>
+
+        <!-- Import button -->
         <button @click="triggerImport()" :disabled="importing"
           class="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed text-white"
           style="background: linear-gradient(135deg,#1d4ed8,#2563eb); box-shadow: 0 0 20px rgba(37,99,235,0.3);"
@@ -332,6 +354,81 @@
             @mouseleave="$el.style.background='rgba(71,85,105,0.15)'">
             → 全部持仓
           </button>
+        </div>
+      </div>
+
+      <!-- P&L row -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+
+        <!-- Market Value -->
+        <div class="card stat-card p-5 relative overflow-hidden">
+          <div class="absolute -top-10 -right-10 w-40 h-40 rounded-full pointer-events-none"
+            style="background: radial-gradient(circle, rgba(16,185,129,0.07), transparent 70%)"></div>
+          <p class="text-[11px] text-slate-600 uppercase tracking-widest mb-2">当前市值</p>
+          <template x-if="overview.market_value > 0">
+            <div>
+              <p class="text-3xl font-bold text-emerald-300 mb-1">¥<span x-text="fmt(overview.market_value)"></span></p>
+              <p class="text-[11px] text-slate-700">
+                覆盖 <span class="text-emerald-500/70" x-text="overview.market_priced_count ?? 0"></span> 件
+                / 共 <span x-text="overview.total_active ?? 0"></span> 件
+              </p>
+            </div>
+          </template>
+          <template x-if="!overview.market_value">
+            <div>
+              <p class="text-2xl font-bold text-slate-700 mb-1">暂无市价</p>
+              <p class="text-[11px] text-slate-700">点击「刷新市价」获取实时数据</p>
+            </div>
+          </template>
+        </div>
+
+        <!-- P&L -->
+        <div class="card stat-card p-5 relative overflow-hidden">
+          <div class="absolute -top-10 -right-10 w-40 h-40 rounded-full pointer-events-none"
+            :style="overview.pnl > 0 ? 'background: radial-gradient(circle, rgba(16,185,129,0.07), transparent 70%)' : overview.pnl < 0 ? 'background: radial-gradient(circle, rgba(239,68,68,0.07), transparent 70%)' : ''"></div>
+          <p class="text-[11px] text-slate-600 uppercase tracking-widest mb-2">盈亏金额</p>
+          <template x-if="overview.pnl != null">
+            <div>
+              <p class="text-3xl font-bold mb-1"
+                :class="overview.pnl >= 0 ? 'text-emerald-300' : 'text-red-400'">
+                <span x-text="overview.pnl >= 0 ? '+¥' : '-¥'"></span><span x-text="fmt(Math.abs(overview.pnl))"></span>
+              </p>
+              <p class="text-[11px] text-slate-700">基于已有市价估算</p>
+            </div>
+          </template>
+          <template x-if="overview.pnl == null">
+            <div>
+              <p class="text-2xl font-bold text-slate-700 mb-1">—</p>
+              <p class="text-[11px] text-slate-700">需要成本价 + 市价数据</p>
+            </div>
+          </template>
+        </div>
+
+        <!-- P&L% -->
+        <div class="card stat-card p-5 relative overflow-hidden">
+          <div class="absolute -top-10 -right-10 w-40 h-40 rounded-full pointer-events-none"
+            :style="overview.pnl_pct > 0 ? 'background: radial-gradient(circle, rgba(16,185,129,0.07), transparent 70%)' : overview.pnl_pct < 0 ? 'background: radial-gradient(circle, rgba(239,68,68,0.07), transparent 70%)' : ''"></div>
+          <p class="text-[11px] text-slate-600 uppercase tracking-widest mb-2">盈亏率</p>
+          <template x-if="overview.pnl_pct != null">
+            <div>
+              <p class="text-3xl font-bold mb-1"
+                :class="overview.pnl_pct >= 0 ? 'text-emerald-300' : 'text-red-400'">
+                <span x-text="(overview.pnl_pct >= 0 ? '+' : '') + overview.pnl_pct + '%'"></span>
+              </p>
+              <div class="flex items-center gap-2 mt-2">
+                <div class="flex-1 h-1 rounded-full overflow-hidden" style="background: rgba(51,65,85,0.4)">
+                  <div class="h-full rounded-full transition-all duration-1000"
+                    :style="'width:' + Math.min(Math.abs(overview.pnl_pct ?? 0), 100) + '%; background:' + (overview.pnl_pct >= 0 ? 'linear-gradient(90deg,#10b981,#059669)' : 'linear-gradient(90deg,#ef4444,#dc2626)')"></div>
+                </div>
+              </div>
+            </div>
+          </template>
+          <template x-if="overview.pnl_pct == null">
+            <div>
+              <p class="text-2xl font-bold text-slate-700 mb-1">—</p>
+              <p class="text-[11px] text-slate-700">待市价刷新后计算</p>
+            </div>
+          </template>
         </div>
       </div>
 
@@ -486,6 +583,8 @@
                 <template x-if="dualPrice">
                   <th class="py-3 px-3 text-right font-normal uppercase tracking-wider" style="color:rgba(202,138,4,0.7)">手动价</th>
                 </template>
+                <th class="py-3 px-3 text-right font-normal uppercase tracking-wider" style="color:#047857">市价</th>
+                <th class="py-3 px-3 text-right font-normal uppercase tracking-wider" style="color:#475569">盈亏</th>
                 <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider hover:text-slate-400 cursor-pointer select-none transition-colors" @click="setSort('purchase_date')">
                   购入日期 <span x-text="sortIcon('purchase_date')"></span>
                 </th>
@@ -497,7 +596,7 @@
               <!-- Loading -->
               <template x-if="loading">
                 <tr>
-                  <td :colspan="dualPrice ? 9 : 8" class="py-24 text-center" style="color:#334155">
+                  <td :colspan="dualPrice ? 11 : 10" class="py-24 text-center" style="color:#334155">
                     <div class="flex flex-col items-center gap-3">
                       <div class="w-6 h-6 rounded-full border-2 border-t-blue-500 animate-spin" style="border-color: rgba(51,65,85,0.4); border-top-color: #3b82f6"></div>
                       <span class="text-xs">加载中…</span>
@@ -509,7 +608,7 @@
               <!-- Empty -->
               <template x-if="!loading && items.length === 0">
                 <tr>
-                  <td :colspan="dualPrice ? 9 : 8" class="py-24 text-center text-xs" style="color:#334155">
+                  <td :colspan="dualPrice ? 11 : 10" class="py-24 text-center text-xs" style="color:#334155">
                     没有找到匹配的饰品
                   </td>
                 </tr>
@@ -571,6 +670,31 @@
                       <span x-show="item.purchase_price_manual==null" style="color:#1e293b">—</span>
                     </td>
                   </template>
+
+                  <!-- Current market price -->
+                  <td class="py-2.5 px-3 text-right font-mono">
+                    <span x-show="item.current_price != null"
+                      class="text-emerald-400/80 text-xs"
+                      x-text="'¥'+fmt(item.current_price)"></span>
+                    <span x-show="item.current_price == null" style="color:#1e293b">—</span>
+                  </td>
+
+                  <!-- P&L -->
+                  <td class="py-2.5 px-3 text-right font-mono">
+                    <template x-if="item.pnl != null">
+                      <div class="flex flex-col items-end leading-tight">
+                        <span class="text-xs font-semibold"
+                          :class="item.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'"
+                          x-text="(item.pnl >= 0 ? '+¥' : '-¥') + fmt(Math.abs(item.pnl))"></span>
+                        <span class="text-[10px]"
+                          :class="item.pnl_pct >= 0 ? 'text-emerald-600' : 'text-red-600'"
+                          x-text="(item.pnl_pct >= 0 ? '+' : '') + item.pnl_pct + '%'"></span>
+                      </div>
+                    </template>
+                    <template x-if="item.pnl == null">
+                      <span style="color:#1e293b">—</span>
+                    </template>
+                  </td>
 
                   <!-- Date -->
                   <td class="py-2.5 px-3 text-right font-mono" style="color:#334155" x-text="item.purchase_date||'—'"></td>
@@ -789,6 +913,10 @@
         importResult: null,
         lastImportAt: '',
 
+        refreshing: false,
+        refreshProgress: 0,
+        _refreshPollTimer: null,
+
         toast: { msg: '', type: 'success' },
 
         // ── Computed page numbers ──────────────────────────────────────
@@ -804,6 +932,16 @@
         // ── Init ──────────────────────────────────────────────────────
         async init() {
           await this.loadAll();
+          // 如果服务器上已有刷新任务在跑，接续轮询
+          const r = await fetch('/api/dashboard/refresh-prices/status');
+          if (r.ok) {
+            const s = await r.json();
+            if (s.status === 'running') {
+              this.refreshing = true;
+              this.refreshProgress = s.progress;
+              this._startRefreshPoll();
+            }
+          }
         },
 
         async loadAll() {
@@ -907,6 +1045,49 @@
         async clearManual() {
           this.manualInput = '';
           await this.saveManual();
+        },
+
+        // ── Price Refresh ──────────────────────────────────────────────
+        async triggerRefreshPrices() {
+          if (this.refreshing) return;
+          this.refreshing = true;
+          this.refreshProgress = 0;
+          try {
+            const r = await fetch('/api/dashboard/refresh-prices', { method: 'POST' });
+            if (!r.ok) throw new Error(await r.text());
+            const d = await r.json();
+            if (!d.started && d.state?.status !== 'running') {
+              this.showToast('启动失败', 'error');
+              this.refreshing = false;
+              return;
+            }
+            this._startRefreshPoll();
+          } catch (e) {
+            this.refreshing = false;
+            this.showToast('刷新启动失败：' + e.message, 'error');
+          }
+        },
+
+        _startRefreshPoll() {
+          clearInterval(this._refreshPollTimer);
+          this._refreshPollTimer = setInterval(async () => {
+            try {
+              const r = await fetch('/api/dashboard/refresh-prices/status');
+              if (!r.ok) return;
+              const s = await r.json();
+              this.refreshProgress = s.progress;
+              if (s.status === 'done' || s.status === 'error') {
+                clearInterval(this._refreshPollTimer);
+                this.refreshing = false;
+                if (s.status === 'done') {
+                  this.showToast('市价刷新完成 ✓');
+                  await this.loadAll();
+                } else {
+                  this.showToast('市价刷新失败：' + (s.error || '未知错误'), 'error');
+                }
+              }
+            } catch {}
+          }, 2500);
         },
 
         // ── Import ────────────────────────────────────────────────────
