@@ -1,3 +1,4 @@
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -26,8 +27,19 @@ async def get_db() -> AsyncSession:
 
 
 async def init_db() -> None:
-    """创建所有表（首次启动时调用）"""
+    """创建所有表，并对已有 DB 自动补齐新增列（轻量 migration）"""
     from app.models import db_models  # noqa: F401 — 触发模型注册
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+        # 对已存在的表补加新列（SQLite 不支持修改约束，只能 ADD COLUMN）
+        _new_columns = [
+            "ALTER TABLE inventory_item ADD COLUMN youpin_order_id TEXT",
+            "ALTER TABLE inventory_item ADD COLUMN youpin_commodity_id INTEGER",
+        ]
+        for sql in _new_columns:
+            try:
+                await conn.execute(text(sql))
+            except Exception:
+                pass  # 列已存在则忽略

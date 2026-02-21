@@ -1,9 +1,10 @@
 """
 悠悠有品记录导入接口
 
-POST /api/youpin/import/buy    拉取购买记录 → 写入 purchase_price
-POST /api/youpin/import/sell   拉取出售记录 → 标记 status=sold
-POST /api/youpin/import/all    全量导入（buy + sell）
+POST /api/youpin/import/lease  拉取当前租出订单 → 写入 rented_out 持仓（主力数据源）
+POST /api/youpin/import/buy    拉取历史购买记录 → 补充 purchase_price
+POST /api/youpin/import/sell   拉取出售记录    → 标记 status=sold
+POST /api/youpin/import/all    全量导入（lease + buy + sell）
 
 GET  /api/youpin/preview/buy   预览购买记录（不写库，用于核对）
 GET  /api/youpin/preview/sell  预览出售记录（不写库）
@@ -52,6 +53,20 @@ async def preview_sell(page: int = 1):
 
 # ── 正式导入 ───────────────────────────────────────────────────────────────
 
+@router.post("/import/lease")
+async def import_lease(db: AsyncSession = Depends(get_db)):
+    """
+    拉取悠悠当前全部租出订单，按 commodity_id upsert 到 inventory_item（status=rented_out）。
+    这是最主要的持仓数据来源，应首先执行。
+    """
+    _check_token()
+    try:
+        result = await youpin_svc.import_lease_records(db)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return result
+
+
 @router.post("/import/buy")
 async def import_buy(db: AsyncSession = Depends(get_db)):
     """
@@ -81,10 +96,19 @@ async def import_sell(db: AsyncSession = Depends(get_db)):
 
 @router.post("/import/all")
 async def import_all(db: AsyncSession = Depends(get_db)):
-    """全量导入：购买记录 + 出售记录。"""
+    """
+    全量导入：
+      1. lease  → 同步当前租出持仓（主力，3000+ 件）
+      2. buy    → 补充购买成本价
+      3. sell   → 标记已出售物品
+    """
     _check_token()
     results = {}
-    for name, fn in [("buy", youpin_svc.import_buy_records), ("sell", youpin_svc.import_sell_records)]:
+    for name, fn in [
+        ("lease", youpin_svc.import_lease_records),
+        ("buy", youpin_svc.import_buy_records),
+        ("sell", youpin_svc.import_sell_records),
+    ]:
         try:
             results[name] = await fn(db)
         except Exception as e:

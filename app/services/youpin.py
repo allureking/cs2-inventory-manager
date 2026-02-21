@@ -112,6 +112,30 @@ def _headers() -> dict:
 
 # ── API 封装 ───────────────────────────────────────────────────────────────
 
+async def fetch_lease_records(page: int = 1, page_size: int = 30) -> tuple:
+    """
+    拉取当前租出中的订单列表。
+    返回 (records: list, total_count: int, stats_desc: str)
+    注意：API 最大 page_size=30，超出返回空列表。
+    """
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            f"{YOUPIN_API}/api/youpin/bff/trade/v1/order/lease/out/list",
+            headers=_headers(),
+            json={"pageIndex": page, "pageSize": page_size, "gameId": 730},
+        )
+    resp.raise_for_status()
+    body = resp.json()
+    code = body.get("Code", body.get("code"))
+    if code != 0:
+        raise RuntimeError(f"悠悠 lease_records 接口错误: {body.get('Msg', body.get('msg'))}")
+    data = body.get("Data", body.get("data")) or {}
+    records = data.get("orderDataList", []) if isinstance(data, dict) else []
+    total_count = data.get("totalCount", 0) if isinstance(data, dict) else 0
+    stats_desc = data.get("statisticsDataDesc", "") if isinstance(data, dict) else ""
+    return records, total_count, stats_desc
+
+
 async def fetch_buy_records(page: int = 1, page_size: int = 30) -> list:
     """拉取购买记录。注意：API 最大 page_size=30，超出返回空列表。"""
     async with httpx.AsyncClient(timeout=15) as client:
@@ -317,4 +341,101 @@ async def import_sell_records(db: AsyncSession) -> dict:
         "updated": len(updated),
         "not_found_in_db": len(not_found),
         "items": updated,
+    }
+
+
+async def import_lease_records(db: AsyncSession) -> dict:
+    """
+    全量拉取当前租出中订单，按 youpin_commodity_id 做 upsert，写入 inventory_item。
+
+    数据来源：POST /api/youpin/bff/trade/v1/order/lease/out/list
+    唯一键：youpin_commodity_id（每件物品对应一个 commodity，即使多次出租也只有一条记录）
+    状态标记：rented_out
+    身份标识：class_id="YOUPIN"，instance_id=str(commodity_id)（兼容现有唯一约束）
+    """
+    from app.core.config import settings
+
+    all_records: List[dict] = []
+    page = 1
+    PAGE_SIZE = 30
+    stats_desc = ""
+
+    # 第一页同时获取汇总统计
+    try:
+        batch, total_count, stats_desc = await fetch_lease_records(page=1, page_size=PAGE_SIZE)
+    except Exception as e:
+        raise RuntimeError(f"拉取租出记录失败: {e}")
+
+    all_records.extend(batch)
+    logger.info("租出记录总计 %d 条，开始分页拉取…", total_count)
+
+    # 继续拉取剩余页（total_count 是准确的）
+    total_pages = (total_count + PAGE_SIZE - 1) // PAGE_SIZE
+    for page in range(2, total_pages + 1):
+        try:
+            batch, _, _ = await fetch_lease_records(page=page, page_size=PAGE_SIZE)
+        except Exception as e:
+            logger.error("拉取租出记录第 %d 页失败: %s", page, e)
+            break
+        if not batch:
+            break
+        all_records.extend(batch)
+
+    logger.info("共拉取悠悠租出记录 %d 条", len(all_records))
+
+    steam_id = settings.steam_steam_id or "unknown"
+    upserted, skipped = [], []
+
+    for rec in all_records:
+        info = rec.get("commodityInfo") or {}
+        commodity_id = info.get("commodityId")
+        hash_name = info.get("commodityHashName")
+        order_id = rec.get("orderId") or rec.get("orderNo")
+        name_cn = info.get("name", hash_name or "")
+
+        if not commodity_id or not hash_name:
+            skipped.append(order_id)
+            continue
+
+        # 按 youpin_commodity_id 查询已有记录
+        result = await db.execute(
+            select(InventoryItem).where(InventoryItem.youpin_commodity_id == commodity_id)
+        )
+        item = result.scalar_one_or_none()
+
+        if item:
+            # 更新当前租出订单号和状态
+            item.youpin_order_id = str(order_id) if order_id else item.youpin_order_id
+            item.status = "rented_out"
+            item.market_hash_name = hash_name
+        else:
+            # 新建（以 YOUPIN 为合成 class_id，commodity_id 为 instance_id）
+            item = InventoryItem(
+                steam_id=steam_id,
+                asset_id=str(order_id),
+                class_id="YOUPIN",
+                instance_id=str(commodity_id),
+                market_hash_name=hash_name,
+                name=name_cn,
+                tradable=True,
+                marketable=True,
+                status="rented_out",
+                youpin_order_id=str(order_id) if order_id else None,
+                youpin_commodity_id=commodity_id,
+            )
+            db.add(item)
+
+        upserted.append({
+            "commodity_id": commodity_id,
+            "market_hash_name": hash_name,
+            "order_id": order_id,
+        })
+
+    await db.commit()
+
+    return {
+        "stats": stats_desc,
+        "total_fetched": len(all_records),
+        "upserted": len(upserted),
+        "skipped": len(skipped),
     }

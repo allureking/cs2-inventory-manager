@@ -129,6 +129,10 @@ class InventoryItem(Base):
     left_steam_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     last_synced_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
+    # 悠悠有品租赁标识（Youpin 来源物品，class_id="YOUPIN", instance_id=str(commodity_id)）
+    youpin_order_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    youpin_commodity_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True, index=True)
+
     # 成本（Phase 3）
     purchase_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     purchase_date: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
