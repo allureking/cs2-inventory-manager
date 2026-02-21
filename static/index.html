@@ -374,11 +374,11 @@
   <template x-teleport="body">
     <div x-show="panel" x-cloak>
       <!-- Backdrop -->
-      <div class="fixed inset-0 bg-black/40 z-50 backdrop-blur-sm" @click="panel = null"></div>
+      <div class="fixed inset-0 bg-black/40 backdrop-blur-sm" style="z-index:1000" @click="panel = null"></div>
 
       <!-- Side panel -->
-      <div class="fixed top-0 right-0 h-full w-[380px] bg-slate-850 border-l border-slate-700/60 z-50 overflow-y-auto shadow-2xl"
-        style="background:#111827" x-show="panel" class="panel-enter">
+      <div class="fixed top-0 right-0 h-full w-[380px] border-l border-slate-700/60 overflow-y-auto shadow-2xl panel-enter"
+        style="background:#111827; z-index:1001" x-show="panel">
         <div class="p-5 h-full flex flex-col">
           <!-- Header -->
           <div class="flex items-start gap-3 mb-4">
@@ -461,21 +461,50 @@
 
   <!-- ── Import Result Modal ────────────────────────────────────────────── -->
   <template x-teleport="body">
-    <div x-show="importResult" x-cloak class="fixed inset-0 bg-black/50 z-60 flex items-center justify-center backdrop-blur-sm" @click.self="importResult = null; loadAll()">
-      <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-80 shadow-2xl">
-        <div class="flex items-center gap-2 mb-4">
-          <div class="w-6 h-6 rounded-full bg-green-500/20 flex items-center justify-center text-green-400 text-xs">✓</div>
-          <h3 class="text-sm font-semibold text-white">导入完成</h3>
+    <div x-show="importResult" x-cloak
+      class="fixed inset-0 bg-black/60 flex items-center justify-center backdrop-blur-sm"
+      style="z-index:9999"
+      @click.self="importResult = null; loadAll()"
+      @keydown.escape.window="importResult = null; loadAll()">
+      <!-- Modal card: flex-col so button is always pinned at bottom -->
+      <div class="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl w-[420px] max-w-[95vw] max-h-[80vh] flex flex-col">
+        <!-- Header -->
+        <div class="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0">
+          <div class="flex items-center gap-2">
+            <div class="w-6 h-6 rounded-full bg-green-500/20 flex items-center justify-center text-green-400 text-xs">✓</div>
+            <h3 class="text-sm font-semibold text-white">导入完成</h3>
+          </div>
+          <button @click="importResult = null; loadAll()"
+            class="w-7 h-7 rounded-lg hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-colors text-base leading-none">✕</button>
         </div>
-        <div class="space-y-2 mb-5">
-          <template x-for="[k, v] in Object.entries(importResult || {})" :key="k">
-            <div class="flex justify-between items-center bg-slate-700/40 rounded-lg px-3 py-2">
-              <span class="text-xs text-slate-400" x-text="importLbl(k)"></span>
-              <span class="text-xs text-white font-medium" x-text="importVal(v)"></span>
+        <!-- Scrollable content -->
+        <div class="px-5 pb-3 overflow-y-auto flex-1 space-y-3">
+          <template x-for="[section, data] in Object.entries(importResult || {})" :key="section">
+            <div class="bg-slate-700/40 rounded-xl p-3">
+              <p class="text-xs font-semibold text-slate-300 mb-2" x-text="importLbl(section)"></p>
+              <template x-if="typeof data === 'object' && data !== null">
+                <div class="space-y-1">
+                  <template x-for="[k, v] in importFields(data)" :key="k">
+                    <div class="flex justify-between">
+                      <span class="text-xs text-slate-500" x-text="k"></span>
+                      <span class="text-xs text-slate-200 font-medium" x-text="v"></span>
+                    </div>
+                  </template>
+                </div>
+              </template>
+              <template x-if="typeof data !== 'object' || data === null">
+                <span class="text-xs text-slate-200" x-text="data"></span>
+              </template>
             </div>
           </template>
         </div>
-        <button @click="importResult = null; loadAll()" class="w-full py-2 bg-blue-600 hover:bg-blue-500 rounded-xl text-sm font-medium transition-colors">刷新数据</button>
+        <!-- Sticky footer button -->
+        <div class="px-5 pb-5 pt-3 flex-shrink-0 border-t border-slate-700/50">
+          <button @click="importResult = null; loadAll()"
+            class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-sm font-semibold transition-colors">
+            刷新数据
+          </button>
+        </div>
       </div>
     </div>
   </template>
@@ -621,13 +650,24 @@
         async triggerImport() {
           this.importing = true;
           try {
-            const res = await fetch('/api/youpin/import/all', { method: 'POST' });
+            // 导入需要几分钟，设置 10 分钟超时
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 10 * 60 * 1000);
+            const res = await fetch('/api/youpin/import/all', {
+              method: 'POST',
+              signal: ctrl.signal,
+            });
+            clearTimeout(timer);
             if (!res.ok) throw new Error(await res.text());
             const d = await res.json();
             this.importResult = d;
             this.lastImportAt = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
           } catch (e) {
-            this.showToast('导入失败：' + e.message, 'error');
+            if (e.name === 'AbortError') {
+              this.showToast('导入超时（超过10分钟），请稍后刷新', 'error');
+            } else {
+              this.showToast('导入失败：' + e.message, 'error');
+            }
           } finally {
             this.importing = false;
           }
@@ -663,14 +703,18 @@
         },
 
         importLbl(k) {
-          return { stock: '库存导入', lease: '租赁导入', buy: '购买记录', sell: '出售记录' }[k] || k;
+          return { stock: '库存导入 (STEAM_PROTECTED)', lease: '租赁导入 (rented_out)', buy: '购买记录匹配', sell: '出售记录标记' }[k] || k;
         },
 
-        importVal(v) {
-          if (typeof v === 'object' && v !== null) {
-            return Object.entries(v).map(([kk, vv]) => kk + ': ' + vv).join(', ');
-          }
-          return String(v);
+        importFields(data) {
+          const labelMap = {
+            total_fetched: '拉取条数', upserted: '写入/更新', skipped: '跳过',
+            total_records: '拉取条数', updated: '匹配更新', not_found_in_db: '未在库存',
+            stats: '租赁统计', valuation: '悠悠估值',
+          };
+          return Object.entries(data)
+            .filter(([k]) => !['items','not_found_names'].includes(k))
+            .map(([k, v]) => [labelMap[k] || k, v]);
         },
 
         showToast(msg, type = 'success') {

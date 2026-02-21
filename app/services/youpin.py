@@ -234,7 +234,7 @@ def _parse_abrade(record: dict) -> Optional[float]:
 
 
 def _parse_price(record: dict) -> Optional[float]:
-    """totalAmount 单位为分（1/100 元），转换为元"""
+    """totalAmount 单位为分（1/100 元），转换为元（整单总价，不除数量）"""
     v = record.get("totalAmount")
     if v is not None:
         try:
@@ -242,6 +242,20 @@ def _parse_price(record: dict) -> Optional[float]:
         except (TypeError, ValueError):
             pass
     return None
+
+
+def _parse_qty(record: dict) -> int:
+    """读取批量购买数量（commodityNum），默认 1。"""
+    for key in ("commodityNum", "count", "quantity", "goodsNum"):
+        v = record.get(key)
+        if v is not None:
+            try:
+                n = int(v)
+                if n > 0:
+                    return n
+            except (TypeError, ValueError):
+                pass
+    return 1
 
 
 def _parse_date(record: dict) -> Optional[str]:
@@ -406,81 +420,89 @@ async def import_buy_records(db: AsyncSession) -> dict:
         hash_name = _parse_hash_name(rec)
         if not hash_name:
             continue
-        price = _parse_price(rec)
+        total_price = _parse_price(rec)   # 整单总价（元）
+        qty = _parse_qty(rec)             # 批量件数，默认 1
+        per_item_price = total_price / qty if total_price is not None else None
         date_str = _parse_date(rec)
         buy_abrade = _parse_abrade(rec)
         detail = rec.get("productDetail") or {}
         buy_commodity_id = detail.get("commodityId")
         buy_asset_id = str(detail.get("assertId") or "").strip()
 
-        item = None
+        # 批量订单：尝试匹配 qty 件物品，每件使用均摊价
+        for _ in range(qty):
+            item = None
 
-        # ── 第一优先：commodityId 精确匹配（租出物品，唯一对应 youpin_commodity_id）──
-        if buy_commodity_id:
-            result = await db.execute(
-                select(InventoryItem)
-                .where(
-                    InventoryItem.youpin_commodity_id == buy_commodity_id,
-                    InventoryItem.purchase_price.is_(None),
-                    InventoryItem.status.in_(["in_steam", "rented_out", "in_storage"]),
+            # ── 第一优先：commodityId 精确匹配（租出物品，唯一对应 youpin_commodity_id）──
+            if buy_commodity_id:
+                result = await db.execute(
+                    select(InventoryItem)
+                    .where(
+                        InventoryItem.youpin_commodity_id == buy_commodity_id,
+                        InventoryItem.purchase_price.is_(None),
+                        InventoryItem.status.in_(["in_steam", "rented_out", "in_storage"]),
+                    )
+                    .limit(1)
                 )
-                .limit(1)
-            )
-            item = result.scalar_one_or_none()
+                item = result.scalar_one_or_none()
 
-        # ── 第二优先：steamAssetId 精确匹配（在库存物品，买入时的 asset_id 不变）──
-        if not item and buy_asset_id:
-            result = await db.execute(
-                select(InventoryItem)
-                .where(
-                    InventoryItem.asset_id == buy_asset_id,
-                    InventoryItem.class_id == "STEAM_PROTECTED",
-                    InventoryItem.purchase_price.is_(None),
-                    InventoryItem.status.in_(["in_steam", "rented_out", "in_storage"]),
+            # ── 第二优先：steamAssetId 精确匹配（在库存物品，买入时的 asset_id 不变）──
+            if not item and buy_asset_id:
+                result = await db.execute(
+                    select(InventoryItem)
+                    .where(
+                        InventoryItem.asset_id == buy_asset_id,
+                        InventoryItem.class_id == "STEAM_PROTECTED",
+                        InventoryItem.purchase_price.is_(None),
+                        InventoryItem.status.in_(["in_steam", "rented_out", "in_storage"]),
+                    )
+                    .limit(1)
                 )
-                .limit(1)
-            )
-            item = result.scalar_one_or_none()
+                item = result.scalar_one_or_none()
 
-        # ── 第三优先：market_hash_name + 磨损值精确匹配（1e-8 容差，唯一识别物品）──
-        if not item and buy_abrade is not None:
-            result = await db.execute(
-                select(InventoryItem)
-                .where(
-                    InventoryItem.market_hash_name == hash_name,
-                    InventoryItem.purchase_price.is_(None),
-                    InventoryItem.status.in_(["in_steam", "rented_out", "in_storage"]),
-                    InventoryItem.abrade.isnot(None),
-                    func.abs(InventoryItem.abrade - buy_abrade) < 1e-8,
+            # ── 第三优先：market_hash_name + 磨损值精确匹配（1e-8 容差，唯一识别物品）──
+            if not item and buy_abrade is not None:
+                result = await db.execute(
+                    select(InventoryItem)
+                    .where(
+                        InventoryItem.market_hash_name == hash_name,
+                        InventoryItem.purchase_price.is_(None),
+                        InventoryItem.status.in_(["in_steam", "rented_out", "in_storage"]),
+                        InventoryItem.abrade.isnot(None),
+                        func.abs(InventoryItem.abrade - buy_abrade) < 1e-8,
+                    )
+                    .limit(1)
                 )
-                .limit(1)
-            )
-            item = result.scalar_one_or_none()
+                item = result.scalar_one_or_none()
 
-        # ── 第四优先（降级）：market_hash_name 匹配（印花/武器箱等无磨损物品）──
-        if not item:
-            result = await db.execute(
-                select(InventoryItem)
-                .where(
-                    InventoryItem.market_hash_name == hash_name,
-                    InventoryItem.purchase_price.is_(None),
-                    InventoryItem.status.in_(["in_steam", "rented_out", "in_storage"]),
-                    InventoryItem.abrade.is_(None),
+            # ── 第四优先（降级）：market_hash_name 匹配（印花/武器箱等无磨损物品）──
+            if not item:
+                result = await db.execute(
+                    select(InventoryItem)
+                    .where(
+                        InventoryItem.market_hash_name == hash_name,
+                        InventoryItem.purchase_price.is_(None),
+                        InventoryItem.status.in_(["in_steam", "rented_out", "in_storage"]),
+                        InventoryItem.abrade.is_(None),
+                    )
+                    .limit(1)
                 )
-                .limit(1)
-            )
-            item = result.scalar_one_or_none()
+                item = result.scalar_one_or_none()
 
-        if not item:
-            not_found.append(hash_name)
-            continue
+            if not item:
+                not_found.append(hash_name)
+                break  # 同款已全部匹配完，剩余件数对应已售出的历史记录
 
-        if price is not None:
-            item.purchase_price = price
-        if date_str:
-            item.purchase_date = date_str
-        item.purchase_platform = "YOUPIN"
-        updated.append({"asset_id": item.asset_id, "market_hash_name": hash_name, "purchase_price": price})
+            if per_item_price is not None:
+                item.purchase_price = per_item_price
+            if date_str:
+                item.purchase_date = date_str
+            item.purchase_platform = "YOUPIN"
+            updated.append({
+                "asset_id": item.asset_id,
+                "market_hash_name": hash_name,
+                "purchase_price": per_item_price,
+            })
 
     await db.commit()
 
