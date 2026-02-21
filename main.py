@@ -1,10 +1,13 @@
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.database import init_db
 from app.api.routes import prices, items, inventory, youpin
+from app.api.routes import dashboard
 
 # ── 定时任务（部署到服务器后取消注释）──────────────────────────────────────────
 # 依赖：pip install apscheduler
@@ -62,11 +65,19 @@ app.include_router(prices.router, prefix="/api/prices", tags=["prices"])
 app.include_router(items.router, prefix="/api/items", tags=["items"])
 app.include_router(inventory.router, prefix="/api/inventory", tags=["inventory"])
 app.include_router(youpin.router, prefix="/api/youpin", tags=["youpin"])
+app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 @app.on_event("startup")
 async def startup():
     await init_db()
+
+
+@app.get("/", include_in_schema=False)
+async def serve_ui():
+    return FileResponse("static/index.html")
 
 
 @app.get("/health")

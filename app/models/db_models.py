@@ -138,6 +138,7 @@ class InventoryItem(Base):
 
     # 成本（Phase 3）
     purchase_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    purchase_price_manual: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     purchase_date: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     purchase_platform: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
 

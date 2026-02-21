@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CS2 Inventory Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    .th-sort { @apply cursor-pointer select-none hover:text-slate-200 transition-colors; }
+    .stat-card { @apply bg-slate-800/60 border border-slate-700/50 rounded-2xl p-5 backdrop-blur-sm; }
+    .badge { @apply px-2 py-0.5 rounded-full text-xs font-medium tracking-wide; }
+    .input-base { @apply bg-slate-700/60 border border-slate-600/60 rounded-xl px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500/70 focus:bg-slate-700 transition-colors; }
+    .btn-primary { @apply flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl text-sm font-medium transition-colors; }
+    .btn-ghost { @apply px-3 py-1.5 text-xs rounded-lg bg-slate-700/60 hover:bg-slate-600/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors; }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
+    .panel-enter { animation: slideIn 0.2s ease-out; }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .toast-enter { animation: fadeUp 0.2s ease-out; }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-200 min-h-screen font-sans antialiased" x-data="app()" x-init="init()">
+
+  <!-- ── Navbar ─────────────────────────────────────────────────────────── -->
+  <header class="sticky top-0 z-40 bg-slate-900/80 backdrop-blur border-b border-slate-800">
+    <div class="max-w-[1800px] mx-auto px-6 py-3 flex items-center gap-4">
+      <!-- Logo -->
+      <div class="flex items-center gap-2.5 mr-4">
+        <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center text-slate-900 font-black text-xs">CS</div>
+        <span class="font-semibold text-white text-sm tracking-tight">CS2 Inventory</span>
+      </div>
+
+      <!-- Nav tabs -->
+      <div class="flex gap-1">
+        <button @click="activeTab = 'inventory'" :class="activeTab === 'inventory' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">持仓列表</button>
+        <button @click="activeTab = 'overview'" :class="activeTab === 'overview' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">资产概览</button>
+      </div>
+
+      <div class="ml-auto flex items-center gap-3">
+        <!-- Last import time -->
+        <span x-show="lastImportAt" x-cloak class="text-xs text-slate-500">上次导入 <span class="text-slate-400" x-text="lastImportAt"></span></span>
+
+        <!-- Import button -->
+        <button @click="triggerImport()" :disabled="importing" class="btn-primary">
+          <template x-if="!importing">
+            <span class="flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              同步数据
+            </span>
+          </template>
+          <template x-if="importing">
+            <span class="flex items-center gap-1.5">
+              <svg class="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 22 6.477 22 12h-4z"/></svg>
+              同步中...
+            </span>
+          </template>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Main ──────────────────────────────────────────────────────────── -->
+  <main class="max-w-[1800px] mx-auto px-6 py-6">
+
+    <!-- ── OVERVIEW TAB ──────────────────────────────────────────── -->
+    <div x-show="activeTab === 'overview'">
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+
+        <!-- Total Cost -->
+        <div class="stat-card col-span-1 md:col-span-2 xl:col-span-1 relative overflow-hidden">
+          <div class="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full -translate-y-8 translate-x-8"></div>
+          <p class="text-xs text-slate-500 uppercase tracking-widest mb-2">总持仓成本</p>
+          <p class="text-3xl font-bold text-white mb-1">¥<span x-text="fmt(overview.total_cost)">—</span></p>
+          <div class="flex gap-3 text-xs text-slate-500">
+            <span>出租 ¥<span x-text="fmt(overview.cost_breakdown?.rented_out)"></span></span>
+            <span>·</span>
+            <span>Steam ¥<span x-text="fmt(overview.cost_breakdown?.in_steam)"></span></span>
+          </div>
+          <div class="mt-3 bg-slate-700/50 rounded-full h-1.5 overflow-hidden">
+            <div class="h-full bg-blue-500 rounded-full transition-all" :style="'width:' + (overview.coverage_pct || 0) + '%'"></div>
+          </div>
+          <p class="text-xs text-slate-500 mt-1">定价覆盖 <span class="text-slate-300" x-text="(overview.coverage_pct || 0) + '%'"></span></p>
+        </div>
+
+        <!-- Active Items -->
+        <div class="stat-card">
+          <p class="text-xs text-slate-500 uppercase tracking-widest mb-2">活跃持仓</p>
+          <p class="text-3xl font-bold text-white mb-3" x-text="overview.total_active ?? '—'">—</p>
+          <div class="space-y-1 text-xs">
+            <div class="flex justify-between">
+              <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-green-400 inline-block"></span>出租中</span>
+              <span class="text-slate-300 font-medium" x-text="overview.status_breakdown?.rented_out ?? 0"></span>
+            </div>
+            <div class="flex justify-between">
+              <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-blue-400 inline-block"></span>Steam中</span>
+              <span class="text-slate-300 font-medium" x-text="overview.status_breakdown?.in_steam ?? 0"></span>
+            </div>
+            <div class="flex justify-between">
+              <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-purple-400 inline-block"></span>收藏</span>
+              <span class="text-slate-300 font-medium" x-text="overview.status_breakdown?.in_storage ?? 0"></span>
+            </div>
+            <div class="flex justify-between">
+              <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-slate-500 inline-block"></span>已售</span>
+              <span class="text-slate-400" x-text="overview.status_breakdown?.sold ?? 0"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pricing Coverage -->
+        <div class="stat-card">
+          <p class="text-xs text-slate-500 uppercase tracking-widest mb-2">定价情况</p>
+          <p class="text-3xl font-bold text-white mb-3" x-text="overview.priced_count ?? '—'">—</p>
+          <div class="space-y-1 text-xs">
+            <div class="flex justify-between">
+              <span class="text-slate-400">已自动定价</span>
+              <span class="text-slate-300 font-medium" x-text="(overview.priced_count ?? 0) - (overview.manual_price_count ?? 0)"></span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-yellow-400/80">已手动定价</span>
+              <span class="text-yellow-300 font-medium" x-text="overview.manual_price_count ?? 0"></span>
+            </div>
+            <div class="flex justify-between border-t border-slate-700 pt-1 mt-1">
+              <span class="text-red-400/80">未定价</span>
+              <span class="text-red-300 font-medium" x-text="overview.unpriced_count ?? 0"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="stat-card flex flex-col gap-3">
+          <p class="text-xs text-slate-500 uppercase tracking-widest">快捷操作</p>
+          <button @click="activeTab = 'inventory'; filters.pricedFilter = 'unpriced'; loadItems()" class="w-full text-left px-3 py-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-xs text-red-300 transition-colors">
+            → 查看未定价饰品 (<span x-text="overview.unpriced_count ?? 0"></span>)
+          </button>
+          <button @click="activeTab = 'inventory'; filters.status = 'rented_out'; loadItems()" class="w-full text-left px-3 py-2.5 rounded-xl bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 text-xs text-green-300 transition-colors">
+            → 查看出租中饰品 (<span x-text="overview.status_breakdown?.rented_out ?? 0"></span>)
+          </button>
+          <button @click="activeTab = 'inventory'; filters.status = ''; filters.pricedFilter = ''; loadItems()" class="w-full text-left px-3 py-2.5 rounded-xl bg-slate-700/40 hover:bg-slate-700/60 border border-slate-600/40 text-xs text-slate-300 transition-colors">
+            → 查看全部持仓
+          </button>
+        </div>
+      </div>
+
+      <!-- Status chart (visual bar) -->
+      <div class="stat-card mb-4">
+        <p class="text-xs text-slate-500 uppercase tracking-widest mb-3">持仓状态分布</p>
+        <div class="flex h-3 rounded-full overflow-hidden gap-0.5" x-show="overview.total_active > 0">
+          <div class="bg-green-500 transition-all" :style="'width:' + pct(overview.status_breakdown?.rented_out, overview.total_active) + '%'" :title="'出租中 ' + overview.status_breakdown?.rented_out"></div>
+          <div class="bg-blue-500 transition-all" :style="'width:' + pct(overview.status_breakdown?.in_steam, overview.total_active) + '%'" :title="'Steam中 ' + overview.status_breakdown?.in_steam"></div>
+          <div class="bg-purple-500 transition-all" :style="'width:' + pct(overview.status_breakdown?.in_storage, overview.total_active) + '%'" :title="'收藏 ' + overview.status_breakdown?.in_storage"></div>
+        </div>
+        <div class="flex gap-6 mt-2 text-xs text-slate-500">
+          <span><span class="text-green-400">■</span> 出租中 <span x-text="pct(overview.status_breakdown?.rented_out, overview.total_active) + '%'"></span></span>
+          <span><span class="text-blue-400">■</span> Steam中 <span x-text="pct(overview.status_breakdown?.in_steam, overview.total_active) + '%'"></span></span>
+          <span><span class="text-purple-400">■</span> 收藏 <span x-text="pct(overview.status_breakdown?.in_storage, overview.total_active) + '%'"></span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── INVENTORY TAB ──────────────────────────────────────────── -->
+    <div x-show="activeTab === 'inventory'">
+
+      <!-- Stats strip -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+        <div class="bg-slate-800/50 border border-slate-700/40 rounded-xl px-4 py-3">
+          <p class="text-xs text-slate-500 mb-0.5">总成本</p>
+          <p class="text-lg font-bold text-white">¥<span x-text="fmt(overview.total_cost)">—</span></p>
+        </div>
+        <div class="bg-slate-800/50 border border-slate-700/40 rounded-xl px-4 py-3">
+          <p class="text-xs text-slate-500 mb-0.5">活跃持仓</p>
+          <p class="text-lg font-bold text-white" x-text="overview.total_active ?? '—'">—</p>
+        </div>
+        <div class="bg-slate-800/50 border border-slate-700/40 rounded-xl px-4 py-3">
+          <p class="text-xs text-slate-500 mb-0.5">定价覆盖</p>
+          <p class="text-lg font-bold text-white"><span x-text="overview.priced_count ?? '—'"></span> / <span class="text-slate-400 text-base" x-text="overview.total_active ?? '—'"></span></p>
+        </div>
+        <div class="bg-slate-800/50 border border-slate-700/40 rounded-xl px-4 py-3">
+          <p class="text-xs text-slate-500 mb-0.5">手动定价</p>
+          <p class="text-lg font-bold text-yellow-300" x-text="overview.manual_price_count ?? '—'">—</p>
+        </div>
+      </div>
+
+      <!-- Filters bar -->
+      <div class="flex flex-wrap items-center gap-2.5 mb-4">
+        <!-- Search -->
+        <div class="relative flex-1 min-w-[220px]">
+          <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <input type="text" x-model="filters.search" @input.debounce.400ms="page = 1; loadItems()"
+            placeholder="搜索饰品名称..." class="input-base pl-8 w-full" />
+        </div>
+
+        <!-- Status -->
+        <select x-model="filters.status" @change="page = 1; loadItems()" class="input-base">
+          <option value="">全部状态</option>
+          <option value="rented_out">出租中</option>
+          <option value="in_steam">Steam中</option>
+          <option value="in_storage">收藏</option>
+          <option value="sold">已售</option>
+        </select>
+
+        <!-- Priced filter -->
+        <select x-model="filters.pricedFilter" @change="page = 1; loadItems()" class="input-base">
+          <option value="">全部</option>
+          <option value="priced">已定价</option>
+          <option value="unpriced">未定价</option>
+        </select>
+
+        <!-- Sort by effective price shortcut -->
+        <button @click="sortBy = 'effective_price'; sortOrder = sortOrder === 'desc' ? 'asc' : 'desc'; loadItems()"
+          class="btn-ghost flex items-center gap-1">
+          成本排序 <span x-text="sortBy === 'effective_price' ? (sortOrder === 'desc' ? '↓' : '↑') : '↕'"></span>
+        </button>
+
+        <!-- Dual price toggle -->
+        <label class="flex items-center gap-2 cursor-pointer ml-auto">
+          <span class="text-xs text-slate-400">双价对比</span>
+          <div @click="dualPrice = !dualPrice" class="relative w-9 h-5 rounded-full transition-colors duration-200"
+            :class="dualPrice ? 'bg-blue-600' : 'bg-slate-600'">
+            <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200"
+              :class="dualPrice ? 'translate-x-4' : 'translate-x-0'"></div>
+          </div>
+        </label>
+
+        <!-- Page size -->
+        <select x-model.number="pageSize" @change="page = 1; loadItems()" class="input-base w-20">
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="200">200</option>
+        </select>
+      </div>
+
+      <!-- Table -->
+      <div class="bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead>
+              <tr class="border-b border-slate-700/60 text-slate-500 uppercase tracking-wider">
+                <th class="py-3 px-4 text-left w-8 font-normal">#</th>
+                <th class="py-3 px-4 text-left font-normal">饰品</th>
+                <th class="py-3 px-3 text-left font-normal th-sort" @click="setSort('status')">状态 <span x-text="sortIcon('status')"></span></th>
+                <th class="py-3 px-3 text-right font-normal th-sort" @click="setSort('abrade')">磨损 <span x-text="sortIcon('abrade')"></span></th>
+                <template x-if="!dualPrice">
+                  <th class="py-3 px-3 text-right font-normal th-sort" @click="setSort('effective_price')">成本价 <span x-text="sortIcon('effective_price')"></span></th>
+                </template>
+                <template x-if="dualPrice">
+                  <th class="py-3 px-3 text-right font-normal text-slate-400">自动价</th>
+                </template>
+                <template x-if="dualPrice">
+                  <th class="py-3 px-3 text-right font-normal text-yellow-500/70">手动价</th>
+                </template>
+                <th class="py-3 px-3 text-right font-normal th-sort" @click="setSort('purchase_date')">购入日期 <span x-text="sortIcon('purchase_date')"></span></th>
+                <th class="py-3 px-3 text-left font-normal">平台</th>
+                <th class="py-3 px-4 text-center font-normal w-10">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Loading -->
+              <template x-if="loading">
+                <tr>
+                  <td :colspan="dualPrice ? 9 : 8" class="py-20 text-center text-slate-600">
+                    <svg class="animate-spin w-5 h-5 mx-auto mb-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 22 6.477 22 12h-4z"/></svg>
+                    加载中...
+                  </td>
+                </tr>
+              </template>
+
+              <!-- Empty -->
+              <template x-if="!loading && items.length === 0">
+                <tr>
+                  <td :colspan="dualPrice ? 9 : 8" class="py-20 text-center text-slate-600">没有找到匹配的饰品</td>
+                </tr>
+              </template>
+
+              <!-- Rows -->
+              <template x-for="(item, idx) in items" :key="item.id">
+                <tr class="border-b border-slate-700/30 hover:bg-slate-700/20 transition-colors group">
+                  <td class="py-2.5 px-4 text-slate-600" x-text="(page - 1) * pageSize + idx + 1"></td>
+
+                  <!-- Name + icon -->
+                  <td class="py-2.5 px-4">
+                    <div class="flex items-center gap-2.5">
+                      <div class="w-9 h-9 flex-shrink-0 rounded-lg overflow-hidden bg-slate-700/60">
+                        <img :src="iconUrl(item.icon_url)" class="w-full h-full object-cover"
+                          @error="$el.src='data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 1 1\'><rect fill=\'%23334155\'/></svg>'" />
+                      </div>
+                      <div class="min-w-0">
+                        <p class="text-slate-100 font-medium leading-tight truncate max-w-[280px]" x-text="item.market_hash_name"></p>
+                        <p class="text-slate-500 leading-tight truncate max-w-[280px]" x-text="item.name"></p>
+                      </div>
+                    </div>
+                  </td>
+
+                  <!-- Status -->
+                  <td class="py-2.5 px-3">
+                    <span class="badge" :class="statusCls(item.status)" x-text="statusLbl(item.status)"></span>
+                  </td>
+
+                  <!-- Abrade -->
+                  <td class="py-2.5 px-3 text-right font-mono text-slate-500" x-text="item.abrade != null ? item.abrade.toFixed(6) : '—'"></td>
+
+                  <!-- Price (single column) -->
+                  <template x-if="!dualPrice">
+                    <td class="py-2.5 px-3 text-right">
+                      <template x-if="item.effective_price != null">
+                        <span class="font-semibold" :class="item.purchase_price_manual != null ? 'text-yellow-300' : 'text-slate-100'"
+                          x-text="'¥' + fmt(item.effective_price)"></span>
+                      </template>
+                      <template x-if="item.effective_price == null">
+                        <span class="text-slate-700">—</span>
+                      </template>
+                    </td>
+                  </template>
+
+                  <!-- Auto price (dual mode) -->
+                  <template x-if="dualPrice">
+                    <td class="py-2.5 px-3 text-right text-slate-400">
+                      <span x-show="item.purchase_price != null" x-text="'¥' + fmt(item.purchase_price)"></span>
+                      <span x-show="item.purchase_price == null" class="text-slate-700">—</span>
+                    </td>
+                  </template>
+
+                  <!-- Manual price (dual mode) -->
+                  <template x-if="dualPrice">
+                    <td class="py-2.5 px-3 text-right">
+                      <span x-show="item.purchase_price_manual != null" class="text-yellow-300 font-semibold"
+                        x-text="'¥' + fmt(item.purchase_price_manual)"></span>
+                      <span x-show="item.purchase_price_manual == null" class="text-slate-700">—</span>
+                    </td>
+                  </template>
+
+                  <!-- Date -->
+                  <td class="py-2.5 px-3 text-right text-slate-500" x-text="item.purchase_date || '—'"></td>
+
+                  <!-- Platform -->
+                  <td class="py-2.5 px-3 text-slate-500" x-text="item.purchase_platform || '—'"></td>
+
+                  <!-- Action -->
+                  <td class="py-2.5 px-4 text-center">
+                    <button @click.stop="openPanel(item)"
+                      class="w-7 h-7 rounded-lg bg-slate-700/0 hover:bg-slate-600/60 group-hover:bg-slate-700/60 flex items-center justify-center text-slate-500 hover:text-slate-200 transition-all">
+                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                    </button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="px-5 py-3 border-t border-slate-700/40 flex items-center justify-between">
+          <p class="text-xs text-slate-500">
+            共 <span class="text-slate-300 font-medium" x-text="total"></span> 条 ·
+            第 <span class="text-slate-300" x-text="page"></span> /
+            <span class="text-slate-300" x-text="Math.ceil(total / pageSize) || 1"></span> 页
+          </p>
+          <div class="flex gap-1.5">
+            <button @click="page > 1 && (page--, loadItems())" :disabled="page <= 1" class="btn-ghost">← 上一页</button>
+            <button @click="page < Math.ceil(total / pageSize) && (page++, loadItems())"
+              :disabled="page >= Math.ceil(total / pageSize)" class="btn-ghost">下一页 →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ── Detail Panel ──────────────────────────────────────────────────── -->
+  <template x-teleport="body">
+    <div x-show="panel" x-cloak>
+      <!-- Backdrop -->
+      <div class="fixed inset-0 bg-black/40 z-50 backdrop-blur-sm" @click="panel = null"></div>
+
+      <!-- Side panel -->
+      <div class="fixed top-0 right-0 h-full w-[380px] bg-slate-850 border-l border-slate-700/60 z-50 overflow-y-auto shadow-2xl"
+        style="background:#111827" x-show="panel" class="panel-enter">
+        <div class="p-5 h-full flex flex-col">
+          <!-- Header -->
+          <div class="flex items-start gap-3 mb-4">
+            <div class="flex-1 min-w-0">
+              <h2 class="text-sm font-semibold text-white leading-snug" x-text="panel?.market_hash_name"></h2>
+              <p class="text-xs text-slate-400 mt-0.5" x-text="panel?.name"></p>
+            </div>
+            <button @click="panel = null" class="flex-shrink-0 w-7 h-7 rounded-lg hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-colors text-base">✕</button>
+          </div>
+
+          <!-- Image -->
+          <div class="bg-slate-800/60 rounded-xl mb-4 flex items-center justify-center h-36 overflow-hidden border border-slate-700/40">
+            <img :src="iconUrl(panel?.icon_url, 200)" class="max-h-full max-w-full object-contain"
+              @error="$el.style.display='none'" x-show="panel?.icon_url" />
+            <span x-show="!panel?.icon_url" class="text-slate-600 text-xs">No image</span>
+          </div>
+
+          <!-- Info grid -->
+          <div class="grid grid-cols-2 gap-2 mb-5">
+            <div class="bg-slate-800/60 rounded-xl p-3 border border-slate-700/30">
+              <p class="text-xs text-slate-500 mb-1">状态</p>
+              <span class="badge" :class="statusCls(panel?.status)" x-text="statusLbl(panel?.status)"></span>
+            </div>
+            <div class="bg-slate-800/60 rounded-xl p-3 border border-slate-700/30">
+              <p class="text-xs text-slate-500 mb-1">来源</p>
+              <p class="text-xs text-slate-300 font-mono" x-text="panel?.class_id || '—'"></p>
+            </div>
+            <div class="bg-slate-800/60 rounded-xl p-3 border border-slate-700/30 col-span-2">
+              <p class="text-xs text-slate-500 mb-1">磨损值</p>
+              <p class="text-xs text-slate-100 font-mono" x-text="panel?.abrade != null ? panel.abrade.toFixed(10) : '—'"></p>
+            </div>
+            <div class="bg-slate-800/60 rounded-xl p-3 border border-slate-700/30">
+              <p class="text-xs text-slate-500 mb-1">购入日期</p>
+              <p class="text-xs text-slate-200" x-text="panel?.purchase_date || '—'"></p>
+            </div>
+            <div class="bg-slate-800/60 rounded-xl p-3 border border-slate-700/30">
+              <p class="text-xs text-slate-500 mb-1">购入平台</p>
+              <p class="text-xs text-slate-200" x-text="panel?.purchase_platform || '—'"></p>
+            </div>
+            <div class="bg-slate-800/60 rounded-xl p-3 border border-slate-700/30">
+              <p class="text-xs text-slate-500 mb-1">自动识别价</p>
+              <p class="text-sm font-medium text-slate-200" x-text="panel?.purchase_price != null ? '¥' + fmt(panel.purchase_price) : '—'"></p>
+            </div>
+            <div class="bg-slate-800/60 rounded-xl p-3 border border-slate-700/30">
+              <p class="text-xs text-slate-500 mb-1">生效价格</p>
+              <p class="text-sm font-bold" :class="panel?.purchase_price_manual != null ? 'text-yellow-300' : 'text-slate-100'"
+                x-text="panel?.effective_price != null ? '¥' + fmt(panel.effective_price) : '—'"></p>
+            </div>
+            <div class="bg-slate-800/60 rounded-xl p-3 border border-slate-700/30 col-span-2" x-show="panel?.first_seen_at">
+              <p class="text-xs text-slate-500 mb-1">首次发现</p>
+              <p class="text-xs text-slate-400" x-text="panel?.first_seen_at ? new Date(panel.first_seen_at).toLocaleString('zh-CN') : '—'"></p>
+            </div>
+          </div>
+
+          <!-- Manual price editor -->
+          <div class="border-t border-slate-700/50 pt-4 mt-auto">
+            <div class="flex items-center justify-between mb-1.5">
+              <p class="text-sm font-medium text-slate-200">手动设置购入价</p>
+              <span x-show="panel?.purchase_price_manual != null" class="badge bg-yellow-500/20 text-yellow-300">已手动</span>
+            </div>
+            <p class="text-xs text-slate-500 mb-3">优先于自动识别价，不会被自动导入覆盖。留空并保存可清除手动价。</p>
+            <div class="flex gap-2">
+              <input type="number" x-model="manualInput" placeholder="金额（元）" step="0.01" min="0"
+                class="input-base flex-1" @keydown.enter="saveManual()" />
+              <button @click="saveManual()" :disabled="saving"
+                class="px-4 py-2 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 text-slate-900 font-semibold text-sm rounded-xl transition-colors">
+                <span x-show="!saving">保存</span>
+                <span x-show="saving">...</span>
+              </button>
+            </div>
+            <button x-show="panel?.purchase_price_manual != null" @click="clearManual()"
+              class="mt-2 text-xs text-red-400/70 hover:text-red-400 transition-colors">
+              × 清除手动价格
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- ── Import Result Modal ────────────────────────────────────────────── -->
+  <template x-teleport="body">
+    <div x-show="importResult" x-cloak class="fixed inset-0 bg-black/50 z-60 flex items-center justify-center backdrop-blur-sm" @click.self="importResult = null; loadAll()">
+      <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-80 shadow-2xl">
+        <div class="flex items-center gap-2 mb-4">
+          <div class="w-6 h-6 rounded-full bg-green-500/20 flex items-center justify-center text-green-400 text-xs">✓</div>
+          <h3 class="text-sm font-semibold text-white">导入完成</h3>
+        </div>
+        <div class="space-y-2 mb-5">
+          <template x-for="[k, v] in Object.entries(importResult || {})" :key="k">
+            <div class="flex justify-between items-center bg-slate-700/40 rounded-lg px-3 py-2">
+              <span class="text-xs text-slate-400" x-text="importLbl(k)"></span>
+              <span class="text-xs text-white font-medium" x-text="importVal(v)"></span>
+            </div>
+          </template>
+        </div>
+        <button @click="importResult = null; loadAll()" class="w-full py-2 bg-blue-600 hover:bg-blue-500 rounded-xl text-sm font-medium transition-colors">刷新数据</button>
+      </div>
+    </div>
+  </template>
+
+  <!-- ── Toast ──────────────────────────────────────────────────────────── -->
+  <template x-teleport="body">
+    <div x-show="toast.msg" x-cloak class="fixed bottom-6 right-6 z-[999] toast-enter">
+      <div class="px-4 py-3 rounded-xl text-sm font-medium shadow-2xl border"
+        :class="toast.type === 'success' ? 'bg-green-500/90 border-green-400/30 text-white' : 'bg-red-500/90 border-red-400/30 text-white'"
+        x-text="toast.msg"></div>
+    </div>
+  </template>
+
+  <script>
+    function app() {
+      return {
+        // ── Tab ────────────────────
+        activeTab: 'inventory',
+
+        // ── Overview data ──────────
+        overview: {},
+
+        // ── Inventory list ─────────
+        items: [],
+        total: 0,
+        loading: false,
+
+        // ── Filters & pagination ───
+        page: 1,
+        pageSize: 50,
+        filters: { search: '', status: '', pricedFilter: '' },
+        sortBy: 'first_seen_at',
+        sortOrder: 'desc',
+
+        // ── UI state ───────────────
+        dualPrice: false,
+
+        // ── Detail panel ───────────
+        panel: null,
+        manualInput: '',
+        saving: false,
+
+        // ── Import ─────────────────
+        importing: false,
+        importResult: null,
+        lastImportAt: '',
+
+        // ── Toast ──────────────────
+        toast: { msg: '', type: 'success' },
+
+        // ───────────────────────────────────────────────────────────────────
+        async init() {
+          await this.loadAll();
+        },
+
+        async loadAll() {
+          await Promise.all([this.loadOverview(), this.loadItems()]);
+        },
+
+        async loadOverview() {
+          try {
+            const res = await fetch('/api/dashboard/overview');
+            if (res.ok) this.overview = await res.json();
+          } catch {}
+        },
+
+        async loadItems() {
+          this.loading = true;
+          try {
+            const p = new URLSearchParams({
+              page: this.page,
+              page_size: this.pageSize,
+              sort_by: this.sortBy,
+              sort_order: this.sortOrder,
+            });
+            if (this.filters.search)      p.set('search', this.filters.search);
+            if (this.filters.status)      p.set('status', this.filters.status);
+            if (this.filters.pricedFilter) p.set('priced_filter', this.filters.pricedFilter);
+            const res = await fetch('/api/dashboard/items?' + p);
+            if (res.ok) {
+              const d = await res.json();
+              this.items = d.items;
+              this.total = d.total;
+            }
+          } catch {}
+          finally { this.loading = false; }
+        },
+
+        setSort(col) {
+          if (this.sortBy === col) this.sortOrder = this.sortOrder === 'asc' ? 'desc' : 'asc';
+          else { this.sortBy = col; this.sortOrder = 'desc'; }
+          this.page = 1;
+          this.loadItems();
+        },
+
+        sortIcon(col) {
+          if (this.sortBy !== col) return '↕';
+          return this.sortOrder === 'asc' ? '↑' : '↓';
+        },
+
+        // ── Detail panel ──────────────────────────────────────────────────
+        openPanel(item) {
+          this.panel = { ...item };
+          this.manualInput = item.purchase_price_manual != null ? item.purchase_price_manual : '';
+        },
+
+        async saveManual() {
+          if (!this.panel) return;
+          this.saving = true;
+          try {
+            const price = this.manualInput !== '' && this.manualInput !== null
+              ? parseFloat(this.manualInput) : null;
+            const res = await fetch(`/api/dashboard/items/${this.panel.id}/manual-price`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ price }),
+            });
+            if (!res.ok) throw new Error();
+            const upd = await res.json();
+            this.panel.purchase_price_manual = upd.purchase_price_manual;
+            this.panel.effective_price = upd.effective_price;
+            // Sync table row
+            const row = this.items.find(i => i.id === this.panel.id);
+            if (row) {
+              row.purchase_price_manual = upd.purchase_price_manual;
+              row.effective_price = upd.effective_price;
+            }
+            this.showToast('保存成功 ✓');
+            await this.loadOverview();
+          } catch {
+            this.showToast('保存失败', 'error');
+          } finally {
+            this.saving = false;
+          }
+        },
+
+        async clearManual() {
+          this.manualInput = '';
+          await this.saveManual();
+        },
+
+        // ── Import ────────────────────────────────────────────────────────
+        async triggerImport() {
+          this.importing = true;
+          try {
+            const res = await fetch('/api/youpin/import/all', { method: 'POST' });
+            if (!res.ok) throw new Error(await res.text());
+            const d = await res.json();
+            this.importResult = d;
+            this.lastImportAt = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+          } catch (e) {
+            this.showToast('导入失败：' + e.message, 'error');
+          } finally {
+            this.importing = false;
+          }
+        },
+
+        // ── Helpers ───────────────────────────────────────────────────────
+        fmt(n) {
+          if (n == null) return '—';
+          return Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        },
+
+        pct(part, total) {
+          if (!total || part == null) return 0;
+          return Math.round(part / total * 100);
+        },
+
+        iconUrl(url, size = 62) {
+          if (!url) return '';
+          return `https://community.fastly.steamstatic.com/economy/image/${url}/${size}fx${size}f`;
+        },
+
+        statusLbl(s) {
+          return { in_steam: 'Steam中', rented_out: '出租中', in_storage: '收藏', sold: '已售' }[s] || s;
+        },
+
+        statusCls(s) {
+          return {
+            in_steam:   'bg-blue-500/15 text-blue-300',
+            rented_out: 'bg-green-500/15 text-green-300',
+            in_storage: 'bg-purple-500/15 text-purple-300',
+            sold:       'bg-slate-500/15 text-slate-400',
+          }[s] || 'bg-slate-500/15 text-slate-400';
+        },
+
+        importLbl(k) {
+          return { stock: '库存导入', lease: '租赁导入', buy: '购买记录', sell: '出售记录' }[k] || k;
+        },
+
+        importVal(v) {
+          if (typeof v === 'object' && v !== null) {
+            return Object.entries(v).map(([kk, vv]) => kk + ': ' + vv).join(', ');
+          }
+          return String(v);
+        },
+
+        showToast(msg, type = 'success') {
+          this.toast = { msg, type };
+          setTimeout(() => { this.toast = { msg: '', type: 'success' }; }, 3000);
+        },
+      };
+    }
+  </script>
+</body>
+</html>
