@@ -384,7 +384,7 @@ async def import_buy_records(db: AsyncSession) -> dict:
     all_records: List[dict] = []
     page = 1
     PAGE_SIZE = 30
-    MAX_PAGES = 200  # 最多拉 6000 条（API total=null，无法提前终止）
+    MAX_PAGES = 200  # 悠悠 API 最多返回 200 页 = 6000 条（服务端硬限制）  # 最多拉 21000 条，覆盖大量历史买入记录
     while page <= MAX_PAGES:
         try:
             batch = await fetch_buy_records(page=page, page_size=PAGE_SIZE)
@@ -500,7 +500,7 @@ async def import_sell_records(db: AsyncSession) -> dict:
     all_records: List[dict] = []
     page = 1
     PAGE_SIZE = 30
-    MAX_PAGES = 200
+    MAX_PAGES = 200  # 悠悠 API 最多返回 200 页 = 6000 条（服务端硬限制）
     while page <= MAX_PAGES:
         try:
             batch = await fetch_sell_records(page=page, page_size=PAGE_SIZE)
@@ -523,12 +523,15 @@ async def import_sell_records(db: AsyncSession) -> dict:
         if not hash_name:
             continue
 
-        # 找 rented_out 或 in_steam 中同名的 item
+        # 找同名且未被 stock/lease 当次确认的物品（排除当前仍在租或在库存的）
+        # class_id='YOUPIN'        → 本次 lease 确认租出中，不能标 sold
+        # class_id='STEAM_PROTECTED' → 本次 stock 确认在库存，不能标 sold
         result = await db.execute(
             select(InventoryItem)
             .where(
                 InventoryItem.market_hash_name == hash_name,
                 InventoryItem.status.in_(["in_steam", "rented_out"]),
+                InventoryItem.class_id.notin_(["YOUPIN", "STEAM_PROTECTED"]),
             )
             .limit(1)
         )
