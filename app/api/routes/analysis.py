@@ -435,6 +435,9 @@ async def signal_rankings(
     sort_order: str = Query("desc"),
     category: Optional[str] = Query(None),
     owned_only: bool = Query(True),
+    min_score: Optional[float] = Query(None),
+    max_score: Optional[float] = Query(None),
+    search: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(30, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -456,12 +459,21 @@ async def signal_rankings(
         )
         q = q.where(QuantSignal.market_hash_name.in_(owned_q))
 
-    # Category filter (simple Python-based classification, apply via subquery)
-    # For efficiency, we filter in SQL with LIKE patterns
+    # Category filter
     if category:
         cat_cond = _sql_category_filter(category)
         if cat_cond is not None:
             q = q.where(cat_cond)
+
+    # Score range filter (for clickable distribution)
+    if min_score is not None:
+        q = q.where(QuantSignal.sell_score >= min_score)
+    if max_score is not None:
+        q = q.where(QuantSignal.sell_score < max_score)
+
+    # Name search
+    if search:
+        q = q.where(QuantSignal.market_hash_name.ilike(f"%{search}%"))
 
     # Sort
     allowed_sorts = {
@@ -555,7 +567,16 @@ async def get_price_history(
     rows = result.scalars().all()
     rows.reverse()
 
-    closes = [r.close_price for r in rows if r.close_price]
+    # Filter out rows with 0/null close_price, or replace with latest known
+    last_good = None
+    for r in rows:
+        if r.close_price and r.close_price > 0:
+            last_good = r.close_price
+        elif last_good:
+            # Fill forward: use last known good price
+            r.close_price = last_good
+
+    closes = [r.close_price for r in rows if r.close_price and r.close_price > 0]
 
     from app.services.quant_engine import _sma, calc_bollinger
 
@@ -566,10 +587,15 @@ async def get_price_history(
     bb_upper_list = []
     bb_lower_list = []
 
+    ci = 0
     for i, r in enumerate(rows):
+        cp = r.close_price if r.close_price and r.close_price > 0 else None
+        if cp is None:
+            continue  # skip rows with no price
         dates.append(r.record_date)
-        close_prices.append(r.close_price)
-        sub = closes[:i + 1] if i < len(closes) else closes
+        close_prices.append(cp)
+        ci += 1
+        sub = closes[:ci]
         ma7_list.append(round(_sma(sub, 7), 2) if _sma(sub, 7) else None)
         ma30_list.append(round(_sma(sub, 30), 2) if _sma(sub, 30) else None)
         bb = calc_bollinger(sub) if len(sub) >= 20 else None
