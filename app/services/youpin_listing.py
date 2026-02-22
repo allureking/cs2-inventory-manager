@@ -29,6 +29,7 @@ from app.services.youpin import (
     TokenExpiredError,
     _check,
     _data,
+    _device_id,
     _headers,
     fetch_market_lease_price,
     fetch_market_sell_price,
@@ -186,6 +187,7 @@ async def list_for_sell(
                     "Price": price,
                     "Remark": "",
                 }],
+                "Sessionid": _device_id,
             },
         )
     resp.raise_for_status()
@@ -220,7 +222,7 @@ async def list_for_lease(
         resp = await client.post(
             f"{YOUPIN_API}/api/commodity/Inventory/SellInventoryWithLeaseV2",
             headers=_headers(),
-            json={"GameId": "730", "ItemInfos": [item_info]},
+            json={"GameId": "730", "ItemInfos": [item_info], "Sessionid": _device_id},
         )
     resp.raise_for_status()
     body = resp.json()
@@ -256,13 +258,30 @@ async def list_for_both(
         resp = await client.post(
             f"{YOUPIN_API}/api/commodity/Inventory/SellInventoryWithLeaseV2",
             headers=_headers(),
-            json={"GameId": "730", "ItemInfos": [item_info]},
+            json={"GameId": "730", "ItemInfos": [item_info], "Sessionid": _device_id},
         )
     resp.raise_for_status()
     body = resp.json()
     _check(body, "list_for_both")
     return {"ok": True, "asset_id": asset_id, "sell_price": sell_price,
             "lease_unit": lease_unit, "deposit": deposit}
+
+
+async def _pre_init_change_price(commodity_ids: list) -> None:
+    """改价前预初始化（出租改价需要先调用此接口）"""
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            f"{YOUPIN_API}/api/youpin/bff/new/commodity/commodity/change/price/v3/init/info",
+            headers=_headers(),
+            json={
+                "changePriceChannel": 0,
+                "commodityIdList": [str(cid) for cid in commodity_ids],
+                "gameId": "730",
+                "Sessionid": _device_id,
+            },
+        )
+    resp.raise_for_status()
+    # 不检查返回值，仅为预热
 
 
 async def change_price(
@@ -276,8 +295,15 @@ async def change_price(
 ) -> dict:
     """
     修改已上架物品价格（使用 CommodityId，非 AssetId）。
-    改价接口：PUT PriceChangeWithLeaseV2
+    出租改价需先调用 pre-init 接口，再调 PriceChangeWithLeaseV2。
     """
+    # 出租改价需要预初始化
+    if is_can_lease:
+        try:
+            await _pre_init_change_price([commodity_id])
+        except Exception as e:
+            logger.warning("改价 pre-init 失败(非致命): %s", e)
+
     commodity_info: dict = {
         "CommodityId": commodity_id,
         "IsCanSold": is_can_sold,
@@ -296,7 +322,7 @@ async def change_price(
         resp = await client.put(
             f"{YOUPIN_API}/api/commodity/Commodity/PriceChangeWithLeaseV2",
             headers=_headers(),
-            json={"Commoditys": [commodity_info]},
+            json={"Commoditys": [commodity_info], "Sessionid": _device_id},
         )
     resp.raise_for_status()
     body = resp.json()
@@ -304,32 +330,26 @@ async def change_price(
     return {"ok": True, "commodity_id": commodity_id, "sell_price": sell_price}
 
 
-async def delist_item(commodity_id: int) -> dict:
-    """下架物品（出售和出租通用）"""
+async def delist_item(commodity_ids: list) -> dict:
+    """下架物品（支持批量，出售和出租通用）"""
+    if isinstance(commodity_ids, (int, str)):
+        commodity_ids = [commodity_ids]
     async with httpx.AsyncClient(timeout=12) as client:
         resp = await client.put(
             f"{YOUPIN_API}/api/commodity/Commodity/OffShelf",
             headers=_headers(),
-            json={"Ids": [commodity_id]},   # API 需要 list 格式
+            json={
+                "Ids": ",".join(str(cid) for cid in commodity_ids),
+                "IsDeleteCommodityCache": 1,
+                "IsForceOffline": True,
+            },
         )
     resp.raise_for_status()
     body = resp.json()
     _check(body, "delist_item")
-    return {"ok": True, "commodity_id": commodity_id}
+    return {"ok": True, "count": len(commodity_ids)}
 
 
-async def cancel_sublet(order_id: str) -> dict:
-    """取消0CD转租（将白玩中订单改回普通租出）"""
-    async with httpx.AsyncClient(timeout=12) as client:
-        resp = await client.post(
-            f"{YOUPIN_API}/api/youpin/bff/trade/v1/order/lease/sublet/close",
-            headers=_headers(),
-            json={"orderId": order_id},
-        )
-    resp.raise_for_status()
-    body = resp.json()
-    _check(body, "cancel_sublet")
-    return {"ok": True, "order_id": order_id}
 
 
 # ══════════════════════════════════════════════════════════════

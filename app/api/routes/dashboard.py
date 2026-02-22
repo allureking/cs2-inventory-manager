@@ -247,35 +247,41 @@ async def get_overview(db: AsyncSession = Depends(get_db)):
         )
     ).scalar() or 0
 
-    # --- 市值计算：按 market_hash_name 聚合持仓量，乘以最新缓存价格 ---
-    name_count_rows = (
+    # --- 市值计算：按 (market_hash_name, status) 聚合，乘以最新缓存价格 ---
+    name_status_rows = (
         await db.execute(
             select(
                 InventoryItem.market_hash_name,
+                InventoryItem.status,
                 func.count(InventoryItem.id).label("cnt"),
             )
             .where(InventoryItem.status.in_(_ACTIVE))
-            .group_by(InventoryItem.market_hash_name)
+            .group_by(InventoryItem.market_hash_name, InventoryItem.status)
         )
     ).all()
 
-    all_active_names = [r[0] for r in name_count_rows]
-    name_to_count = {r[0]: r[1] for r in name_count_rows}
+    # 汇总
+    all_active_names = list({r[0] for r in name_status_rows})
+    name_to_count: dict = {}
+    for n, s, c in name_status_rows:
+        name_to_count[n] = name_to_count.get(n, 0) + c
 
     price_map = await _get_latest_prices(all_active_names, db)
 
-    market_value = sum(
-        price_map[name] * name_to_count[name]
-        for name in all_active_names
-        if name in price_map and price_map[name] is not None
-    )
-
-    # 有市价覆盖的活跃物品数（按件数统计）
-    market_priced_count = sum(
-        name_to_count[name]
-        for name in all_active_names
-        if name in price_map and price_map[name] is not None
-    )
+    market_value = 0.0
+    market_value_steam = 0.0
+    market_value_rented = 0.0
+    market_priced_count = 0
+    for n, s, c in name_status_rows:
+        mp = price_map.get(n)
+        if mp is not None:
+            val = mp * c
+            market_value += val
+            market_priced_count += c
+            if s == "in_steam":
+                market_value_steam += val
+            elif s == "rented_out":
+                market_value_rented += val
 
     # P&L：仅对同时有【购入价】AND【市价】的物品精确逐件对比
     # 拉取活跃物品中有购入价的每一件
@@ -354,6 +360,8 @@ async def get_overview(db: AsyncSession = Depends(get_db)):
         "coverage_pct": round(priced_count / active_count * 100, 1) if active_count > 0 else 0,
         # 市值 & P&L
         "market_value": round(market_value, 2) if market_value else 0,
+        "market_value_steam": round(market_value_steam, 2),
+        "market_value_rented": round(market_value_rented, 2),
         "market_priced_count": market_priced_count,
         "pnl": round(pnl, 2) if pnl is not None else None,
         "pnl_pct": round(pnl_pct, 2) if pnl_pct is not None else None,

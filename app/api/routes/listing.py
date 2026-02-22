@@ -23,7 +23,6 @@ from app.services.youpin import TokenExpiredError
 from app.services.youpin_listing import (
     calc_lease_price,
     calc_sell_price,
-    cancel_sublet,
     change_price,
     delist_item,
     fetch_market_lease_price,
@@ -84,15 +83,17 @@ async def get_unlisted_api(
         _handle_token_error(e)
 
 
-class CancelSubletRequest(BaseModel):
-    order_id: str
+class BatchDelistRequest(BaseModel):
+    commodity_ids: list
 
 
-@router.post("/cancel-sublet")
-async def cancel_sublet_api(body: CancelSubletRequest):
-    """取消0CD转租（将白玩中订单改回普通租出状态）"""
+@router.post("/batch-delist")
+async def batch_delist_api(body: BatchDelistRequest):
+    """批量下架物品"""
+    if not body.commodity_ids:
+        raise HTTPException(status_code=400, detail="至少选择一件物品")
     try:
-        return await cancel_sublet(body.order_id)
+        return await delist_item(body.commodity_ids)
     except Exception as e:
         _handle_token_error(e)
 
@@ -261,6 +262,6 @@ async def reprice_api(body: RepriceRequest):
 async def delist_api(commodity_id: int):
     """下架物品"""
     try:
-        return await delist_item(commodity_id)
+        return await delist_item([commodity_id])
     except Exception as e:
         _handle_token_error(e)

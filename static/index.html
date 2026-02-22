@@ -235,6 +235,22 @@
           </span>
         </div>
 
+        <!-- 悠悠登录状态 -->
+        <div class="flex items-center gap-1.5">
+          <template x-if="authState.has_token && authState.nickname">
+            <span class="px-2 py-1 rounded-lg text-[11px]"
+              style="background:rgba(34,197,94,0.1);color:#4ade80;border:1px solid rgba(34,197,94,0.15)">
+              <span x-text="authState.nickname"></span>
+              <span class="text-emerald-700 ml-1" x-text="authState.token_source==='sms' ? '(APP)' : '(ENV)'"></span>
+            </span>
+          </template>
+          <button @click="loginModal.show=true"
+            class="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-medium transition-all"
+            :style="authState.has_token ? 'background:rgba(51,65,85,0.2);color:#64748b;border:1px solid rgba(51,65,85,0.3)' : 'background:rgba(234,179,8,0.12);color:#fbbf24;border:1px solid rgba(234,179,8,0.2)'">
+            <span x-text="authState.has_token ? '切换账号' : '登录悠悠'"></span>
+          </button>
+        </div>
+
         <!-- 涨跌颜色 toggle -->
         <button @click="colorMode = colorMode==='cn' ? 'us' : 'cn'"
           class="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all"
@@ -305,6 +321,57 @@
             style="background:linear-gradient(135deg,#6366f1,#4f46e5)">
             <span x-show="!repriceModal.saving">确认改价</span>
             <span x-show="repriceModal.saving" x-cloak>保存中…</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- ── 登录模态框 ─────────────────────────────────────────────────────── -->
+  <template x-teleport="body">
+    <div x-show="loginModal.show" x-cloak
+      class="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style="background:rgba(0,0,0,0.6);backdrop-filter:blur(4px)"
+      @keydown.escape.window="loginModal.show=false">
+      <div class="w-full max-w-sm rounded-2xl p-6" style="background:#0f172a;border:1px solid rgba(51,65,85,0.5)">
+        <p class="text-slate-200 font-medium mb-4">悠悠有品 手机号登录</p>
+        <p class="text-[11px] text-slate-600 mb-4">通过手机号+验证码获取 App 端 Token（支持上架/下架/改价等操作）</p>
+
+        <div class="space-y-3 mb-4">
+          <div>
+            <label class="block text-[11px] text-slate-600 mb-1">手机号</label>
+            <div class="flex gap-2">
+              <span class="flex items-center px-2 text-xs text-slate-500" style="background:rgba(51,65,85,0.3);border-radius:0.75rem">+86</span>
+              <input x-model="loginModal.phone" type="tel" placeholder="手机号"
+                class="flex-1 px-3 py-2 rounded-xl text-sm border" />
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <div class="flex-1">
+              <label class="block text-[11px] text-slate-600 mb-1">验证码</label>
+              <input x-model="loginModal.code" type="text" placeholder="短信验证码"
+                class="w-full px-3 py-2 rounded-xl text-sm border" />
+            </div>
+            <div class="flex items-end">
+              <button @click="sendSmsCode()" :disabled="loginModal.smsSending || loginModal.cooldown > 0"
+                class="px-3 py-2 rounded-xl text-xs font-medium transition-all disabled:opacity-40"
+                style="background:rgba(59,130,246,0.12);color:#60a5fa;border:1px solid rgba(59,130,246,0.2)">
+                <span x-show="loginModal.cooldown <= 0" x-text="loginModal.smsSending ? '发送中…' : '发送验证码'"></span>
+                <span x-show="loginModal.cooldown > 0" x-text="loginModal.cooldown + 's'"></span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex gap-3">
+          <button @click="loginModal.show=false"
+            class="flex-1 py-2 rounded-xl text-sm transition-all"
+            style="background:rgba(51,65,85,0.3);color:#94a3b8">取消</button>
+          <button @click="doSmsLogin()" :disabled="loginModal.logging || !loginModal.code"
+            class="flex-1 py-2 rounded-xl text-sm font-medium text-white transition-all disabled:opacity-40"
+            style="background:linear-gradient(135deg,#f59e0b,#d97706)">
+            <span x-show="!loginModal.logging">登录</span>
+            <span x-show="loginModal.logging" x-cloak>登录中…</span>
           </button>
         </div>
       </div>
@@ -446,6 +513,16 @@
           <template x-if="overview.market_value > 0">
             <div>
               <p class="text-3xl font-bold text-emerald-300 mb-1">¥<span x-text="fmt(overview.market_value)"></span></p>
+              <div class="space-y-1 mb-1">
+                <div class="flex justify-between text-[11px]">
+                  <span class="text-slate-600">库存市值</span>
+                  <span class="text-blue-300 font-mono">¥<span x-text="fmt(overview.market_value_steam??0)"></span></span>
+                </div>
+                <div class="flex justify-between text-[11px]">
+                  <span class="text-slate-600">出租市值</span>
+                  <span class="text-green-300 font-mono">¥<span x-text="fmt(overview.market_value_rented??0)"></span></span>
+                </div>
+              </div>
               <p class="text-[11px] text-slate-700">
                 覆盖 <span class="text-emerald-500/70" x-text="overview.market_priced_count ?? 0"></span> 件
                 / 共 <span x-text="overview.total_active ?? 0"></span> 件
@@ -545,27 +622,27 @@
       <!-- Sub-tab bar -->
       <div class="flex items-center gap-3 mb-4">
         <div class="flex gap-0.5 p-1 rounded-xl" style="background: rgba(20,30,48,0.7); border: 1px solid rgba(51,65,85,0.3)">
-          <button @click="shelfTab='sell'; loadShelf()"
+          <button @click="shelfTab='sell'; selectedItems=[]; loadShelf()"
             class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
             :class="shelfTab==='sell' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'">
             出售货架 <span class="font-mono ml-1 text-slate-400" x-text="sellShelf.total??0"></span>
           </button>
-          <button @click="shelfTab='lease'; loadShelf()"
+          <button @click="shelfTab='lease'; selectedItems=[]; loadShelf()"
             class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
             :class="shelfTab==='lease' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'">
             出租货架 <span class="font-mono ml-1 text-slate-400" x-text="leaseShelf.total??0"></span>
           </button>
-          <button @click="shelfTab='rented'; loadRentedList(1)"
+          <button @click="shelfTab='rented'; selectedItems=[]; loadRentedList(1)"
             class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
             :class="shelfTab==='rented' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'">
             已租出 <span class="font-mono ml-1 text-slate-400" x-text="rentedList.total??'—'"></span>
           </button>
-          <button @click="shelfTab='sublet'; loadSubletList(1)"
+          <button @click="shelfTab='sublet'; selectedItems=[]; loadSubletList(1)"
             class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
             :class="shelfTab==='sublet' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'">
             转租中/0CD <span class="font-mono ml-1 text-amber-500" x-text="subletList.total??'—'"></span>
           </button>
-          <button @click="shelfTab='unlisted'; loadUnlistedItems(1)"
+          <button @click="shelfTab='unlisted'; selectedItems=[]; loadUnlistedItems(1)"
             class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
             :class="shelfTab==='unlisted' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'">
             待上架 <span class="font-mono ml-1 text-blue-400" x-text="unlistedItems.total??'—'"></span>
@@ -602,10 +679,24 @@
 
       <!-- Shelf table (sell / lease shelves) -->
       <div x-show="shelfTab==='sell' || shelfTab==='lease'" class="card overflow-hidden">
+        <!-- 批量操作栏 -->
+        <div x-show="selectedItems.length > 0"
+          class="px-4 py-2 flex items-center gap-3 border-b" style="border-color:rgba(51,65,85,0.3);background:rgba(99,102,241,0.05)">
+          <span class="text-[11px] text-indigo-400">已选 <span class="font-mono" x-text="selectedItems.length"></span> 件</span>
+          <button @click="batchDelist()"
+            class="text-[11px] px-2 py-1 rounded-lg" style="background:rgba(239,68,68,0.08);color:rgba(239,68,68,0.7);border:1px solid rgba(239,68,68,0.15)">
+            批量下架
+          </button>
+          <button @click="selectedItems=[]" class="text-[11px] text-slate-600 ml-auto">清除选择</button>
+        </div>
         <div class="tbl-wrap">
           <table class="w-full text-xs" style="border-collapse: separate; border-spacing: 0;">
             <thead>
               <tr style="border-bottom: 1px solid rgba(51,65,85,0.3);">
+                <th class="py-3 px-2 w-8">
+                  <input type="checkbox" @change="toggleSelectAll(currentShelf)" class="accent-indigo-500"
+                    :checked="currentShelf.length>0 && currentShelf.every(i=>selectedItems.includes(i.commodityId))"/>
+                </th>
                 <th class="py-3 px-4 text-left font-normal text-slate-700 uppercase tracking-wider">饰品</th>
                 <template x-if="shelfTab==='sell'">
                   <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">出售价</th>
@@ -623,7 +714,7 @@
             </thead>
             <tbody>
               <template x-if="shelfLoading">
-                <tr><td colspan="6" class="py-16 text-center" style="color:#334155">
+                <tr><td colspan="7" class="py-16 text-center" style="color:#334155">
                   <div class="flex flex-col items-center gap-2">
                     <div class="w-5 h-5 rounded-full border-2 animate-spin" style="border-color:rgba(51,65,85,0.4);border-top-color:#3b82f6"></div>
                     <span class="text-xs">加载货架…</span>
@@ -631,10 +722,14 @@
                 </td></tr>
               </template>
               <template x-if="!shelfLoading && currentShelf.length === 0">
-                <tr><td colspan="6" class="py-16 text-center text-xs" style="color:#334155">货架为空</td></tr>
+                <tr><td colspan="7" class="py-16 text-center text-xs" style="color:#334155">货架为空</td></tr>
               </template>
               <template x-for="item in currentShelf" :key="item.commodityId || item.CommodityId">
                 <tr class="tbl-row">
+                  <td class="py-2.5 px-2 w-8">
+                    <input type="checkbox" :checked="selectedItems.includes(item.commodityId)"
+                      @change="toggleSelectItem(item.commodityId)" class="accent-indigo-500"/>
+                  </td>
                   <td class="py-2.5 px-4">
                     <div class="flex items-center gap-2.5">
                       <div class="min-w-0">
@@ -759,16 +854,26 @@
 
       <!-- ── 转租中/0CD列表 ── -->
       <div x-show="shelfTab==='sublet'" class="card overflow-hidden">
-        <div x-show="subletList.stats" x-cloak class="px-4 py-2 text-[11px] text-slate-500 border-b" style="border-color:rgba(51,65,85,0.3)"
-          x-text="subletList.stats"></div>
+        <!-- 批量操作栏 -->
+        <div x-show="selectedItems.length > 0" class="px-4 py-2 flex items-center gap-3 border-b" style="border-color:rgba(51,65,85,0.3);background:rgba(234,179,8,0.05)">
+          <span class="text-[11px] text-amber-400">已选 <span class="font-mono" x-text="selectedItems.length"></span> 件</span>
+          <button @click="batchDisableZeroCd()"
+            class="text-[11px] px-2 py-1 rounded-lg" style="background:rgba(234,179,8,0.1);color:#fbbf24;border:1px solid rgba(234,179,8,0.15)">
+            批量取消转租
+          </button>
+          <button @click="selectedItems=[]" class="text-[11px] text-slate-600 ml-auto">清除选择</button>
+        </div>
         <div class="tbl-wrap">
           <table class="w-full text-xs" style="border-collapse: separate; border-spacing: 0;">
             <thead>
               <tr style="border-bottom: 1px solid rgba(51,65,85,0.3);">
-                <th class="py-3 px-4 text-left font-normal text-slate-700 uppercase tracking-wider">饰品</th>
-                <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">租金</th>
-                <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">到期时间</th>
-                <th class="py-3 px-3 text-center font-normal text-slate-700 uppercase tracking-wider">续租</th>
+                <th class="py-3 px-2 w-8">
+                  <input type="checkbox" @change="toggleSelectAll(subletList.items||[])" class="accent-amber-500"
+                    :checked="(subletList.items||[]).length>0 && (subletList.items||[]).every(i=>selectedItems.includes(i.commodityId))"/>
+                </th>
+                <th class="py-3 px-3 text-left font-normal text-slate-700 uppercase tracking-wider">饰品</th>
+                <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">日租金</th>
+                <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">押金</th>
                 <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">磨损</th>
                 <th class="py-3 px-4 text-center font-normal text-slate-700 uppercase tracking-wider">操作</th>
               </tr>
@@ -785,29 +890,28 @@
               <template x-if="!subletLoading && (subletList.items||[]).length === 0">
                 <tr><td colspan="6" class="py-16 text-center text-xs" style="color:#334155">暂无转租中饰品，请点击「刷新」</td></tr>
               </template>
-              <template x-for="item in (subletList.items||[])" :key="item.orderId">
+              <template x-for="item in (subletList.items||[])" :key="item.commodityId">
                 <tr class="tbl-row">
-                  <td class="py-2.5 px-4">
+                  <td class="py-2.5 px-2 w-8">
+                    <input type="checkbox" :checked="selectedItems.includes(item.commodityId)"
+                      @change="toggleSelectItem(item.commodityId)" class="accent-amber-500"/>
+                  </td>
+                  <td class="py-2.5 px-3">
                     <div class="min-w-0">
                       <p class="text-slate-100 font-medium leading-tight truncate" style="max-width:280px"
-                        x-text="item.hashName || item.name || '—'"></p>
-                      <p class="text-[11px] mt-0.5 truncate font-mono" style="color:#334155; max-width:280px"
-                        x-text="item.orderId"></p>
+                        x-text="item.commodityHashName || item.name || '—'"></p>
                     </div>
                   </td>
-                  <td class="py-2.5 px-3 text-right font-semibold text-emerald-300" x-text="item.leaseAmountDesc || '—'"></td>
+                  <td class="py-2.5 px-3 text-right font-semibold text-emerald-300"
+                    x-text="item.leaseUnitPrice ? '¥'+item.leaseUnitPrice+'/天' : (item.leaseAmountDesc || '—')"></td>
                   <td class="py-2.5 px-3 text-right font-mono text-slate-400"
-                    x-text="item.leaseExpireTime ? item.leaseExpireTime.slice(0,16).replace('T',' ') : (item.leaseDaysDesc || '—')"></td>
-                  <td class="py-2.5 px-3 text-center">
-                    <span x-show="item.hasRenewal" class="px-1.5 py-0.5 rounded text-[10px]" style="background:rgba(234,179,8,0.1);color:#fbbf24">续租</span>
-                    <span x-show="!item.hasRenewal" class="text-slate-700">—</span>
-                  </td>
+                    x-text="item.leaseDeposit ? '¥'+item.leaseDeposit : (item.depositAmountDesc || '—')"></td>
                   <td class="py-2.5 px-3 text-right font-mono" style="color:#475569"
                     x-text="item.abrade != null ? parseFloat(item.abrade).toFixed(4) : '—'"></td>
                   <td class="py-2.5 px-4 text-center">
-                    <button @click="cancelSubletOrder(item.orderId)"
+                    <button @click="cancelSubletOrder(item.commodityId)"
                       class="text-[11px] px-2 py-1 rounded-lg transition-all"
-                      style="background:rgba(234,179,8,0.08); color:rgba(234,179,8,0.7); border:1px solid rgba(234,179,8,0.15)"
+                      style="background:rgba(234,179,8,0.08);color:rgba(234,179,8,0.7);border:1px solid rgba(234,179,8,0.15)"
                       @mouseenter="$el.style.background='rgba(234,179,8,0.18)'"
                       @mouseleave="$el.style.background='rgba(234,179,8,0.08)'">
                       取消转租
@@ -820,7 +924,7 @@
         </div>
         <div x-show="!subletLoading && subletList.total > (subletList.page_size||50)"
           class="flex items-center justify-between px-4 py-3 border-t" style="border-color:rgba(51,65,85,0.3)">
-          <span class="text-[11px] text-slate-600">共 <span class="font-mono text-slate-400" x-text="subletList.total"></span> 条 · 第 <span class="font-mono text-slate-400" x-text="subletPage"></span> 页</span>
+          <span class="text-[11px] text-slate-600">共 <span class="font-mono text-slate-400" x-text="subletList.total"></span> 件 · 第 <span class="font-mono text-slate-400" x-text="subletPage"></span> 页</span>
           <div class="flex gap-2">
             <button @click="loadSubletList(subletPage-1)" :disabled="subletPage<=1"
               class="px-3 py-1 rounded-lg text-xs disabled:opacity-30" style="background:rgba(51,65,85,0.3);color:#94a3b8">上一页</button>
@@ -903,85 +1007,9 @@
         </div>
       </div>
 
-      <!-- Smart List panel (from inventory) -->
-      <div class="card p-5 mt-4">
-        <p class="text-[11px] text-slate-600 uppercase tracking-widest mb-3">从持仓快速上架</p>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-          <div>
-            <p class="text-[11px] text-slate-600 mb-1">Asset ID</p>
-            <input x-model="quickList.assetId" type="text" placeholder="Steam Asset ID"
-              class="w-full px-3 py-2 rounded-xl text-xs border" />
-          </div>
-          <div>
-            <p class="text-[11px] text-slate-600 mb-1">Template ID</p>
-            <input x-model.number="quickList.templateId" type="number" placeholder="悠悠模板ID"
-              class="w-full px-3 py-2 rounded-xl text-xs border" />
-          </div>
-          <div>
-            <p class="text-[11px] text-slate-600 mb-1">上架模式</p>
-            <select x-model="quickList.mode" class="w-full py-2 pl-3 rounded-xl text-xs border">
-              <option value="sell">仅出售</option>
-              <option value="lease">仅出租</option>
-              <option value="both">可租可售</option>
-            </select>
-          </div>
-          <div>
-            <p class="text-[11px] text-slate-600 mb-1">购入价（止盈用）</p>
-            <input x-model.number="quickList.buyPrice" type="number" placeholder="元" step="0.01"
-              class="w-full px-3 py-2 rounded-xl text-xs border" />
-          </div>
-        </div>
-        <div class="flex items-center gap-3">
-          <div class="flex items-center gap-2">
-            <span class="text-[11px] text-slate-600">止盈率</span>
-            <input x-model.number="quickList.takeProfitRatio" type="number" placeholder="0 = 不启用" step="0.01" min="0"
-              class="w-24 px-2 py-1.5 rounded-lg text-xs border" />
-          </div>
-          <div class="flex items-center gap-2">
-            <span class="text-[11px] text-slate-600">低一分</span>
-            <label class="pill-toggle" :class="quickList.useUndercut ? 'active-blue' : ''"
-              @click="quickList.useUndercut = !quickList.useUndercut">
-              <div class="relative toggle-track" :style="quickList.useUndercut ? 'background:#1d4ed8' : 'background:#1e293b'">
-                <div class="toggle-thumb" :style="quickList.useUndercut ? 'transform:translateX(12px)' : ''"></div>
-              </div>
-            </label>
-          </div>
-          <button @click="previewListPrice()" :disabled="!quickList.templateId || quickList.previewing"
-            class="px-4 py-2 rounded-xl text-xs font-medium transition-all disabled:opacity-40"
-            style="background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.2); color:#a5b4fc">
-            预览定价
-          </button>
-          <button @click="smartListItem()" :disabled="!quickList.assetId || !quickList.templateId || quickList.listing"
-            class="px-4 py-2 rounded-xl text-xs font-semibold text-white transition-all disabled:opacity-40"
-            style="background:linear-gradient(135deg,#059669,#047857); box-shadow:0 0 14px rgba(5,150,105,0.2)">
-            <span x-show="!quickList.listing">智能上架</span>
-            <span x-show="quickList.listing" x-cloak>上架中…</span>
-          </button>
-        </div>
-        <!-- Preview result -->
-        <div x-show="quickList.preview" x-cloak class="mt-3 p-3 rounded-xl text-xs"
-          style="background:rgba(10,18,35,0.7); border:1px solid rgba(51,65,85,0.25)">
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <p class="text-slate-600 mb-0.5">建议出售价</p>
-              <p class="font-semibold text-slate-100" x-text="quickList.preview?.suggested_sell ? '¥'+fmt(quickList.preview.suggested_sell) : '—'"></p>
-            </div>
-            <div x-show="quickList.preview?.suggested_lease">
-              <p class="text-slate-600 mb-0.5">建议租金/押金</p>
-              <p class="font-semibold text-emerald-300"
-                x-text="quickList.preview?.suggested_lease ? '¥'+fmt(quickList.preview.suggested_lease.lease_unit)+'/天  押金¥'+fmt(quickList.preview.suggested_lease.deposit) : '—'"></p>
-            </div>
-          </div>
-          <div class="mt-2" x-show="quickList.preview?.market_sell_top5?.length">
-            <p class="text-slate-700 mb-1">市场前5档</p>
-            <div class="flex gap-2 flex-wrap">
-              <template x-for="p in (quickList.preview?.market_sell_top5||[])" :key="p.price">
-                <span class="px-2 py-0.5 rounded-full text-[11px]" style="background:rgba(51,65,85,0.3); color:#94a3b8"
-                  x-text="'¥'+fmt(p.price)"></span>
-              </template>
-            </div>
-          </div>
-        </div>
+      <!-- 提示：使用待上架 tab 快速上架 -->
+      <div x-show="shelfTab==='sell' || shelfTab==='lease'" class="mt-3 px-4 py-2 text-[11px] text-slate-700 text-center">
+        需要上架新饰品？请切换到「待上架」标签页，从库存中选择饰品快速上架
       </div>
     </div>
 
@@ -1459,6 +1487,9 @@
         unlistedLoading: false,
         unlistedPage: 1,
         repriceModal: { show: false, item: null, newPrice: '', newLeaseUnit: '', newDeposit: '', saving: false },
+        loginModal: { show: false, phone: '', code: '', sessionId: '', smsSending: false, logging: false, cooldown: 0 },
+        authState: { has_token: false, token_source: 'none', nickname: null },
+        selectedItems: [],
         quickList: {
           assetId: '', templateId: null, mode: 'sell',
           buyPrice: 0, takeProfitRatio: 0, useUndercut: true,
@@ -1483,6 +1514,8 @@
         // ── Init ──────────────────────────────────────────────────────
         async init() {
           await this.loadAll();
+          // 加载登录状态
+          this._loadAuthState();
           // 检查 token 状态
           this._checkToken();
           // 如果服务器上已有刷新任务在跑，接续轮询
@@ -1503,8 +1536,116 @@
             if (r.ok) {
               const s = await r.json();
               this.tokenExpired = !s.valid;
+              if (s.valid && s.nickname) this.authState.nickname = s.nickname;
             }
           } catch {}
+        },
+
+        async _loadAuthState() {
+          try {
+            const r = await fetch('/api/youpin/auth/state');
+            if (r.ok) this.authState = await r.json();
+          } catch {}
+        },
+
+        async sendSmsCode() {
+          if (!this.loginModal.phone) return this.showToast('请输入手机号', 'error');
+          this.loginModal.smsSending = true;
+          try {
+            const r = await fetch('/api/youpin/auth/send-sms', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ phone: this.loginModal.phone }),
+            });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.detail || '发送失败');
+            this.loginModal.sessionId = d.session_id;
+            this.showToast('验证码已发送');
+            // 60秒倒计时
+            this.loginModal.cooldown = 60;
+            const timer = setInterval(() => {
+              this.loginModal.cooldown--;
+              if (this.loginModal.cooldown <= 0) clearInterval(timer);
+            }, 1000);
+          } catch (e) {
+            this.showToast('发送失败：' + e.message, 'error');
+          }
+          finally { this.loginModal.smsSending = false; }
+        },
+
+        async doSmsLogin() {
+          if (!this.loginModal.code || !this.loginModal.sessionId) return;
+          this.loginModal.logging = true;
+          try {
+            const r = await fetch('/api/youpin/auth/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                phone: this.loginModal.phone,
+                code: this.loginModal.code,
+                session_id: this.loginModal.sessionId,
+              }),
+            });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.detail || '登录失败');
+            this.showToast('登录成功：' + (d.nickname || ''));
+            this.loginModal.show = false;
+            this.tokenExpired = false;
+            await this._loadAuthState();
+          } catch (e) {
+            this.showToast('登录失败：' + e.message, 'error');
+          }
+          finally { this.loginModal.logging = false; }
+        },
+
+        // ── 批量操作 ──────────────────────────────────────────────────
+        toggleSelectItem(id) {
+          const idx = this.selectedItems.indexOf(id);
+          if (idx >= 0) this.selectedItems.splice(idx, 1);
+          else this.selectedItems.push(id);
+        },
+
+        toggleSelectAll(items, key = 'commodityId') {
+          const ids = items.map(i => i[key]).filter(Boolean);
+          if (ids.every(id => this.selectedItems.includes(id))) {
+            this.selectedItems = this.selectedItems.filter(id => !ids.includes(id));
+          } else {
+            const set = new Set(this.selectedItems);
+            ids.forEach(id => set.add(id));
+            this.selectedItems = [...set];
+          }
+        },
+
+        async batchDelist() {
+          if (!this.selectedItems.length || !confirm(`确认下架 ${this.selectedItems.length} 件物品？`)) return;
+          try {
+            const r = await fetch('/api/listing/batch-delist', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ commodity_ids: this.selectedItems }),
+            });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.detail || '下架失败');
+            this.showToast(`成功下架 ${this.selectedItems.length} 件`);
+            this.selectedItems = [];
+            await this.loadShelf();
+          } catch (e) { this.showToast('批量下架失败：' + e.message, 'error'); }
+        },
+
+        async batchDisableZeroCd() {
+          if (!this.selectedItems.length || !confirm(`确认取消 ${this.selectedItems.length} 件转租？`)) return;
+          try {
+            const r = await fetch('/api/youpin/lease/disable-zero-cd', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ order_ids: this.selectedItems }),
+            });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.detail || '取消失败');
+            this.showToast('已取消 0CD 转租');
+            this.selectedItems = [];
+            await this.loadSubletList(this.subletPage);
+          } catch (e) { this.showToast('批量取消失败：' + e.message, 'error'); }
         },
 
         get currentShelf() {
@@ -1707,13 +1848,14 @@
           finally { this.unlistedLoading = false; }
         },
 
-        async cancelSubletOrder(orderId) {
-          if (!orderId || !confirm('确认取消该饰品的0CD转租？取消后将恢复为普通租出状态。')) return;
+        async cancelSubletOrder(commodityId) {
+          if (!commodityId || !confirm('确认取消该饰品的0CD转租？')) return;
           try {
-            const r = await fetch('/api/listing/cancel-sublet', {
+            // 转租中列表使用 commodityId 作为标识
+            const r = await fetch('/api/youpin/lease/disable-zero-cd', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ order_id: orderId }),
+              body: JSON.stringify({ order_ids: [commodityId] }),
             });
             const d = await r.json();
             if (!r.ok) throw new Error(d.detail || '取消失败');

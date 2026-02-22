@@ -58,16 +58,50 @@ router = APIRouter()
 
 
 def _require_token():
-    if not settings.youpin_token:
-        raise HTTPException(status_code=503, detail="YOUPIN_TOKEN 未配置，请先在 .env 中填写")
+    if not youpin_svc.get_active_token():
+        raise HTTPException(status_code=503, detail="Token 未配置，请先通过手机号登录或在 .env 中填写 YOUPIN_TOKEN")
 
 
-# ── Token 状态 ──────────────────────────────────────────────────────────────
+# ── 认证 ──────────────────────────────────────────────────────────────────
 
 @router.get("/token/status")
 async def token_status():
     """验证当前悠悠 Token 是否有效，返回用户信息"""
     return await youpin_svc.check_token_status()
+
+
+@router.get("/auth/state")
+async def auth_state():
+    """获取当前登录状态（昵称、Token 来源等）"""
+    return youpin_svc.get_login_state()
+
+
+@router.post("/auth/send-sms")
+async def auth_send_sms(body: dict):
+    """发送短信验证码"""
+    phone = body.get("phone", "").strip()
+    if not phone:
+        raise HTTPException(status_code=400, detail="请输入手机号")
+    try:
+        return await youpin_svc.send_sms_code(phone)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.post("/auth/login")
+async def auth_login(body: dict):
+    """短信验证码登录，获取 App 端 Token"""
+    phone = body.get("phone", "").strip()
+    code = body.get("code", "").strip()
+    session_id = body.get("session_id", "").strip()
+    if not phone or not code or not session_id:
+        raise HTTPException(status_code=400, detail="缺少必填字段")
+    try:
+        return await youpin_svc.sms_login(phone, code, session_id)
+    except youpin_svc.TokenExpiredError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 # ── 模板ID同步 ──────────────────────────────────────────────────────────────
@@ -144,26 +178,57 @@ async def lease_sublet_list(
     page_size: int = 50,
 ):
     """
-    实时拉取转租中（白玩中/0CD）订单列表。
-    使用服务端 orderSubStatus=1064 过滤，直接返回准确的转租件数。
+    获取当前 0CD 转租货架列表（zeroCDLease 端点，精确数据）。
     """
     _require_token()
     try:
-        records, total_count, stats_desc = await youpin_svc.fetch_sublet_records(
-            page=page, page_size=page_size
-        )
+        result = await youpin_svc.fetch_zero_cd_shelf(page=page, page_size=page_size)
     except youpin_svc.TokenExpiredError as e:
         raise HTTPException(status_code=401, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
 
-    return {
-        "items": [_fmt_lease_record(r) for r in records],
-        "total": total_count,
-        "stats": stats_desc,
-        "page": page,
-        "page_size": page_size,
-    }
+    from app.services.youpin_listing import _normalize_shelf_item
+    data = youpin_svc._data(result)
+    if isinstance(data, dict):
+        raw = (data.get("commodityInfoList") or data.get("list") or [])
+        stats = data.get("statisticalData") or {}
+        total = stats.get("quantity") or data.get("totalCount") or len(raw)
+        items = [_normalize_shelf_item(i) for i in raw]
+    else:
+        items, total = [], 0
+
+    return {"items": items, "total": total, "page": page, "page_size": page_size}
+
+
+@router.post("/lease/enable-zero-cd")
+async def enable_zero_cd_api(body: dict):
+    """批量开启 0CD 转租"""
+    _require_token()
+    order_ids = body.get("order_ids", [])
+    if not order_ids:
+        raise HTTPException(status_code=400, detail="至少选择一个订单")
+    try:
+        return await youpin_svc.enable_zero_cd(order_ids)
+    except youpin_svc.TokenExpiredError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.post("/lease/disable-zero-cd")
+async def disable_zero_cd_api(body: dict):
+    """批量取消 0CD 转租"""
+    _require_token()
+    order_ids = body.get("order_ids", [])
+    if not order_ids:
+        raise HTTPException(status_code=400, detail="至少选择一个订单")
+    try:
+        return await youpin_svc.disable_zero_cd(order_ids)
+    except youpin_svc.TokenExpiredError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 # ── 数据导入 ────────────────────────────────────────────────────────────────

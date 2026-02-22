@@ -76,6 +76,28 @@ class TokenExpiredError(Exception):
 
 _uk_cache: dict = {"value": None, "expires_at": 0.0}
 
+# ── 设备标识（启动时随机生成，模拟 Android 客户端）────────────────────────
+_device_id: str = ""
+_device_token: str = ""
+
+# ── 运行时 token（SMS 登录后覆盖 .env 中的值）────────────────────────────
+_runtime_token: Optional[str] = None
+_runtime_nickname: Optional[str] = None
+
+
+def _ensure_device_id() -> None:
+    global _device_id, _device_token
+    if not _device_id:
+        _device_id = "".join(random.choices(string.ascii_letters + string.digits, k=10))
+        _device_token = _device_id
+
+_ensure_device_id()
+
+
+def get_active_token() -> str:
+    """返回当前有效 token：运行时(SMS) > .env 配置"""
+    return _runtime_token or settings.youpin_token
+
 
 def _rand_str(n: int) -> str:
     return "".join(random.choices(string.ascii_letters + string.digits, k=n))
@@ -123,14 +145,12 @@ def _get_real_uk() -> str:
 
 def _headers(pc_market: bool = False) -> dict:
     """
-    构建悠悠 API 请求头。
+    构建悠悠 API 请求头（模拟 Android 客户端）。
 
-    pc_market=True  → 使用 RSA+AES 真实 uk + platform=pc
-                      仅用于市场价格查询接口（queryOnSaleCommodityList）
-    pc_market=False → uk 使用随机字符串（快速，适用于绝大多数接口）
+    pc_market=True  → 使用 RSA+AES 真实 uk + platform=pc（仅市场查询）
+    pc_market=False → uk 使用随机字符串（绝大多数接口）
     """
-    token = settings.youpin_token
-    device_id = settings.youpin_device_id or str(uuid.uuid4())
+    token = get_active_token()
 
     if pc_market:
         try:
@@ -145,17 +165,26 @@ def _headers(pc_market: bool = False) -> dict:
 
     return {
         "authorization": f"Bearer {token}",
-        "content-type": "application/json",
+        "content-type": "application/json; charset=utf-8",
         "user-agent": "okhttp/3.14.9",
-        "app-version": "5.28.3",
-        "apptype": "4",
-        "appversion": "5.28.3",
+        "App-Version": "5.28.3",
+        "AppType": "4",
         "platform": platform,
-        "deviceid": device_id,
-        "devicetype": "1",
+        "DeviceId": _device_id,
+        "DeviceToken": _device_token,
+        "deviceType": "1",
+        "package-type": "uuyp",
         "uk": uk,
-        "gameid": "730",
-        "accept": "application/json, text/plain, */*",
+        "Gameid": "730",
+        "accept-encoding": "gzip",
+        "Device-Info": json.dumps({
+            "deviceId": _device_id,
+            "deviceType": _device_id,
+            "hasSteamApp": 1,
+            "requestTag": _rand_str(32).upper(),
+            "systemName ": "Android",
+            "systemVersion": "15",
+        }, ensure_ascii=False),
     }
 
 
@@ -186,8 +215,8 @@ async def check_token_status() -> dict:
     验证当前 Token 是否有效，返回:
       {"valid": bool, "nickname": str | None, "error": str | None}
     """
-    if not settings.youpin_token:
-        return {"valid": False, "nickname": None, "error": "Token 未配置（.env 中 YOUPIN_TOKEN 为空）"}
+    if not get_active_token():
+        return {"valid": False, "nickname": None, "error": "Token 未配置，请通过手机号登录或在 .env 中填写 YOUPIN_TOKEN"}
 
     try:
         async with httpx.AsyncClient(timeout=8) as client:
@@ -209,29 +238,138 @@ async def check_token_status() -> dict:
         return {"valid": False, "nickname": None, "error": f"检测失败: {e}"}
 
 
-# ── 原始数据拉取 ────────────────────────────────────────────────────────────
+# ── SMS 登录 ──────────────────────────────────────────────────────────────
 
-async def fetch_sublet_records(page: int = 1, page_size: int = 50) -> tuple:
-    """获取白玩中/转租中订单（尝试服务端 orderSubStatus=1064 过滤）"""
-    async with httpx.AsyncClient(timeout=15) as client:
+async def send_sms_code(phone: str) -> dict:
+    """发送短信验证码（用于 App 端登录获取 Token）"""
+    session_id = _rand_str(10)
+    async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.post(
-            f"{YOUPIN_API}/api/youpin/bff/trade/v1/order/lease/out/list",
+            f"{YOUPIN_API}/api/user/Auth/SendSignInSmsCode",
+            headers=_headers(),
+            json={"Area": 86, "Mobile": phone, "Sessionid": session_id, "Code": ""},
+        )
+    resp.raise_for_status()
+    body = resp.json()
+    _check(body, "send_sms_code")
+    return {"ok": True, "session_id": session_id}
+
+
+async def sms_login(phone: str, code: str, session_id: str) -> dict:
+    """验证码登录，获取 App 端 Token"""
+    global _runtime_token, _runtime_nickname
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            f"{YOUPIN_API}/api/user/Auth/SmsSignIn",
             headers=_headers(),
             json={
-                "pageIndex": page,
-                "pageSize": page_size,
-                "gameId": 730,
-                "orderSubStatus": 1064,   # 白玩中
+                "Area": 86,
+                "Code": code,
+                "DeviceName": session_id,
+                "Sessionid": session_id,
+                "Mobile": phone,
             },
         )
     resp.raise_for_status()
     body = resp.json()
-    _check(body, "sublet_records")
+    _check(body, "sms_login")
+    data = _data(body)
+    token = data.get("Token") or data.get("token")
+    if not token:
+        raise RuntimeError("登录成功但未返回 Token")
+
+    _runtime_token = token
+    # 验证新 token 并获取昵称
+    info = await check_token_status()
+    _runtime_nickname = info.get("nickname")
+    return {
+        "ok": True,
+        "token": token,
+        "nickname": _runtime_nickname,
+        "valid": info.get("valid", True),
+    }
+
+
+def get_login_state() -> dict:
+    """返回当前登录状态"""
+    token = get_active_token()
+    return {
+        "has_token": bool(token),
+        "token_source": "sms" if _runtime_token else ("env" if settings.youpin_token else "none"),
+        "nickname": _runtime_nickname,
+        "device_id": _device_id,
+    }
+
+
+# ── 0CD 转租管理 ──────────────────────────────────────────────────────────
+
+async def fetch_zero_cd_shelf(page: int = 1, page_size: int = 50) -> dict:
+    """获取当前 0CD 转租货架列表（实际在转租中的饰品）"""
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            f"{YOUPIN_API}/api/youpin/bff/new/commodity/v1/commodity/list/zeroCDLease",
+            headers=_headers(),
+            json={"pageIndex": page, "pageSize": page_size, "gameId": "730"},
+        )
+    resp.raise_for_status()
+    body = resp.json()
+    _check(body, "zero_cd_shelf")
+    return body
+
+
+async def fetch_zero_cd_eligible(page: int = 1, page_size: int = 50) -> tuple:
+    """获取可以开启 0CD 但尚未开启的订单列表"""
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            f"{YOUPIN_API}/api/youpin/bff/trade/v1/order/lease/sublet/canEnable/list",
+            headers=_headers(),
+            json={"pageIndex": page, "pageSize": page_size},
+        )
+    resp.raise_for_status()
+    body = resp.json()
+    _check(body, "zero_cd_eligible")
     data = _data(body)
     records = data.get("orderDataList", []) if isinstance(data, dict) else []
     total_count = data.get("totalCount", 0) if isinstance(data, dict) else 0
-    stats_desc = data.get("statisticsDataDesc", "") if isinstance(data, dict) else ""
-    return records, total_count, stats_desc
+    return records, total_count
+
+
+async def enable_zero_cd(order_ids: list) -> dict:
+    """批量开启 0CD 转租"""
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            f"{YOUPIN_API}/api/youpin/bff/order/sublet/open",
+            headers=_headers(),
+            json={
+                "orderIdList": order_ids,
+                "subletConfig": {
+                    "subletSwitchFlag": 1,
+                    "subletPricingFlag": 1,
+                    "pricingMinPercent": "95",
+                },
+            },
+        )
+    resp.raise_for_status()
+    body = resp.json()
+    _check(body, "enable_zero_cd")
+    return {"ok": True, "count": len(order_ids)}
+
+
+async def disable_zero_cd(order_ids: list) -> dict:
+    """批量取消 0CD 转租"""
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            f"{YOUPIN_API}/api/youpin/bff/order/sublet/close",
+            headers=_headers(),
+            json={"orderIdList": order_ids},
+        )
+    resp.raise_for_status()
+    body = resp.json()
+    _check(body, "disable_zero_cd")
+    return {"ok": True, "count": len(order_ids)}
+
+
+# ── 原始数据拉取 ────────────────────────────────────────────────────────────
 
 
 async def fetch_lease_records(page: int = 1, page_size: int = 30) -> tuple:
