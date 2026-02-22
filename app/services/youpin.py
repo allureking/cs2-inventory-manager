@@ -304,8 +304,10 @@ async def fetch_full_inventory(page: int = 1, page_size: int = 500) -> tuple:
     _check(body, "full_inventory")
     data = _data(body)
     if isinstance(data, dict):
-        items = data.get("Items", data.get("items", data.get("data", [])))
-        total = data.get("TotalCount", data.get("totalCount", 0))
+        # 实际字段名是 ItemsInfos（原代码用 Items 不对）
+        items = (data.get("ItemsInfos") or data.get("Items") or
+                 data.get("items") or data.get("data") or [])
+        total = data.get("TotalCount") or data.get("totalCount") or 0
         return items or [], total
     if isinstance(data, list):
         return data, len(data)
@@ -533,39 +535,49 @@ async def sync_template_ids(db: AsyncSession) -> dict:
             break
         all_items.extend(batch)
 
-    # 构建 market_hash_name → templateId 映射
+    # 构建 market_hash_name → (templateId, icon_url) 映射
+    # GetUserInventoryDataListV3 实际结构：templateId 在 TemplateInfo.Id（嵌套对象）
     name_to_tid: dict[str, int] = {}
+    name_to_icon: dict[str, str] = {}
     for item in all_items:
-        # 字段名可能是 ItemId / templateId / TemplateId / itemId
-        tid = (item.get("ItemId") or item.get("templateId") or
+        ti = item.get("TemplateInfo") or {}
+        tid = (ti.get("Id") or
+               item.get("ItemId") or item.get("templateId") or
                item.get("TemplateId") or item.get("itemId"))
-        name = (item.get("commodityHashName") or item.get("CommodityHashName") or
-                item.get("marketHashName") or item.get("MarketHashName"))
+        name = (item.get("MarketHashName") or item.get("marketHashName") or
+                item.get("commodityHashName") or item.get("CommodityHashName"))
+        icon = ti.get("IconUrl") or ti.get("IconUrlLarge")
         if tid and name:
             name_to_tid[str(name)] = int(tid)
+        if icon and name:
+            name_to_icon[str(name)] = str(icon)
 
     if not name_to_tid:
         return {"synced": 0, "total_fetched": len(all_items),
                 "note": "API 响应中未找到 templateId 字段，请检查响应结构"}
 
-    # 批量更新 inventory_item
+    # 批量更新 inventory_item（templateId + icon_url）
     synced = 0
+    icon_updated = 0
     for hash_name, tid in name_to_tid.items():
         result = await db.execute(
             select(InventoryItem)
-            .where(
-                InventoryItem.market_hash_name == hash_name,
-                InventoryItem.youpin_template_id.is_(None),
-            )
+            .where(InventoryItem.market_hash_name == hash_name)
         )
         items_to_update = result.scalars().all()
+        icon = name_to_icon.get(hash_name)
         for it in items_to_update:
-            it.youpin_template_id = tid
-            synced += 1
+            if it.youpin_template_id is None:
+                it.youpin_template_id = tid
+                synced += 1
+            if icon and not it.icon_url:
+                it.icon_url = icon
+                icon_updated += 1
 
     await db.commit()
     return {"synced": synced, "total_fetched": len(all_items),
-            "unique_names_mapped": len(name_to_tid)}
+            "unique_names_mapped": len(name_to_tid),
+            "icon_urls_filled": icon_updated}
 
 
 # ── 数据解析工具 ────────────────────────────────────────────────────────────
@@ -622,7 +634,14 @@ def _parse_date(record: dict) -> Optional[str]:
 
 
 def _extract_template_id(info: dict) -> Optional[int]:
-    """从各种可能字段中提取 templateId"""
+    """从各种可能字段中提取 templateId（包括嵌套 TemplateInfo.Id）"""
+    # GetUserInventoryDataListV3 把 templateId 放在 TemplateInfo.Id 里
+    ti = info.get("TemplateInfo") or {}
+    if ti.get("Id"):
+        try:
+            return int(ti["Id"])
+        except (TypeError, ValueError):
+            pass
     for key in ("templateId", "TemplateId", "ItemId", "itemId", "commodityTemplateId"):
         v = info.get(key)
         if v:
