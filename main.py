@@ -1,3 +1,4 @@
+import logging
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,51 +8,25 @@ from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.core.database import init_db
 from app.api.routes import prices, items, inventory, youpin, listing
-from app.api.routes import dashboard
+from app.api.routes import dashboard, analysis
 
-# ── 定时任务（部署到服务器后取消注释）──────────────────────────────────────────
-# 依赖：pip install apscheduler
-#
-# from apscheduler.schedulers.asyncio import AsyncIOScheduler
-# from app.core.database import AsyncSessionLocal
-# from app.services import steamdt as steamdt_svc
-# from app.services import youpin as youpin_svc
-# from app.models.db_models import InventoryItem
-# from sqlalchemy import select
-#
-# scheduler = AsyncIOScheduler()
-#
-# async def _scheduled_price_refresh():
-#     """每小时自动拉取持仓物品最新价格（写入 price_snapshot）"""
-#     async with AsyncSessionLocal() as db:
-#         result = await db.execute(
-#             select(InventoryItem.market_hash_name)
-#             .where(InventoryItem.status.in_(["in_steam", "rented_out"]))
-#             .distinct()
-#         )
-#         hash_names = [row[0] for row in result.all()]
-#         if not hash_names:
-#             return
-#         chunks = [hash_names[i:i+100] for i in range(0, len(hash_names), 100)]
-#         for chunk in chunks:
-#             await steamdt_svc.fetch_batch_prices(chunk, db)
-#             await asyncio.sleep(61)  # 批量接口 1 次/分钟
-#
-# async def _scheduled_lease_sync():
-#     """每天同步一次悠悠租出持仓（更新 rented_out 物品列表）"""
-#     async with AsyncSessionLocal() as db:
-#         await youpin_svc.import_lease_records(db)
-#
-# # 部署时在 startup 里添加：
-# # scheduler.add_job(_scheduled_price_refresh, "interval", hours=1, id="price_refresh")
-# # scheduler.add_job(_scheduled_lease_sync,    "cron",     hour=4,  id="lease_sync")
-# # scheduler.start()
-# ──────────────────────────────────────────────────────────────────────────────
+# ── 定时任务 ────────────────────────────────────────────────────────────────
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from app.services.collector import (
+    collect_prices,
+    aggregate_daily,
+    compute_signals,
+    cleanup_old_snapshots,
+)
+
+scheduler = AsyncIOScheduler()
+logger = logging.getLogger(__name__)
+# ────────────────────────────────────────────────────────────────────────────
 
 app = FastAPI(
     title="CS2 Inventory Manager",
     description="CS2 饰品量化交易监控系统",
-    version="0.1.0",
+    version="0.2.0",
 )
 
 app.add_middleware(
@@ -67,6 +42,7 @@ app.include_router(inventory.router, prefix="/api/inventory", tags=["inventory"]
 app.include_router(youpin.router, prefix="/api/youpin", tags=["youpin"])
 app.include_router(listing.router, prefix="/api/listing", tags=["listing"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
+app.include_router(analysis.router, prefix="/api/analysis", tags=["analysis"])
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -74,6 +50,28 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 @app.on_event("startup")
 async def startup():
     await init_db()
+
+    # ── Background jobs ──
+    # Price collection: every 30 min
+    scheduler.add_job(collect_prices, "interval", minutes=30, id="price_collect",
+                      misfire_grace_time=300)
+    # Daily aggregation: 00:05 UTC
+    scheduler.add_job(aggregate_daily, "cron", hour=0, minute=5, id="daily_aggregate",
+                      misfire_grace_time=600)
+    # Signal computation: 00:10 UTC
+    scheduler.add_job(compute_signals, "cron", hour=0, minute=10, id="daily_signals",
+                      misfire_grace_time=600)
+    # Cleanup old snapshots: 01:00 UTC
+    scheduler.add_job(cleanup_old_snapshots, "cron", hour=1, minute=0, id="cleanup_snapshots",
+                      misfire_grace_time=600)
+
+    scheduler.start()
+    logger.info("APScheduler started with 4 background jobs")
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    scheduler.shutdown(wait=False)
 
 
 @app.get("/", include_in_schema=False)

@@ -7,3 +7,4 @@ pydantic-settings==2.7.0
 python-dotenv==1.0.1
 pycryptodome==3.21.0
 aiofiles==24.1.0
+apscheduler==3.10.4

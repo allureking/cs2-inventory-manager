@@ -146,6 +146,81 @@ class InventoryItem(Base):
     purchase_platform: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
 
 
+class PriceHistory(Base):
+    """每日价格 OHLC 记录（量化分析时序基础）"""
+
+    __tablename__ = "price_history"
+    __table_args__ = (
+        UniqueConstraint("market_hash_name", "platform", "record_date", name="uq_price_history"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    market_hash_name: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    platform: Mapped[str] = mapped_column(String(32), nullable=False)  # BUFF163 / 悠悠有品 / C5 / ALL
+
+    open_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    close_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    high_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    low_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    sell_count: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    bidding_count: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+
+    record_date: Mapped[str] = mapped_column(String(8), nullable=False, index=True)  # "20260222"
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class QuantSignal(Base):
+    """饰品量化信号（每日计算后覆盖写入）"""
+
+    __tablename__ = "quant_signal"
+    __table_args__ = (
+        UniqueConstraint("market_hash_name", "signal_date", name="uq_quant_signal"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    market_hash_name: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    signal_date: Mapped[str] = mapped_column(String(8), nullable=False, index=True)
+
+    # 技术指标
+    rsi_14: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    bb_position: Mapped[Optional[float]] = mapped_column(Float, nullable=True)   # %B
+    bb_width: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    momentum_7: Mapped[Optional[float]] = mapped_column(Float, nullable=True)    # 7 天动量 %
+    momentum_30: Mapped[Optional[float]] = mapped_column(Float, nullable=True)   # 30 天动量 %
+    volatility_30: Mapped[Optional[float]] = mapped_column(Float, nullable=True) # 年化波动率
+    ma_7: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    ma_30: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    ath_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    ath_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)       # 当前 / ATH %
+
+    # 跨平台价差
+    spread_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # 综合评分 0-100
+    sell_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    opportunity_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class QuantAlert(Base):
+    """量化预警记录"""
+
+    __tablename__ = "quant_alert"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    market_hash_name: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    alert_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    severity: Mapped[str] = mapped_column(String(16), nullable=False, default="info")
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    detail: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    current_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    threshold: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class StorageUnit(Base):
     """
     储物柜状态追踪表。
