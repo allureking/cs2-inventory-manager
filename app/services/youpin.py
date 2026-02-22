@@ -42,7 +42,7 @@ import httpx
 from Crypto.Cipher import AES, PKCS1_v1_5
 from Crypto.PublicKey import RSA
 from Crypto.Util.Padding import pad, unpad
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update as sa_update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -724,11 +724,28 @@ async def import_stock_records(db: AsyncSession) -> dict:
         })
 
     await db.commit()
+
+    # ── 对账：保护期已过的物品（class_id 改为 STEAM_RETURNED，仍计入 in_steam）──
+    reconciled_stock = 0
+    if upserted:
+        seen_instance_ids = [rec["asset_id"] for rec in upserted]
+        r = await db.execute(
+            sa_update(InventoryItem)
+            .where(
+                InventoryItem.class_id == "STEAM_PROTECTED",
+                InventoryItem.instance_id.notin_(seen_instance_ids),
+            )
+            .values(class_id="STEAM_RETURNED")
+        )
+        reconciled_stock = r.rowcount
+        await db.commit()
+
     return {
         "valuation": valuation,
         "total_fetched": len(all_records),
         "upserted": len(upserted),
         "skipped": len(skipped),
+        "reconciled_protection_ended": reconciled_stock,
     }
 
 
@@ -757,6 +774,28 @@ async def import_lease_records(db: AsyncSession) -> dict:
     logger.info("共拉取悠悠租出记录 %d 条", len(all_records))
     steam_id = cfg.steam_steam_id or "unknown"
     upserted, skipped = [], []
+
+    # ── 对账第一步：把旧的租出物品临时重置为 in_steam ──────────────────────────
+    # 导入后，本次租出的物品会重新标回 rented_out；
+    # 没出现在本次导入中的（租约已到期/归还）就自然停留在 in_steam。
+    prev_rented_count_r = await db.execute(
+        select(func.count()).where(
+            InventoryItem.status == "rented_out",
+            InventoryItem.class_id == "YOUPIN",
+        )
+    )
+    prev_rented_count = prev_rented_count_r.scalar() or 0
+
+    await db.execute(
+        sa_update(InventoryItem)
+        .where(
+            InventoryItem.status == "rented_out",
+            InventoryItem.class_id == "YOUPIN",
+        )
+        .values(status="in_steam")
+    )
+    # flush 使后续 select 看到最新状态（不提交，保留事务）
+    await db.flush()
 
     for rec in all_records:
         info = rec.get("commodityInfo") or {}
@@ -813,11 +852,18 @@ async def import_lease_records(db: AsyncSession) -> dict:
                          "order_id": order_id})
 
     await db.commit()
+
+    # 对账统计：之前有多少件已归还（不在本次导入中）
+    reconciled_returned = max(0, prev_rented_count - len(upserted))
+    logger.info("租出对账：之前 %d 件，本次 %d 件，%d 件租约归还 → 状态改回 in_steam",
+                prev_rented_count, len(upserted), reconciled_returned)
+
     return {
         "stats": stats_desc,
         "total_fetched": len(all_records),
         "upserted": len(upserted),
         "skipped": len(skipped),
+        "reconciled_returned": reconciled_returned,
     }
 
 
