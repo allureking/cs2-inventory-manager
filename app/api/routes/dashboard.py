@@ -17,7 +17,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import and_, func, or_, select, case
+from sqlalchemy import and_, func, or_, select, case, not_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal, get_db
@@ -27,6 +27,45 @@ from app.services import steamdt as price_svc
 router = APIRouter()
 
 _ACTIVE = ["in_steam", "rented_out", "in_storage"]
+
+# CS2 物品分类：根据 market_hash_name 前缀/关键词判定
+_CATEGORY_PATTERNS: dict[str, list[str]] = {
+    "knife":    ["★ StatTrak™", "★"],          # 最前匹配，★ 开头且非手套
+    "glove":    [],                              # 特殊处理：★ + 含 Gloves/Wraps/Hand Wraps
+    "pistol":   ["Glock-17", "USP-S", "P250", "CZ75-Auto", "Five-SeveN", "Tec-9",
+                 "Desert Eagle", "R8 Revolver", "P2000", "Dual Berettas"],
+    "rifle":    ["AK-47", "M4A4", "M4A1-S", "FAMAS", "Galil AR", "AUG", "SG 553", "G3SG1", "SCAR-20"],
+    "sniper":   ["AWP", "SSG 08", "SCAR-20", "G3SG1"],
+    "smg":      ["MP9", "MP5-SD", "MAC-10", "PP-Bizon", "UMP-45", "P90", "MP7"],
+    "shotgun":  ["XM1014", "MAG-7", "Nova", "Sawed-Off"],
+    "mg":       ["M249", "Negev"],
+    "sticker":  ["Sticker |", "Patch |", "Graffiti |", "Autograph Capsule"],
+    "case":     [" Case", "Capsule", " Package", "Souvenir Package"],
+}
+_GLOVE_KEYWORDS = ["Gloves", "Wraps", "Hand Wraps"]
+
+
+def _category_filter(category: str):
+    """返回对应分类的 SQLAlchemy WHERE 条件（用于 list_items 过滤）"""
+    if category == "knife":
+        # ★ 开头且不含手套关键词
+        return and_(
+            InventoryItem.market_hash_name.like("★%"),
+            ~InventoryItem.market_hash_name.ilike("%Gloves%"),
+            ~InventoryItem.market_hash_name.ilike("%Wraps%"),
+        )
+    if category == "glove":
+        return and_(
+            InventoryItem.market_hash_name.like("★%"),
+            or_(
+                InventoryItem.market_hash_name.ilike("%Gloves%"),
+                InventoryItem.market_hash_name.ilike("%Wraps%"),
+            ),
+        )
+    patterns = _CATEGORY_PATTERNS.get(category, [])
+    if not patterns:
+        return None
+    return or_(*[InventoryItem.market_hash_name.ilike(f"{p}%") for p in patterns])
 
 # ── 价格刷新后台任务状态（单进程内共享）────────────────────────────────
 _refresh_state: dict = {
@@ -380,6 +419,7 @@ async def list_items(
     status: Optional[str] = Query(None),
     priced_filter: Optional[str] = Query(None),  # "priced" | "unpriced"
     exclude_sold: bool = Query(False),
+    category: Optional[str] = Query(None),        # "knife"|"glove"|"pistol"|"rifle"|"sniper"|"smg"|"shotgun"|"mg"|"sticker"|"case"
     sort_by: str = Query("first_seen_at"),
     sort_order: str = Query("desc"),
     db: AsyncSession = Depends(get_db),
@@ -415,6 +455,11 @@ async def list_items(
                 InventoryItem.purchase_price_manual.is_(None),
             )
         )
+
+    if category:
+        cat_cond = _category_filter(category)
+        if cat_cond is not None:
+            q = q.where(cat_cond)
 
     count_q = select(func.count()).select_from(q.subquery())
     total = (await db.execute(count_q)).scalar() or 0

@@ -34,6 +34,7 @@ from app.services.youpin_listing import (
     list_for_lease,
     list_for_sell,
     smart_list,
+    _MEMBER_MAX_DAYS,
 )
 
 router = APIRouter()
@@ -149,6 +150,7 @@ class SmartListRequest(BaseModel):
     take_profit_ratio: float = 0.0
     fix_lease_ratio: float = 0.0
     use_undercut: bool = True
+    member_level: int = 3           # 出租大会员等级 1/2/3 → max_days 8/30/90
 
 
 @router.post("/smart")
@@ -164,7 +166,83 @@ async def smart_list_api(body: SmartListRequest):
             take_profit_ratio=body.take_profit_ratio,
             fix_lease_ratio=body.fix_lease_ratio,
             use_undercut=body.use_undercut,
+            member_level=body.member_level,
         )
+    except Exception as e:
+        _handle_token_error(e)
+
+
+class BatchSmartRepriceItem(BaseModel):
+    commodity_id: int
+    template_id: int
+    abrade: Optional[float] = None
+    is_can_lease: bool = False
+
+
+class BatchSmartRepriceRequest(BaseModel):
+    items: list[BatchSmartRepriceItem]
+    use_undercut: bool = True
+    take_profit_ratio: float = 0.0
+
+
+@router.post("/batch-smart-reprice")
+async def batch_smart_reprice_api(body: BatchSmartRepriceRequest):
+    """
+    批量智能改价：查询市场价 → 计算建议价 → 逐件改价。
+    每件间隔 0.3s 避免限速，最多支持 30 件/批次。
+    """
+    import asyncio
+    if not body.items:
+        raise HTTPException(status_code=400, detail="至少选择一件物品")
+    if len(body.items) > 30:
+        raise HTTPException(status_code=400, detail="单次批量最多 30 件")
+
+    results = []
+    try:
+        for item in body.items:
+            try:
+                if item.is_can_lease:
+                    market_data = await fetch_market_lease_price(item.template_id)
+                    lease_info = calc_lease_price(market_data)
+                    if lease_info is None:
+                        results.append({"ok": False, "commodity_id": item.commodity_id, "error": "无法获取市场租价"})
+                        continue
+                    await change_price(
+                        commodity_id=item.commodity_id,
+                        lease_unit=lease_info["lease_unit"],
+                        long_lease_unit=lease_info["long_lease_unit"],
+                        deposit=lease_info["deposit"],
+                        is_can_sold=False,
+                        is_can_lease=True,
+                    )
+                    results.append({
+                        "ok": True, "commodity_id": item.commodity_id,
+                        "lease_unit": lease_info["lease_unit"],
+                        "deposit": lease_info["deposit"],
+                    })
+                else:
+                    market_data = await fetch_market_sell_price(item.template_id, item.abrade)
+                    sell_price = calc_sell_price(
+                        market_data,
+                        take_profit_ratio=body.take_profit_ratio,
+                        use_undercut=body.use_undercut,
+                    )
+                    if sell_price is None:
+                        results.append({"ok": False, "commodity_id": item.commodity_id, "error": "无法获取市场售价"})
+                        continue
+                    await change_price(
+                        commodity_id=item.commodity_id,
+                        sell_price=sell_price,
+                        is_can_sold=True,
+                        is_can_lease=False,
+                    )
+                    results.append({"ok": True, "commodity_id": item.commodity_id, "sell_price": sell_price})
+            except Exception as e:
+                results.append({"ok": False, "commodity_id": item.commodity_id, "error": str(e)})
+            await asyncio.sleep(0.3)
+
+        ok_count = sum(1 for r in results if r.get("ok"))
+        return {"ok_count": ok_count, "total": len(results), "results": results}
     except Exception as e:
         _handle_token_error(e)
 

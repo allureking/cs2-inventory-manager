@@ -24,8 +24,9 @@ GET  /api/youpin/preview/sell      → 预览出售记录（不写库）
 from __future__ import annotations
 
 import asyncio
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -143,6 +144,52 @@ async def refresh_market_prices():
 async def market_refresh_status():
     """查询市价刷新进度（供前端轮询）"""
     return youpin_svc.market_refresh_state
+
+
+@router.get("/market/price-info")
+async def market_price_info(
+    template_id: int = Query(...),
+    abrade: Optional[float] = Query(None),
+):
+    """
+    查询指定模板的市场挂单价 + 出租价 + 建议定价（供货架改价/上架参考）。
+    返回前10条卖价、前10条租价、计算好的建议出售价和出租价。
+    """
+    _require_token()
+    try:
+        sell_list, lease_list = await asyncio.gather(
+            youpin_svc.fetch_market_sell_price(template_id, abrade),
+            youpin_svc.fetch_market_lease_price(template_id),
+        )
+    except youpin_svc.TokenExpiredError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    from app.services.youpin_listing import calc_sell_price, calc_lease_price
+    suggested_sell = calc_sell_price(sell_list)
+    suggested_lease = calc_lease_price(lease_list, sell_price=suggested_sell or 0.0)
+
+    def _extract_sell(item: dict) -> dict:
+        return {
+            "price": item.get("price") or item.get("Price") or item.get("sellPrice"),
+            "abrade": item.get("abrade"),
+        }
+
+    def _extract_lease(item: dict) -> dict:
+        return {
+            "leaseUnit": item.get("leaseUnitPrice") or item.get("LeaseUnitPrice"),
+            "longLeaseUnit": item.get("longLeaseUnitPrice") or item.get("LongLeaseUnitPrice"),
+            "deposit": item.get("leaseDeposit") or item.get("LeaseDeposit"),
+        }
+
+    return {
+        "template_id": template_id,
+        "sell_list": [_extract_sell(i) for i in sell_list[:10]],
+        "lease_list": [_extract_lease(i) for i in lease_list[:10]],
+        "suggested_sell": suggested_sell,
+        "suggested_lease": suggested_lease,
+    }
 
 
 # ── 租出订单实时列表 ─────────────────────────────────────────────────────────

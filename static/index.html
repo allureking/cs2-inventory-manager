@@ -261,6 +261,17 @@
           <span x-text="colorMode==='cn' ? '🟢跌' : '🔴跌'"></span>
         </button>
 
+        <!-- 会员等级选择 -->
+        <div class="flex items-center gap-1.5" title="出租大会员等级，影响最长出租天数（V3=90天）">
+          <span class="text-[10px] text-slate-700">会员</span>
+          <select x-model.number="memberLevel"
+            class="py-1 pl-2 rounded-lg text-xs border" style="width:52px; background:rgba(8,15,30,0.85)!important">
+            <option value="1">V1</option>
+            <option value="2">V2</option>
+            <option value="3">V3</option>
+          </select>
+        </div>
+
         <!-- Import button -->
         <button @click="triggerImport()" :disabled="importing"
           class="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed text-white"
@@ -285,10 +296,13 @@
       @keydown.escape.window="repriceModal.show=false">
       <div class="w-full max-w-sm rounded-2xl p-6" style="background:#0f172a; border:1px solid rgba(51,65,85,0.5)">
         <p class="text-slate-300 font-medium mb-1 truncate" x-text="repriceModal.item?.commodityHashName || repriceModal.item?.name || '改价'"></p>
-        <p class="text-[11px] text-slate-600 mb-4">CommodityId: <span x-text="repriceModal.item?.commodityId"></span></p>
+        <p class="text-[11px] text-slate-600 mb-4">
+          CommodityId: <span x-text="repriceModal.item?.commodityId"></span>
+          <span x-show="repriceModal.isSublet" class="ml-2 px-1.5 py-0.5 rounded text-[10px]" style="background:rgba(234,179,8,0.1);color:#fbbf24">转租中改价</span>
+        </p>
 
         <!-- Sell price -->
-        <template x-if="shelfTab==='sell'">
+        <template x-if="shelfTab==='sell' && !repriceModal.isSublet">
           <div class="mb-4">
             <label class="block text-[11px] text-slate-600 mb-1">出售价（元）</label>
             <input x-model.number="repriceModal.newPrice" type="number" step="0.01" min="0.01"
@@ -297,7 +311,7 @@
         </template>
 
         <!-- Lease prices -->
-        <template x-if="shelfTab==='lease'">
+        <template x-if="shelfTab==='lease' || repriceModal.isSublet">
           <div class="space-y-3 mb-4">
             <div>
               <label class="block text-[11px] text-slate-600 mb-1">日租金（元/天）</label>
@@ -527,6 +541,9 @@
                 覆盖 <span class="text-emerald-500/70" x-text="overview.market_priced_count ?? 0"></span> 件
                 / 共 <span x-text="overview.total_active ?? 0"></span> 件
               </p>
+              <p class="text-[10px] mt-1" style="color:#1e3a5f" title="出租市值 = 悠悠市价快照 × 租出件数，与悠悠官方估值可能有出入（快照更新时间/覆盖率差异）">
+                ⓘ 出租市值基于市价快照计算，与悠悠官方估值可能略有差异
+              </p>
             </div>
           </template>
           <template x-if="!overview.market_value">
@@ -687,6 +704,11 @@
             class="text-[11px] px-2 py-1 rounded-lg" style="background:rgba(239,68,68,0.08);color:rgba(239,68,68,0.7);border:1px solid rgba(239,68,68,0.15)">
             批量下架
           </button>
+          <button @click="batchSmartReprice()" :disabled="batchRepricing"
+            class="text-[11px] px-2 py-1 rounded-lg disabled:opacity-40" style="background:rgba(99,102,241,0.08);color:rgba(99,102,241,0.8);border:1px solid rgba(99,102,241,0.2)">
+            <span x-show="!batchRepricing">批量智能改价</span>
+            <span x-show="batchRepricing" x-cloak>改价中… (<span x-text="batchRepriceProgress"></span>)</span>
+          </button>
           <button @click="selectedItems=[]" class="text-[11px] text-slate-600 ml-auto">清除选择</button>
         </div>
         <div class="tbl-wrap">
@@ -697,9 +719,13 @@
                   <input type="checkbox" @change="toggleSelectAll(currentShelf)" class="accent-indigo-500"
                     :checked="currentShelf.length>0 && currentShelf.every(i=>selectedItems.includes(i.commodityId))"/>
                 </th>
+                <th class="py-3 px-2 w-12"></th>
                 <th class="py-3 px-4 text-left font-normal text-slate-700 uppercase tracking-wider">饰品</th>
                 <template x-if="shelfTab==='sell'">
                   <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">出售价</th>
+                </template>
+                <template x-if="shelfTab==='sell'">
+                  <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider" style="color:#0f766e" title="市场最低参考价（点击行内「查」按钮获取）">市场参考价</th>
                 </template>
                 <template x-if="shelfTab==='lease'">
                   <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">日租金</th>
@@ -707,14 +733,17 @@
                 <template x-if="shelfTab==='lease'">
                   <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">押金</th>
                 </template>
+                <template x-if="shelfTab==='lease'">
+                  <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider" style="color:#0f766e" title="市场参考租金/押金（点击「查」获取）">市场参考租金</th>
+                </template>
                 <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">磨损</th>
                 <th class="py-3 px-3 text-left font-normal text-slate-700 uppercase tracking-wider">状态</th>
-                <th class="py-3 px-4 w-24 text-center font-normal text-slate-700 uppercase tracking-wider">操作</th>
+                <th class="py-3 px-4 w-32 text-center font-normal text-slate-700 uppercase tracking-wider">操作</th>
               </tr>
             </thead>
             <tbody>
               <template x-if="shelfLoading">
-                <tr><td colspan="7" class="py-16 text-center" style="color:#334155">
+                <tr><td colspan="10" class="py-16 text-center" style="color:#334155">
                   <div class="flex flex-col items-center gap-2">
                     <div class="w-5 h-5 rounded-full border-2 animate-spin" style="border-color:rgba(51,65,85,0.4);border-top-color:#3b82f6"></div>
                     <span class="text-xs">加载货架…</span>
@@ -722,7 +751,7 @@
                 </td></tr>
               </template>
               <template x-if="!shelfLoading && currentShelf.length === 0">
-                <tr><td colspan="7" class="py-16 text-center text-xs" style="color:#334155">货架为空</td></tr>
+                <tr><td colspan="10" class="py-16 text-center text-xs" style="color:#334155">货架为空</td></tr>
               </template>
               <template x-for="item in currentShelf" :key="item.commodityId || item.CommodityId">
                 <tr class="tbl-row">
@@ -730,19 +759,43 @@
                     <input type="checkbox" :checked="selectedItems.includes(item.commodityId)"
                       @change="toggleSelectItem(item.commodityId)" class="accent-indigo-500"/>
                   </td>
+                  <!-- Item image -->
+                  <td class="py-2 px-1 w-12">
+                    <div class="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0" style="background:rgba(20,30,48,0.8)">
+                      <img :src="shelfImgUrl(item)" class="w-full h-full object-cover"
+                        @error="$el.style.opacity='0'" loading="lazy" />
+                    </div>
+                  </td>
                   <td class="py-2.5 px-4">
                     <div class="flex items-center gap-2.5">
                       <div class="min-w-0">
-                        <p class="text-slate-100 font-medium leading-tight truncate" style="max-width:300px"
-                          x-text="item.commodityHashName || item.marketHashName || item.market_hash_name || '—'"></p>
-                        <p class="text-[11px] mt-0.5 truncate" style="color:#334155; max-width:300px"
-                          x-text="item.name || item.Name || ''"></p>
+                        <p class="leading-tight truncate font-medium" style="max-width:280px"
+                          :class="rarityClass(item.commodityHashName || item.marketHashName)"
+                          x-text="nameLang==='cn' ? (item.name||item.Name||item.commodityHashName||'—') : (item.commodityHashName||item.marketHashName||item.market_hash_name||'—')"></p>
+                        <p class="text-[11px] mt-0.5 truncate" style="color:#334155; max-width:280px"
+                          x-text="nameLang==='cn' ? (item.commodityHashName||item.marketHashName||'') : (item.name||item.Name||'')"></p>
                       </div>
                     </div>
                   </td>
                   <template x-if="shelfTab==='sell'">
                     <td class="py-2.5 px-3 text-right font-semibold text-slate-100"
                       x-text="'¥' + fmt(item.price || item.Price || item.sellPrice)"></td>
+                  </template>
+                  <!-- Market ref price (sell) -->
+                  <template x-if="shelfTab==='sell'">
+                    <td class="py-2.5 px-3 text-right">
+                      <template x-if="item._mktSell != null">
+                        <span class="text-teal-400 font-mono text-[11px]" x-text="'¥' + fmt(item._mktSell)"></span>
+                      </template>
+                      <template x-if="item._mktSell == null && !item._mktLoading">
+                        <button @click.stop="fetchShelfMktPrice(item)"
+                          class="text-[10px] px-1.5 py-0.5 rounded text-slate-600 hover:text-teal-400 transition-colors"
+                          style="border:1px solid rgba(51,65,85,0.3)">查</button>
+                      </template>
+                      <template x-if="item._mktLoading">
+                        <span class="text-slate-700 text-[10px]">…</span>
+                      </template>
+                    </td>
                   </template>
                   <template x-if="shelfTab==='lease'">
                     <td class="py-2.5 px-3 text-right font-semibold text-emerald-300"
@@ -751,6 +804,23 @@
                   <template x-if="shelfTab==='lease'">
                     <td class="py-2.5 px-3 text-right font-mono text-slate-400"
                       x-text="'¥' + fmt(item.leaseDeposit || item.LeaseDeposit)"></td>
+                  </template>
+                  <!-- Market ref lease (lease) -->
+                  <template x-if="shelfTab==='lease'">
+                    <td class="py-2.5 px-3 text-right">
+                      <template x-if="item._mktLease != null">
+                        <span class="text-teal-400 font-mono text-[11px]"
+                          x-text="'¥' + fmt(item._mktLease.leaseUnit) + '/天'"></span>
+                      </template>
+                      <template x-if="item._mktLease == null && !item._mktLoading">
+                        <button @click.stop="fetchShelfMktPrice(item)"
+                          class="text-[10px] px-1.5 py-0.5 rounded text-slate-600 hover:text-teal-400 transition-colors"
+                          style="border:1px solid rgba(51,65,85,0.3)">查</button>
+                      </template>
+                      <template x-if="item._mktLoading">
+                        <span class="text-slate-700 text-[10px]">…</span>
+                      </template>
+                    </td>
                   </template>
                   <td class="py-2.5 px-3 text-right font-mono" style="color:#475569"
                     x-text="(item.abrade || item.Abrade) != null ? parseFloat(item.abrade || item.Abrade).toFixed(4) : '—'"></td>
@@ -871,6 +941,7 @@
                   <input type="checkbox" @change="toggleSelectAll(subletList.items||[])" class="accent-amber-500"
                     :checked="(subletList.items||[]).length>0 && (subletList.items||[]).every(i=>selectedItems.includes(i.commodityId))"/>
                 </th>
+                <th class="py-3 px-2 w-12"></th>
                 <th class="py-3 px-3 text-left font-normal text-slate-700 uppercase tracking-wider">饰品</th>
                 <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">日租金</th>
                 <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">押金</th>
@@ -880,7 +951,7 @@
             </thead>
             <tbody>
               <template x-if="subletLoading">
-                <tr><td colspan="6" class="py-16 text-center" style="color:#334155">
+                <tr><td colspan="7" class="py-16 text-center" style="color:#334155">
                   <div class="flex flex-col items-center gap-2">
                     <div class="w-5 h-5 rounded-full border-2 animate-spin" style="border-color:rgba(51,65,85,0.4);border-top-color:#f59e0b"></div>
                     <span class="text-xs">加载转租中饰品…</span>
@@ -888,7 +959,7 @@
                 </td></tr>
               </template>
               <template x-if="!subletLoading && (subletList.items||[]).length === 0">
-                <tr><td colspan="6" class="py-16 text-center text-xs" style="color:#334155">暂无转租中饰品，请点击「刷新」</td></tr>
+                <tr><td colspan="7" class="py-16 text-center text-xs" style="color:#334155">暂无转租中饰品，请点击「刷新」</td></tr>
               </template>
               <template x-for="item in (subletList.items||[])" :key="item.commodityId">
                 <tr class="tbl-row">
@@ -896,10 +967,18 @@
                     <input type="checkbox" :checked="selectedItems.includes(item.commodityId)"
                       @change="toggleSelectItem(item.commodityId)" class="accent-amber-500"/>
                   </td>
+                  <!-- Image -->
+                  <td class="py-2 px-1 w-12">
+                    <div class="w-10 h-10 rounded-lg overflow-hidden" style="background:rgba(20,30,48,0.8)">
+                      <img :src="shelfImgUrl(item)" class="w-full h-full object-cover"
+                        @error="$el.style.opacity='0'" loading="lazy" />
+                    </div>
+                  </td>
                   <td class="py-2.5 px-3">
                     <div class="min-w-0">
-                      <p class="text-slate-100 font-medium leading-tight truncate" style="max-width:280px"
-                        x-text="item.commodityHashName || item.name || '—'"></p>
+                      <p class="leading-tight truncate font-medium" style="max-width:260px"
+                        :class="rarityClass(item.commodityHashName)"
+                        x-text="nameLang==='cn' ? (item.name||item.commodityHashName||'—') : (item.commodityHashName||item.name||'—')"></p>
                     </div>
                   </td>
                   <td class="py-2.5 px-3 text-right font-semibold text-emerald-300"
@@ -909,13 +988,22 @@
                   <td class="py-2.5 px-3 text-right font-mono" style="color:#475569"
                     x-text="item.abrade != null ? parseFloat(item.abrade).toFixed(4) : '—'"></td>
                   <td class="py-2.5 px-4 text-center">
-                    <button @click="cancelSubletOrder(item.commodityId)"
-                      class="text-[11px] px-2 py-1 rounded-lg transition-all"
-                      style="background:rgba(234,179,8,0.08);color:rgba(234,179,8,0.7);border:1px solid rgba(234,179,8,0.15)"
-                      @mouseenter="$el.style.background='rgba(234,179,8,0.18)'"
-                      @mouseleave="$el.style.background='rgba(234,179,8,0.08)'">
-                      取消转租
-                    </button>
+                    <div class="flex items-center justify-center gap-1.5">
+                      <button @click="openSubletReprice(item)"
+                        class="text-[11px] px-2 py-1 rounded-lg transition-all"
+                        style="background:rgba(99,102,241,0.08);color:rgba(99,102,241,0.7);border:1px solid rgba(99,102,241,0.15)"
+                        @mouseenter="$el.style.background='rgba(99,102,241,0.18)'"
+                        @mouseleave="$el.style.background='rgba(99,102,241,0.08)'">
+                        改价
+                      </button>
+                      <button @click="cancelSubletOrder(item.commodityId)"
+                        class="text-[11px] px-2 py-1 rounded-lg transition-all"
+                        style="background:rgba(234,179,8,0.08);color:rgba(234,179,8,0.7);border:1px solid rgba(234,179,8,0.15)"
+                        @mouseenter="$el.style.background='rgba(234,179,8,0.18)'"
+                        @mouseleave="$el.style.background='rgba(234,179,8,0.08)'">
+                        取消转租
+                      </button>
+                    </div>
                   </td>
                 </tr>
               </template>
@@ -1066,6 +1154,28 @@
             <option value="in_storage">收藏</option>
           </select>
 
+          <!-- Category filter -->
+          <select x-model="filters.category" @change="page=1; loadItems()"
+            class="py-2 pl-3 rounded-xl text-sm border" style="min-width: 100px">
+            <option value="">全部类型</option>
+            <optgroup label="近战">
+              <option value="knife">匕首/刀</option>
+              <option value="glove">手套</option>
+            </optgroup>
+            <optgroup label="枪械">
+              <option value="pistol">手枪</option>
+              <option value="rifle">步枪</option>
+              <option value="sniper">狙击枪</option>
+              <option value="smg">冲锋枪</option>
+              <option value="shotgun">霰弹枪</option>
+              <option value="mg">机枪</option>
+            </optgroup>
+            <optgroup label="其他">
+              <option value="sticker">印花/贴纸</option>
+              <option value="case">箱子/胶囊</option>
+            </optgroup>
+          </select>
+
           <!-- Priced filter -->
           <select x-model="filters.pricedFilter" @change="page=1; loadItems()"
             class="py-2 pl-3 rounded-xl text-sm border" style="min-width: 96px">
@@ -1073,6 +1183,13 @@
             <option value="priced">已定价</option>
             <option value="unpriced">未定价</option>
           </select>
+
+          <!-- Name lang toggle -->
+          <button @click="nameLang = nameLang==='cn' ? 'en' : 'cn'"
+            class="pill-toggle" :class="nameLang==='en' ? 'active-blue' : ''"
+            title="切换饰品名称语言">
+            <span x-text="nameLang==='cn' ? '中文名' : 'EN Name'"></span>
+          </button>
 
           <!-- Show sold toggle -->
           <label class="pill-toggle" :class="showSold ? 'active-slate' : ''"
@@ -1181,8 +1298,11 @@
                           @error="$el.style.opacity='0'" loading="lazy" />
                       </div>
                       <div class="min-w-0">
-                        <p class="text-slate-100 font-medium leading-tight truncate" style="max-width:260px" x-text="item.market_hash_name"></p>
-                        <p class="leading-tight truncate mt-0.5" style="max-width:260px; color:#334155" x-text="item.name"></p>
+                        <p class="font-medium leading-tight truncate" style="max-width:260px"
+                          :class="rarityClass(item.market_hash_name)"
+                          x-text="nameLang==='cn' ? (item.name || item.market_hash_name) : item.market_hash_name"></p>
+                        <p class="leading-tight truncate mt-0.5" style="max-width:260px; color:#334155"
+                          x-text="nameLang==='cn' ? item.market_hash_name : item.name"></p>
                       </div>
                     </div>
                   </td>
@@ -1449,11 +1569,21 @@
 
         page: 1,
         pageSize: 50,
-        filters: { search: '', status: '', pricedFilter: '' },
+        filters: { search: '', status: '', pricedFilter: '', category: '' },
         sortBy: 'first_seen_at',
         sortOrder: 'desc',
         dualPrice: false,
         showSold: false,
+
+        // 名称语言模式: 'cn'=中文优先 / 'en'=英文优先
+        nameLang: localStorage.getItem('nameLang') || 'cn',
+
+        // 批量智能改价状态
+        batchRepricing: false,
+        batchRepriceProgress: '',
+
+        // 出租大会员等级 (由 header select 控制)
+        memberLevel: parseInt(localStorage.getItem('memberLevel') || '3'),
 
         panel: null,
         manualInput: '',
@@ -1528,6 +1658,9 @@
               this._startRefreshPoll();
             }
           }
+          // 持久化用户偏好到 localStorage
+          this.$watch('nameLang', v => localStorage.setItem('nameLang', v));
+          this.$watch('memberLevel', v => localStorage.setItem('memberLevel', v));
         },
 
         async _checkToken() {
@@ -1626,9 +1759,11 @@
             });
             const d = await r.json();
             if (!r.ok) throw new Error(d.detail || '下架失败');
-            this.showToast(`成功下架 ${this.selectedItems.length} 件`);
+            this.showToast(`成功下架 ${this.selectedItems.length} 件（YouPin API 约需 30 秒更新库存，再刷新待上架）`);
             this.selectedItems = [];
             await this.loadShelf();
+            // 3秒后自动刷新待上架列表（等待YouPin API同步延迟）
+            setTimeout(() => { if (this.shelfTab === 'unlisted') this.loadUnlistedItems(1); }, 3000);
           } catch (e) { this.showToast('批量下架失败：' + e.message, 'error'); }
         },
 
@@ -1675,6 +1810,7 @@
             if (this.filters.search)        p.set('search', this.filters.search);
             if (this.filters.status)        p.set('status', this.filters.status);
             if (this.filters.pricedFilter)  p.set('priced_filter', this.filters.pricedFilter);
+            if (this.filters.category)      p.set('category', this.filters.category);
             if (!this.showSold)             p.set('exclude_sold', '1');
             const r = await fetch('/api/dashboard/items?' + p);
             if (r.ok) { const d = await r.json(); this.items = d.items; this.total = d.total; }
@@ -1873,7 +2009,87 @@
             newLeaseUnit: item.leaseUnitPrice ?? '',
             newDeposit: item.leaseDeposit ?? '',
             saving: false,
+            isSublet: false,
           };
+        },
+
+        // 转租中物品改价（强制 lease 模式，不依赖 shelfTab）
+        openSubletReprice(item) {
+          this.repriceModal = {
+            show: true, item,
+            newPrice: '',
+            newLeaseUnit: item.leaseUnitPrice ?? '',
+            newDeposit: item.leaseDeposit ?? '',
+            saving: false,
+            isSublet: true,  // 强制使用 lease 改价路径
+          };
+        },
+
+        // 查询货架物品的市场参考价（按需，点击「查」按钮触发）
+        async fetchShelfMktPrice(item) {
+          if (!item.templateId || item._mktLoading) return;
+          item._mktLoading = true;
+          // 强制 Alpine 重新渲染
+          this.sellShelf = { ...this.sellShelf };
+          this.leaseShelf = { ...this.leaseShelf };
+          try {
+            const p = new URLSearchParams({ template_id: item.templateId });
+            if (item.abrade != null) p.set('abrade', item.abrade);
+            const r = await fetch('/api/youpin/market/price-info?' + p);
+            if (!r.ok) throw new Error('查询失败');
+            const d = await r.json();
+            item._mktSell = d.suggested_sell;
+            item._mktLease = d.suggested_lease;
+          } catch (e) {
+            item._mktSell = null;
+            item._mktLease = null;
+            this.showToast('市价查询失败：' + e.message, 'error');
+          } finally {
+            item._mktLoading = false;
+            // 触发重新渲染
+            this.sellShelf = { ...this.sellShelf };
+            this.leaseShelf = { ...this.leaseShelf };
+          }
+        },
+
+        // 批量智能改价：对选中货架物品按市场价改价
+        async batchSmartReprice() {
+          const shelf = this.currentShelf;
+          const selected = shelf.filter(i => this.selectedItems.includes(i.commodityId));
+          if (!selected.length) return;
+          if (selected.some(i => !i.templateId)) {
+            this.showToast('部分物品缺少模板ID，无法智能改价（请先同步模板ID）', 'error');
+            return;
+          }
+          if (!confirm(`确认对 ${selected.length} 件物品按市场价智能改价？`)) return;
+
+          this.batchRepricing = true;
+          const isLease = this.shelfTab === 'lease';
+          const items = selected.map(i => ({
+            commodity_id: i.commodityId,
+            template_id: i.templateId,
+            abrade: i.abrade,
+            is_can_lease: isLease,
+          }));
+
+          try {
+            this.batchRepriceProgress = `0/${items.length}`;
+            const r = await fetch('/api/listing/batch-smart-reprice', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ items, use_undercut: true }),
+            });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.detail || '批量改价失败');
+            this.showToast(`批量改价完成：${d.ok_count}/${d.total} 件成功`);
+            this.selectedItems = [];
+            await this.loadShelf();
+          } catch (e) {
+            this.showToast('批量改价失败：' + e.message, 'error');
+          } finally {
+            this.batchRepricing = false;
+            this.batchRepriceProgress = '';
+          }
         },
 
         async saveReprice() {
@@ -1881,7 +2097,7 @@
           if (!item || !item.commodityId) return;
           this.repriceModal.saving = true;
           try {
-            const isLease = this.shelfTab === 'lease';
+            const isLease = this.shelfTab === 'lease' || this.repriceModal.isSublet;
             const body = {
               commodity_id: item.commodityId,
               is_can_sold: !isLease,
@@ -1942,8 +2158,10 @@
             const r = await fetch(`/api/listing/${commodityId}`, { method: 'DELETE' });
             const d = await r.json();
             if (!r.ok) throw new Error(d.detail || '下架失败');
-            this.showToast('下架成功');
+            this.showToast('下架成功（YouPin API 约需 30 秒更新库存，请稍后刷新待上架列表）');
             await this.loadShelf();
+            // 5秒后刷新待上架列表
+            setTimeout(() => { if (this.shelfTab === 'unlisted') this.loadUnlistedItems(1); }, 5000);
           } catch (e) {
             this.showToast('下架失败：' + e.message, 'error');
           }
@@ -1983,6 +2201,7 @@
                 buy_price: this.quickList.buyPrice || 0,
                 take_profit_ratio: this.quickList.takeProfitRatio || 0,
                 use_undercut: this.quickList.useUndercut,
+                member_level: this.memberLevel,
               }),
             });
             const d = await r.json();
@@ -2034,6 +2253,27 @@
         },
 
         // ── Helpers ───────────────────────────────────────────────────
+
+        // 货架图片 URL（优先用 imgUrl，fallback icon_url）
+        shelfImgUrl(item) {
+          const raw = item.imgUrl || item.imgurl || item.icon_url || item.IconUrl;
+          if (!raw) return '';
+          // 悠悠自有 CDN 地址（非 steam 路径）直接返回
+          if (raw.startsWith('http')) return raw;
+          // Steam economy icon 路径
+          return `https://community.fastly.steamstatic.com/economy/image/${raw}/62fx62f`;
+        },
+
+        // 根据 market_hash_name 返回品质颜色 class（★/刀/手套=金色，StatTrak=橙色，Souvenir=黄色）
+        rarityClass(hashName) {
+          if (!hashName) return 'text-slate-100';
+          if (hashName.startsWith('★ StatTrak™')) return 'text-yellow-300';
+          if (hashName.startsWith('★')) return 'text-yellow-400';
+          if (hashName.startsWith('StatTrak™')) return 'text-orange-400';
+          if (hashName.startsWith('Souvenir')) return 'text-yellow-200';
+          return 'text-slate-100';
+        },
+
         fmt(n) {
           if (n == null) return '—';
           return Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });

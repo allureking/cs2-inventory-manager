@@ -37,6 +37,9 @@ from app.services.youpin import (
 
 logger = logging.getLogger(__name__)
 
+# 出租大会员等级 → 最长可租天数（V1=普通/V2=大会员/V3=黑金大会员）
+_MEMBER_MAX_DAYS = {1: 8, 2: 30, 3: 90}
+
 
 # ══════════════════════════════════════════════════════════════
 #  定价算法
@@ -48,6 +51,7 @@ def calc_sell_price(
     take_profit_ratio: float = 0.0,
     use_undercut: bool = True,
     min_price: float = 0.01,
+    outlier_ratio: float = 0.5,
 ) -> Optional[float]:
     """
     计算出售价格。
@@ -55,9 +59,10 @@ def calc_sell_price(
     buy_price: 购入价（元），>0 时启用止盈率保护
     take_profit_ratio: 止盈率，如 0.1 = 10%，0 = 不启用
     use_undercut: True = 最终价格 -0.01（低一分抢单）
+    outlier_ratio: 孤立低价判定阈值，prices[0] < prices[1] * ratio 则视为异常值排除
     """
     prices = []
-    for item in market_list[:10]:
+    for item in market_list[:15]:
         p = item.get("price") or item.get("Price") or item.get("sellPrice")
         if p:
             try:
@@ -69,6 +74,12 @@ def calc_sell_price(
         return None
 
     prices.sort()
+
+    # ── 孤立低价 outlier 过滤 ─────────────────────────────────────────────
+    # 若最低价 < 第2低价 × outlier_ratio（默认50%），判定为异常挂单，忽略
+    # 同时要求至少有3个参考价，以免过度过滤
+    if len(prices) >= 3 and prices[0] < prices[1] * outlier_ratio:
+        prices = prices[1:]
 
     if len(prices) == 1:
         sale_price = prices[0]
@@ -502,6 +513,7 @@ async def smart_list(
     take_profit_ratio: float = 0.0,
     fix_lease_ratio: float = 0.0,
     use_undercut: bool = True,
+    member_level: int = 3,       # 出租大会员等级 1/2/3 → max_days 8/30/90
 ) -> dict:
     """
     一键智能上架：自动查询市场价 → 计算定价 → 上架。
@@ -511,6 +523,7 @@ async def smart_list(
       "both"  → 可租可售
     返回上架结果 + 计算出的价格
     """
+    max_days = _MEMBER_MAX_DAYS.get(member_level, 30)
     sell_price = None
     lease_info = None
 
@@ -544,6 +557,7 @@ async def smart_list(
             lease_info["lease_unit"],
             lease_info["long_lease_unit"],
             lease_info["deposit"],
+            max_days=max_days,
         )
 
     else:  # both
@@ -554,6 +568,7 @@ async def smart_list(
             lease_info["lease_unit"],
             lease_info["long_lease_unit"],
             lease_info["deposit"],
+            max_days=max_days,
         )
 
     return {
