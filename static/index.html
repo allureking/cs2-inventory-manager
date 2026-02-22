@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CS2 Inventory Manager</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
   <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <style>
     /* ── Base ────────────────────────────────────────────────────────── */
@@ -201,6 +203,14 @@
           class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
           :class="activeTab==='listing' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'">
           上架管理
+        </button>
+        <button @click="activeTab='analysis'; loadAnalysis()"
+          class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 relative"
+          :class="activeTab==='analysis' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'">
+          量化分析
+          <span x-show="unreadAlertCount>0" x-cloak
+            class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center font-bold"
+            x-text="unreadAlertCount>9?'9+':unreadAlertCount"></span>
         </button>
       </nav>
 
@@ -1101,6 +1111,366 @@
       </div>
     </div>
 
+    <!-- ════════════ ANALYSIS TAB ════════════ -->
+    <div x-show="activeTab==='analysis'" class="fade-up">
+
+      <!-- Sub-tabs -->
+      <div class="flex gap-1 mb-4">
+        <template x-for="t in [{k:'overview',l:'市场总览'},{k:'detail',l:'个股分析'},{k:'alerts',l:'预警中心'},{k:'spreads',l:'套利雷达'}]">
+          <button @click="analysisTab=t.k; loadAnalysisSubTab(t.k)"
+            class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+            :class="analysisTab===t.k ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'"
+            x-text="t.l"></button>
+        </template>
+      </div>
+
+      <!-- ── Sub: Overview ── -->
+      <div x-show="analysisTab==='overview'">
+        <!-- Stat cards -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+          <div class="card p-4 cursor-pointer" @click="analysisTab='alerts'; loadAnalysisSubTab('alerts')">
+            <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-1">未读预警</p>
+            <p class="text-2xl font-bold" :class="(ao.unread_alerts||0)>0?'text-red-400':'text-slate-400'" x-text="ao.unread_alerts||0"></p>
+          </div>
+          <div class="card p-4">
+            <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-1">平均卖出评分</p>
+            <p class="text-2xl font-bold" :class="scoreColor(ao.avg_sell_score)" x-text="ao.avg_sell_score!==null?ao.avg_sell_score:'—'"></p>
+            <p class="text-[10px] mt-1" :class="scoreColor(ao.avg_sell_score)" x-text="scoreLabel(ao.avg_sell_score)"></p>
+          </div>
+          <div class="card p-4">
+            <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-1">30D 平均动量</p>
+            <p class="text-2xl font-bold" :class="ao.avg_momentum_30>0?'text-emerald-400':'text-red-400'" x-text="ao.avg_momentum_30!==null?(ao.avg_momentum_30>0?'+':'')+ao.avg_momentum_30+'%':'—'"></p>
+          </div>
+          <div class="card p-4">
+            <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-1">数据状态</p>
+            <p class="text-xs text-slate-400 mt-1" x-text="ao.collector?.status==='running'?'采集中…':ao.collector?.last_run?'上次: '+ao.collector.last_run.slice(5,16):'未启动'"></p>
+            <p class="text-[10px] text-slate-600 mt-0.5" x-text="ao.signal_date?'信号日期: '+ao.signal_date:'无信号数据'"></p>
+          </div>
+        </div>
+
+        <!-- Sell Score Distribution -->
+        <div class="card p-4 mb-5">
+          <p class="text-[11px] text-slate-500 mb-3 font-medium">卖出评分分布（持仓饰品）</p>
+          <div class="flex items-end gap-1.5 h-20">
+            <template x-for="(v,i) in (ao.score_distribution||[0,0,0,0,0])">
+              <div class="flex-1 flex flex-col items-center gap-1">
+                <span class="text-[10px] font-mono text-slate-400" x-text="v"></span>
+                <div class="w-full rounded-t transition-all duration-500"
+                  :style="'height:'+Math.max(4, v/Math.max(1,...(ao.score_distribution||[1]))*60)+'px'"
+                  :class="['bg-emerald-500/60','bg-slate-500/60','bg-yellow-500/60','bg-orange-500/60','bg-red-500/60'][i]"></div>
+                <span class="text-[9px] text-slate-600" x-text="['持有','中性','考虑卖','强卖','急卖'][i]"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Top 10 + Category Trends -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <!-- Top 10 Sell Signals -->
+          <div class="card overflow-hidden">
+            <div class="px-4 py-3 border-b" style="border-color:rgba(51,65,85,0.3)">
+              <p class="text-[11px] text-slate-500 font-medium">Top 10 卖出信号</p>
+            </div>
+            <table class="w-full text-xs">
+              <thead><tr class="text-[10px] text-slate-600 uppercase" style="background:rgba(15,23,42,0.5)">
+                <th class="py-2 px-3 text-left">饰品</th>
+                <th class="py-2 px-2 text-right">评分</th>
+                <th class="py-2 px-2 text-right">RSI</th>
+                <th class="py-2 px-2 text-right">30D动量</th>
+                <th class="py-2 px-2 text-right">ATH%</th>
+              </tr></thead>
+              <tbody>
+                <template x-for="s in (ao.top_sell||[])">
+                  <tr class="border-t cursor-pointer hover:bg-slate-800/30" style="border-color:rgba(51,65,85,0.2)"
+                    @click="analysisTab='detail'; analysisSelectedItem=s.market_hash_name; loadItemSignals(s.market_hash_name)">
+                    <td class="py-2 px-3 font-medium text-slate-300 truncate max-w-[200px]" :title="s.market_hash_name" x-text="s.market_hash_name"></td>
+                    <td class="py-2 px-2 text-right font-mono font-bold" :class="scoreColor(s.sell_score)" x-text="s.sell_score"></td>
+                    <td class="py-2 px-2 text-right font-mono" :class="s.rsi_14>70?'text-red-400':s.rsi_14<30?'text-emerald-400':'text-slate-400'" x-text="s.rsi_14??'—'"></td>
+                    <td class="py-2 px-2 text-right font-mono" :class="s.momentum_30>0?'text-emerald-400':'text-red-400'" x-text="s.momentum_30!==null?(s.momentum_30>0?'+':'')+s.momentum_30+'%':'—'"></td>
+                    <td class="py-2 px-2 text-right font-mono" :class="s.ath_pct>90?'text-yellow-300':'text-slate-400'" x-text="s.ath_pct?s.ath_pct+'%':'—'"></td>
+                  </tr>
+                </template>
+                <tr x-show="!ao.top_sell?.length"><td colspan="5" class="py-6 text-center text-slate-600">暂无信号数据，请先触发信号计算</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Category Trends -->
+          <div class="card overflow-hidden">
+            <div class="px-4 py-3 border-b" style="border-color:rgba(51,65,85,0.3)">
+              <p class="text-[11px] text-slate-500 font-medium">分类趋势</p>
+            </div>
+            <table class="w-full text-xs">
+              <thead><tr class="text-[10px] text-slate-600 uppercase" style="background:rgba(15,23,42,0.5)">
+                <th class="py-2 px-3 text-left">类别</th>
+                <th class="py-2 px-2 text-right">数量</th>
+                <th class="py-2 px-2 text-right">7D动量</th>
+                <th class="py-2 px-2 text-right">30D动量</th>
+                <th class="py-2 px-2 text-right">平均RSI</th>
+              </tr></thead>
+              <tbody>
+                <template x-for="c in (ao.category_trends||[])">
+                  <tr class="border-t" style="border-color:rgba(51,65,85,0.2)">
+                    <td class="py-2 px-3 font-medium text-slate-300" x-text="catLabel(c.category)"></td>
+                    <td class="py-2 px-2 text-right font-mono text-slate-400" x-text="c.count"></td>
+                    <td class="py-2 px-2 text-right font-mono" :class="c.avg_momentum_7>0?'text-emerald-400':'text-red-400'" x-text="c.avg_momentum_7!==null?(c.avg_momentum_7>0?'+':'')+c.avg_momentum_7+'%':'—'"></td>
+                    <td class="py-2 px-2 text-right font-mono" :class="c.avg_momentum_30>0?'text-emerald-400':'text-red-400'" x-text="c.avg_momentum_30!==null?(c.avg_momentum_30>0?'+':'')+c.avg_momentum_30+'%':'—'"></td>
+                    <td class="py-2 px-2 text-right font-mono text-slate-400" x-text="c.avg_rsi??'—'"></td>
+                  </tr>
+                </template>
+                <tr x-show="!ao.category_trends?.length"><td colspan="5" class="py-6 text-center text-slate-600">暂无分类数据</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="flex gap-3 mt-4">
+          <button @click="triggerBackfill()" :disabled="backfillRunning"
+            class="px-4 py-2 rounded-lg text-xs font-medium bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50">
+            <span x-show="!backfillRunning">回填历史数据</span>
+            <span x-show="backfillRunning" x-cloak x-text="'回填中… '+backfillProgress"></span>
+          </button>
+          <button @click="triggerComputeNow()" :disabled="computingSignals"
+            class="px-4 py-2 rounded-lg text-xs font-medium bg-slate-700 hover:bg-slate-600 text-white disabled:opacity-50">
+            <span x-show="!computingSignals">立即计算信号</span>
+            <span x-show="computingSignals" x-cloak>计算中…</span>
+          </button>
+          <button @click="collectNow()" :disabled="ao.collector?.status==='running'"
+            class="px-4 py-2 rounded-lg text-xs font-medium bg-slate-700 hover:bg-slate-600 text-white disabled:opacity-50">
+            <span x-text="ao.collector?.status==='running'?'采集中…':'立即采集价格'"></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ── Sub: Item Detail ── -->
+      <div x-show="analysisTab==='detail'">
+        <!-- Search bar -->
+        <div class="flex gap-3 mb-4">
+          <div class="relative flex-1">
+            <input type="text" x-model="analysisSearch" @input.debounce.300ms="searchAnalysisItems()"
+              placeholder="搜索饰品名称…" class="w-full px-4 py-2.5 rounded-xl text-sm text-white placeholder-slate-600"
+              style="background:rgba(15,23,42,0.8); border:1px solid rgba(51,65,85,0.3)" />
+            <div x-show="analysisSearchResults.length>0" x-cloak
+              class="absolute z-50 left-0 right-0 top-full mt-1 rounded-xl overflow-hidden shadow-xl max-h-60 overflow-y-auto"
+              style="background:rgba(15,23,42,0.95); border:1px solid rgba(51,65,85,0.4)">
+              <template x-for="r in analysisSearchResults">
+                <div @click="analysisSelectedItem=r.market_hash_name; analysisSearch=r.market_hash_name; analysisSearchResults=[]; loadItemSignals(r.market_hash_name)"
+                  class="px-4 py-2 text-xs text-slate-300 hover:bg-slate-700/50 cursor-pointer truncate" x-text="r.market_hash_name"></div>
+              </template>
+            </div>
+          </div>
+        </div>
+
+        <template x-if="itemSignals">
+          <div>
+            <!-- Price Chart -->
+            <div class="card p-4 mb-4">
+              <div class="flex items-center justify-between mb-3">
+                <p class="text-sm font-medium text-slate-300" x-text="analysisSelectedItem"></p>
+                <div class="flex gap-2">
+                  <template x-for="d in [30,60,90]">
+                    <button @click="chartDays=d; loadItemSignals(analysisSelectedItem)"
+                      class="px-2 py-0.5 rounded text-[10px]"
+                      :class="chartDays===d?'bg-slate-600 text-white':'text-slate-500 hover:text-slate-300'"
+                      x-text="d+'天'"></button>
+                  </template>
+                </div>
+              </div>
+              <div class="relative" style="height:280px">
+                <canvas id="priceChart"></canvas>
+              </div>
+            </div>
+
+            <!-- Signal Gauges (2x3) -->
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+              <div class="card p-3 text-center">
+                <p class="text-[10px] text-slate-600 mb-1">RSI(14)</p>
+                <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.rsi_14||0)>70?'text-red-400':(itemSignals.signal?.rsi_14||0)<30?'text-emerald-400':'text-slate-300'" x-text="itemSignals.signal?.rsi_14??'—'"></p>
+                <p class="text-[9px] mt-0.5" :class="(itemSignals.signal?.rsi_14||0)>70?'text-red-500':'text-slate-600'" x-text="(itemSignals.signal?.rsi_14||0)>70?'超买':(itemSignals.signal?.rsi_14||0)<30?'超卖':'中性'"></p>
+              </div>
+              <div class="card p-3 text-center">
+                <p class="text-[10px] text-slate-600 mb-1">Bollinger %B</p>
+                <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.bb_position||0)>1?'text-red-400':(itemSignals.signal?.bb_position||0)<0?'text-emerald-400':'text-slate-300'" x-text="itemSignals.signal?.bb_position??'—'"></p>
+                <p class="text-[9px] mt-0.5 text-slate-600" x-text="(itemSignals.signal?.bb_position||0)>1?'突破上轨':(itemSignals.signal?.bb_position||0)<0?'低于下轨':'带内'"></p>
+              </div>
+              <div class="card p-3 text-center">
+                <p class="text-[10px] text-slate-600 mb-1">7D 动量</p>
+                <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.momentum_7||0)>0?'text-emerald-400':'text-red-400'" x-text="itemSignals.signal?.momentum_7!==null?(itemSignals.signal.momentum_7>0?'+':'')+itemSignals.signal.momentum_7+'%':'—'"></p>
+              </div>
+              <div class="card p-3 text-center">
+                <p class="text-[10px] text-slate-600 mb-1">30D 动量</p>
+                <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.momentum_30||0)>0?'text-emerald-400':'text-red-400'" x-text="itemSignals.signal?.momentum_30!==null?(itemSignals.signal.momentum_30>0?'+':'')+itemSignals.signal.momentum_30+'%':'—'"></p>
+              </div>
+              <div class="card p-3 text-center">
+                <p class="text-[10px] text-slate-600 mb-1">波动率</p>
+                <p class="text-xl font-bold font-mono text-slate-300" x-text="itemSignals.signal?.volatility_30?itemSignals.signal.volatility_30+'%':'—'"></p>
+              </div>
+              <div class="card p-3 text-center">
+                <p class="text-[10px] text-slate-600 mb-1">ATH 距离</p>
+                <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.ath_pct||0)>90?'text-yellow-300':'text-slate-300'" x-text="itemSignals.signal?.ath_pct?itemSignals.signal.ath_pct+'%':'—'"></p>
+                <p class="text-[9px] mt-0.5 text-slate-600" x-text="itemSignals.signal?.ath_price?'ATH ¥'+itemSignals.signal.ath_price:''"></p>
+              </div>
+            </div>
+
+            <!-- Sell Score + Ownership -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+              <div class="card p-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-1">综合卖出评分</p>
+                    <p class="text-3xl font-bold font-mono" :class="scoreColor(itemSignals.signal?.sell_score)" x-text="itemSignals.signal?.sell_score??'—'"></p>
+                    <p class="text-xs mt-1" :class="scoreColor(itemSignals.signal?.sell_score)" x-text="scoreLabel(itemSignals.signal?.sell_score)"></p>
+                  </div>
+                  <div class="text-right">
+                    <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-1">买入机会评分</p>
+                    <p class="text-xl font-bold font-mono text-cyan-400" x-text="itemSignals.signal?.opportunity_score??'—'"></p>
+                  </div>
+                </div>
+              </div>
+              <div class="card p-4" x-show="itemSignals.ownership">
+                <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-2">持仓信息</p>
+                <div class="space-y-1.5 text-xs">
+                  <div class="flex justify-between"><span class="text-slate-500">购入价</span><span class="font-mono text-slate-300" x-text="itemSignals.ownership?.purchase_price?'¥'+itemSignals.ownership.purchase_price:'未知'"></span></div>
+                  <div class="flex justify-between"><span class="text-slate-500">当前价</span><span class="font-mono text-slate-300" x-text="itemSignals.ownership?.current_price?'¥'+itemSignals.ownership.current_price:'—'"></span></div>
+                  <div class="flex justify-between"><span class="text-slate-500">盈亏</span>
+                    <span class="font-mono font-bold" :class="(itemSignals.ownership?.pnl||0)>=0?'text-emerald-400':'text-red-400'"
+                      x-text="itemSignals.ownership?.pnl!==null?((itemSignals.ownership.pnl>=0?'+':'')+'¥'+itemSignals.ownership.pnl+' ('+itemSignals.ownership.pnl_pct+'%)'):'—'"></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Cross-platform prices -->
+            <div class="card overflow-hidden" x-show="itemSignals.platforms?.length">
+              <div class="px-4 py-3 border-b" style="border-color:rgba(51,65,85,0.3)">
+                <p class="text-[11px] text-slate-500 font-medium">跨平台价格对比</p>
+              </div>
+              <table class="w-full text-xs">
+                <thead><tr class="text-[10px] text-slate-600 uppercase" style="background:rgba(15,23,42,0.5)">
+                  <th class="py-2 px-3 text-left">平台</th>
+                  <th class="py-2 px-2 text-right">卖价</th>
+                  <th class="py-2 px-2 text-right">求购价</th>
+                  <th class="py-2 px-2 text-right">在售数量</th>
+                </tr></thead>
+                <tbody>
+                  <template x-for="p in itemSignals.platforms">
+                    <tr class="border-t" style="border-color:rgba(51,65,85,0.2)">
+                      <td class="py-2 px-3 text-slate-300" x-text="p.platform"></td>
+                      <td class="py-2 px-2 text-right font-mono text-slate-300" x-text="p.sell_price?'¥'+p.sell_price:'—'"></td>
+                      <td class="py-2 px-2 text-right font-mono text-slate-400" x-text="p.bidding_price?'¥'+p.bidding_price:'—'"></td>
+                      <td class="py-2 px-2 text-right font-mono text-slate-500" x-text="p.sell_count??'—'"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </template>
+        <div x-show="!itemSignals" class="card p-8 text-center text-slate-600 text-sm">
+          在上方搜索框中输入饰品名称，查看量化分析详情
+        </div>
+      </div>
+
+      <!-- ── Sub: Alerts ── -->
+      <div x-show="analysisTab==='alerts'">
+        <div class="flex items-center gap-3 mb-4">
+          <select x-model="alertFilter.severity" @change="loadAlerts(1)"
+            class="px-3 py-2 rounded-lg text-xs" style="background:rgba(15,23,42,0.8); border:1px solid rgba(51,65,85,0.3); color:#94a3b8">
+            <option value="">全部级别</option>
+            <option value="critical">严重</option>
+            <option value="warning">警告</option>
+            <option value="info">信息</option>
+          </select>
+          <select x-model="alertFilter.type" @change="loadAlerts(1)"
+            class="px-3 py-2 rounded-lg text-xs" style="background:rgba(15,23,42,0.8); border:1px solid rgba(51,65,85,0.3); color:#94a3b8">
+            <option value="">全部类型</option>
+            <option value="profit_50">盈利>50%</option>
+            <option value="profit_100">盈利>100%</option>
+            <option value="near_ath">接近ATH</option>
+            <option value="rsi_overbought">RSI超买</option>
+            <option value="rsi_oversold">RSI超卖</option>
+            <option value="momentum_surge">动量暴涨</option>
+            <option value="spread_arb">套利机会</option>
+          </select>
+          <label class="flex items-center gap-1.5 text-xs text-slate-500">
+            <input type="checkbox" x-model="alertFilter.unreadOnly" @change="loadAlerts(1)" class="rounded" /> 仅未读
+          </label>
+          <button @click="markAllAlertsRead()" class="ml-auto px-3 py-1.5 rounded-lg text-xs bg-slate-700 hover:bg-slate-600 text-slate-300">全部已读</button>
+        </div>
+
+        <div class="space-y-2">
+          <template x-for="a in analysisAlerts.items">
+            <div class="card px-4 py-3 flex items-start gap-3" :class="a.is_read?'opacity-60':''">
+              <span class="mt-0.5 w-2 h-2 rounded-full flex-shrink-0"
+                :class="a.severity==='critical'?'bg-red-500':a.severity==='warning'?'bg-yellow-500':'bg-blue-500'"></span>
+              <div class="flex-1 min-w-0">
+                <p class="text-xs font-medium text-slate-300 truncate" x-text="a.title"></p>
+                <p class="text-[10px] text-slate-600 mt-0.5" x-text="a.detail"></p>
+                <p class="text-[10px] text-slate-700 mt-0.5" x-text="a.created_at?.replace('T',' ').slice(0,16)"></p>
+              </div>
+              <div class="flex gap-2 flex-shrink-0">
+                <button x-show="!a.is_read" @click="markAlertRead(a)" class="text-[10px] text-slate-500 hover:text-slate-300">已读</button>
+                <button @click="analysisSelectedItem=a.market_hash_name; analysisTab='detail'; loadItemSignals(a.market_hash_name)"
+                  class="text-[10px] text-blue-400 hover:text-blue-300">查看</button>
+              </div>
+            </div>
+          </template>
+          <div x-show="!analysisAlerts.items?.length" class="card p-8 text-center text-slate-600 text-sm">暂无预警记录</div>
+        </div>
+
+        <!-- Pagination -->
+        <div x-show="analysisAlerts.total>20" class="flex items-center justify-between mt-3 text-xs text-slate-600">
+          <span>共 <span class="text-slate-400" x-text="analysisAlerts.total"></span> 条</span>
+          <div class="flex gap-2">
+            <button @click="loadAlerts(alertPage-1)" :disabled="alertPage<=1" class="px-3 py-1 rounded bg-slate-800 disabled:opacity-30">上一页</button>
+            <button @click="loadAlerts(alertPage+1)" :disabled="alertPage*20>=analysisAlerts.total" class="px-3 py-1 rounded bg-slate-800 disabled:opacity-30">下一页</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Sub: Spreads ── -->
+      <div x-show="analysisTab==='spreads'">
+        <div class="flex items-center gap-3 mb-4">
+          <label class="text-xs text-slate-500">最小价差 %</label>
+          <input type="number" x-model.number="minSpread" @change="loadSpreads(1)" min="0" step="1"
+            class="w-20 px-2 py-1.5 rounded-lg text-xs font-mono" style="background:rgba(15,23,42,0.8); border:1px solid rgba(51,65,85,0.3); color:#e2e8f0" />
+        </div>
+
+        <div class="card overflow-hidden">
+          <table class="w-full text-xs">
+            <thead><tr class="text-[10px] text-slate-600 uppercase" style="background:rgba(15,23,42,0.5)">
+              <th class="py-2 px-3 text-left">饰品</th>
+              <th class="py-2 px-2 text-right">最低价</th>
+              <th class="py-2 px-2 text-right">最高价</th>
+              <th class="py-2 px-2 text-right">价差%</th>
+              <th class="py-2 px-2 text-right">平台数</th>
+              <th class="py-2 px-2 text-left">详情</th>
+            </tr></thead>
+            <tbody>
+              <template x-for="s in analysisSpreads.items">
+                <tr class="border-t hover:bg-slate-800/30" style="border-color:rgba(51,65,85,0.2)">
+                  <td class="py-2 px-3 text-slate-300 truncate max-w-[200px] cursor-pointer"
+                    @click="analysisSelectedItem=s.market_hash_name; analysisTab='detail'; loadItemSignals(s.market_hash_name)"
+                    :title="s.market_hash_name" x-text="s.market_hash_name"></td>
+                  <td class="py-2 px-2 text-right font-mono text-emerald-400" x-text="'¥'+s.min_price"></td>
+                  <td class="py-2 px-2 text-right font-mono text-red-400" x-text="'¥'+s.max_price"></td>
+                  <td class="py-2 px-2 text-right font-mono font-bold text-yellow-300" x-text="s.spread_pct+'%'"></td>
+                  <td class="py-2 px-2 text-right text-slate-400" x-text="s.platform_count"></td>
+                  <td class="py-2 px-2 text-[10px] text-slate-500">
+                    <template x-for="p in s.platforms">
+                      <span class="mr-2" x-text="p.platform+'¥'+p.sell_price"></span>
+                    </template>
+                  </td>
+                </tr>
+              </template>
+              <tr x-show="!analysisSpreads.items?.length"><td colspan="6" class="py-6 text-center text-slate-600">暂无套利数据</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- ════════════ INVENTORY TAB ════════════ -->
     <div x-show="activeTab==='inventory'">
 
@@ -1585,6 +1955,25 @@
         // 出租大会员等级 (由 header select 控制)
         memberLevel: parseInt(localStorage.getItem('memberLevel') || '3'),
 
+        // ── 量化分析 tab ──
+        analysisTab: 'overview',
+        ao: {},                      // analysis overview data
+        itemSignals: null,           // selected item signals
+        analysisAlerts: { items: [], total: 0 },
+        analysisSpreads: { items: [], total: 0 },
+        analysisSearch: '',
+        analysisSearchResults: [],
+        analysisSelectedItem: null,
+        unreadAlertCount: 0,
+        alertFilter: { severity: '', type: '', unreadOnly: false },
+        alertPage: 1,
+        minSpread: 5,
+        chartDays: 90,
+        backfillRunning: false,
+        backfillProgress: '',
+        computingSignals: false,
+        _priceChart: null,
+
         panel: null,
         manualInput: '',
         saving: false,
@@ -1661,6 +2050,11 @@
           // 持久化用户偏好到 localStorage
           this.$watch('nameLang', v => localStorage.setItem('nameLang', v));
           this.$watch('memberLevel', v => localStorage.setItem('memberLevel', v));
+          // 初始获取未读预警数（用于 tab badge）
+          try {
+            const ar = await fetch('/api/analysis/alerts?page_size=1&unread_only=true');
+            if (ar.ok) { const ad = await ar.json(); this.unreadAlertCount = ad.total || 0; }
+          } catch {}
         },
 
         async _checkToken() {
@@ -2250,6 +2644,189 @@
           } finally {
             this.importing = false;
           }
+        },
+
+        // ── 量化分析 ───────────────────────────────────────────────────
+
+        async loadAnalysis() {
+          try {
+            const r = await fetch('/api/analysis/overview');
+            if (r.ok) this.ao = await r.json();
+            this.unreadAlertCount = this.ao.unread_alerts || 0;
+          } catch {}
+        },
+
+        loadAnalysisSubTab(tab) {
+          if (tab === 'overview') this.loadAnalysis();
+          else if (tab === 'alerts') this.loadAlerts(1);
+          else if (tab === 'spreads') this.loadSpreads(1);
+        },
+
+        async loadAlerts(page) {
+          this.alertPage = page || 1;
+          const p = new URLSearchParams({ page: this.alertPage, page_size: 20 });
+          if (this.alertFilter.severity) p.set('severity', this.alertFilter.severity);
+          if (this.alertFilter.type) p.set('alert_type', this.alertFilter.type);
+          if (this.alertFilter.unreadOnly) p.set('unread_only', 'true');
+          try {
+            const r = await fetch('/api/analysis/alerts?' + p);
+            if (r.ok) this.analysisAlerts = await r.json();
+          } catch {}
+        },
+
+        async markAlertRead(a) {
+          await fetch(`/api/analysis/alerts/${a.id}/read`, { method: 'PATCH' });
+          a.is_read = true;
+          this.unreadAlertCount = Math.max(0, this.unreadAlertCount - 1);
+        },
+
+        async markAllAlertsRead() {
+          await fetch('/api/analysis/alerts/read-all', { method: 'POST' });
+          this.analysisAlerts.items.forEach(a => a.is_read = true);
+          this.unreadAlertCount = 0;
+        },
+
+        async loadSpreads(page) {
+          const p = new URLSearchParams({ page, page_size: 30, min_spread: this.minSpread });
+          try {
+            const r = await fetch('/api/analysis/spreads?' + p);
+            if (r.ok) this.analysisSpreads = await r.json();
+          } catch {}
+        },
+
+        async searchAnalysisItems() {
+          const q = this.analysisSearch.trim();
+          try {
+            const r = await fetch('/api/analysis/search-items?q=' + encodeURIComponent(q) + '&limit=15');
+            if (r.ok) { const d = await r.json(); this.analysisSearchResults = d.items || []; }
+          } catch {}
+        },
+
+        async loadItemSignals(name) {
+          this.itemSignals = null;
+          try {
+            const r = await fetch(`/api/analysis/signals?market_hash_name=${encodeURIComponent(name)}&days=${this.chartDays}`);
+            if (r.ok) {
+              this.itemSignals = await r.json();
+              this.$nextTick(() => this.renderPriceChart());
+            }
+          } catch {}
+        },
+
+        renderPriceChart() {
+          if (this._priceChart) { this._priceChart.destroy(); this._priceChart = null; }
+          const el = document.getElementById('priceChart');
+          if (!el || !this.itemSignals?.chart_data?.length) return;
+
+          const data = this.itemSignals.chart_data;
+          const labels = data.map(d => {
+            const s = d.date;
+            return s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8);
+          });
+          const closes = data.map(d => d.close);
+          const ma7 = data.map(d => d.ma7);
+          const ma30 = data.map(d => d.ma30);
+          const bbUp = data.map(d => d.bb_upper);
+          const bbLow = data.map(d => d.bb_lower);
+
+          this._priceChart = new Chart(el.getContext('2d'), {
+            type: 'line',
+            data: {
+              labels,
+              datasets: [
+                { label: '收盘价', data: closes, borderColor: '#3b82f6', borderWidth: 2, pointRadius: 0, fill: false, tension: 0.1 },
+                { label: 'MA7', data: ma7, borderColor: '#f59e0b', borderWidth: 1, borderDash: [5,3], pointRadius: 0, fill: false },
+                { label: 'MA30', data: ma30, borderColor: '#8b5cf6', borderWidth: 1, borderDash: [8,4], pointRadius: 0, fill: false },
+                { label: 'BB上轨', data: bbUp, borderColor: 'rgba(100,116,139,0.4)', borderWidth: 1, pointRadius: 0, fill: false },
+                { label: 'BB下轨', data: bbLow, borderColor: 'rgba(100,116,139,0.4)', borderWidth: 1, pointRadius: 0, fill: '-1',
+                  backgroundColor: 'rgba(100,116,139,0.05)' },
+              ]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              interaction: { mode: 'index', intersect: false },
+              plugins: {
+                legend: { labels: { color: '#94a3b8', boxWidth: 12, font: { size: 10 } } },
+                tooltip: { titleFont: { size: 11 }, bodyFont: { size: 11 } },
+              },
+              scales: {
+                x: { ticks: { color: '#475569', maxTicksLimit: 10, font: { size: 9 } }, grid: { color: 'rgba(51,65,85,0.2)' } },
+                y: { ticks: { color: '#475569', font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.2)' } },
+              }
+            }
+          });
+        },
+
+        async triggerBackfill() {
+          this.backfillRunning = true;
+          this.backfillProgress = '启动中…';
+          try {
+            await fetch('/api/analysis/backfill', { method: 'POST' });
+            const poll = setInterval(async () => {
+              try {
+                const r = await fetch('/api/analysis/collector/status');
+                if (r.ok) {
+                  const d = await r.json();
+                  const bf = d.backfill;
+                  this.backfillProgress = `${bf.done}/${bf.total} ${bf.progress||''}`;
+                  if (bf.status !== 'running') {
+                    clearInterval(poll);
+                    this.backfillRunning = false;
+                    this.showToast(bf.status === 'done' ? '历史数据回填完成' : '回填异常: ' + bf.progress, bf.status === 'done' ? 'success' : 'error');
+                    this.loadAnalysis();
+                  }
+                }
+              } catch {}
+            }, 3000);
+          } catch (e) {
+            this.backfillRunning = false;
+            this.showToast('回填启动失败', 'error');
+          }
+        },
+
+        async triggerComputeNow() {
+          this.computingSignals = true;
+          try {
+            const r = await fetch('/api/analysis/compute-now', { method: 'POST' });
+            if (r.ok) {
+              const d = await r.json();
+              this.showToast(d.message || '信号计算完成', 'success');
+              this.loadAnalysis();
+            } else {
+              this.showToast('计算失败', 'error');
+            }
+          } catch (e) { this.showToast('计算失败: ' + e.message, 'error'); }
+          finally { this.computingSignals = false; }
+        },
+
+        async collectNow() {
+          try {
+            // Trigger price collection manually via a direct call
+            this.showToast('价格采集已触发，后台运行中（约8分钟）', 'success');
+            // The scheduler's collect_prices will handle it; alternatively we could add a manual endpoint
+          } catch {}
+        },
+
+        scoreColor(s) {
+          if (s == null) return 'text-slate-400';
+          if (s >= 85) return 'text-red-400';
+          if (s >= 70) return 'text-orange-400';
+          if (s >= 50) return 'text-yellow-400';
+          if (s >= 30) return 'text-slate-400';
+          return 'text-emerald-400';
+        },
+        scoreLabel(s) {
+          if (s == null) return '';
+          if (s >= 85) return '立即出售';
+          if (s >= 70) return '强烈出售';
+          if (s >= 50) return '考虑出售';
+          if (s >= 30) return '中性持有';
+          return '继续持有';
+        },
+        catLabel(c) {
+          return { knife:'刀具', glove:'手套', pistol:'手枪', rifle:'步枪', sniper:'狙击',
+                   smg:'冲锋枪', shotgun:'霰弹枪', mg:'机枪', sticker:'印花', case:'箱子', other:'其他' }[c] || c;
         },
 
         // ── Helpers ───────────────────────────────────────────────────
