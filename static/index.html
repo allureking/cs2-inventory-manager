@@ -911,11 +911,18 @@
               <template x-for="item in (rentedList.items||[])" :key="item.orderId">
                 <tr class="tbl-row">
                   <td class="py-2.5 px-4">
-                    <div class="min-w-0">
-                      <p class="text-slate-100 font-medium leading-tight truncate" style="max-width:300px"
-                        x-text="item.hashName || item.name || '—'"></p>
-                      <p class="text-[11px] mt-0.5 truncate font-mono" style="color:#334155; max-width:300px"
-                        x-text="item.orderId"></p>
+                    <div class="flex items-center gap-2.5">
+                      <div class="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0" style="background:rgba(20,30,48,0.8)">
+                        <img :src="shelfImgUrl(item)" class="w-full h-full object-cover"
+                          @error="$el.style.opacity='0'" loading="lazy" />
+                      </div>
+                      <div class="min-w-0">
+                        <p class="font-medium leading-tight truncate" style="max-width:260px"
+                          :class="rarityClass(item.hashName)"
+                          x-text="nameLang==='cn' ? (item.name||item.hashName||'—') : (item.hashName||item.name||'—')"></p>
+                        <p class="leading-tight truncate mt-0.5" style="max-width:260px; color:#475569"
+                          x-text="nameLang==='cn' ? (item.hashName||'') : (item.name||'')"></p>
+                      </div>
                     </div>
                   </td>
                   <td class="py-2.5 px-3">
@@ -1546,7 +1553,7 @@
             class="py-2 pl-3 rounded-xl text-sm border" style="min-width: 100px">
             <option value="">全部类型</option>
             <optgroup label="近战">
-              <option value="knife">匕首/刀</option>
+              <option value="knife">刀具</option>
               <option value="glove">手套</option>
             </optgroup>
             <optgroup label="枪械">
@@ -1557,9 +1564,28 @@
               <option value="shotgun">霰弹枪</option>
               <option value="mg">机枪</option>
             </optgroup>
-            <optgroup label="其他">
-              <option value="sticker">印花/贴纸</option>
+            <optgroup label="饰品">
+              <option value="sticker">印花</option>
+              <option value="patch">布章</option>
+              <option value="graffiti">涂鸦</option>
+              <option value="charm">挂件</option>
+              <option value="musickit">音乐盒</option>
+              <option value="agent">特工</option>
+            </optgroup>
+            <optgroup label="容器">
               <option value="case">箱子/胶囊</option>
+              <option value="key">钥匙/通行证</option>
+            </optgroup>
+            <optgroup label="品质">
+              <option value="stattrak">StatTrak™</option>
+              <option value="souvenir">纪念品</option>
+            </optgroup>
+            <optgroup label="磨损">
+              <option value="fn">崭新出厂 FN</option>
+              <option value="mw">略有磨损 MW</option>
+              <option value="ft">久经沙场 FT</option>
+              <option value="ww">破损不堪 WW</option>
+              <option value="bs">战痕累累 BS</option>
             </optgroup>
           </select>
 
@@ -2887,14 +2913,21 @@
           return `https://community.fastly.steamstatic.com/economy/image/${raw}/62fx62f`;
         },
 
-        // 根据 market_hash_name 返回品质颜色 class（★/刀/手套=金色，StatTrak=橙色，Souvenir=黄色）
+        // CS2 品质色 (Exceedingly Rare=Gold, Contraband=Orange, Covert=Red, Classified=Pink,
+        // Restricted=Purple, Mil-Spec=Blue, Industrial=LightBlue, Consumer=White)
+        // 无法从名字判定所有 rarity tier，标注已知特殊品质
         rarityClass(hashName) {
-          if (!hashName) return 'text-slate-100';
-          if (hashName.startsWith('★ StatTrak™')) return 'text-yellow-300';
+          if (!hashName) return 'text-slate-200';
+          // Gold — ★ knives/gloves (Exceedingly Rare / Special)
           if (hashName.startsWith('★')) return 'text-yellow-400';
+          // Orange — Contraband (M4A4 Howl)
+          if (hashName.includes('M4A4 | Howl')) return 'text-orange-500';
+          // StatTrak™ prefix — keep original rarity but add visual distinction
           if (hashName.startsWith('StatTrak™')) return 'text-orange-400';
+          // Souvenir prefix
           if (hashName.startsWith('Souvenir')) return 'text-yellow-200';
-          return 'text-slate-100';
+          // Default: white (full rarity requires item metadata)
+          return 'text-slate-200';
         },
 
         fmt(n) {

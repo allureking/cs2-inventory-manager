@@ -51,6 +51,7 @@ def _fmt_lease_record(rec: dict) -> dict:
         "name":            info.get("name"),
         "hashName":        info.get("commodityHashName"),
         "abrade":          info.get("abrade"),
+        "imgUrl":          info.get("imgUrl") or info.get("iconUrl"),
         "shortLeasePrice": info.get("shortLeasePrice"),
         "longLeasePrice":  info.get("longLeasePrice"),
     }

@@ -28,27 +28,54 @@ router = APIRouter()
 
 _ACTIVE = ["in_steam", "rented_out", "in_storage"]
 
-# CS2 物品分类：根据 market_hash_name 前缀/关键词判定
+# CS2 物品分类（参考悠悠有品筛选）
 _CATEGORY_PATTERNS: dict[str, list[str]] = {
-    "knife":    ["★ StatTrak™", "★"],          # 最前匹配，★ 开头且非手套
-    "glove":    [],                              # 特殊处理：★ + 含 Gloves/Wraps/Hand Wraps
-    "pistol":   ["Glock-17", "USP-S", "P250", "CZ75-Auto", "Five-SeveN", "Tec-9",
+    "knife":    [],   # 特殊处理：★ 开头且非手套
+    "glove":    [],   # 特殊处理：★ + 含 Gloves/Wraps
+    "pistol":   ["Glock-18", "USP-S", "P250", "CZ75-Auto", "Five-SeveN", "Tec-9",
                  "Desert Eagle", "R8 Revolver", "P2000", "Dual Berettas"],
-    "rifle":    ["AK-47", "M4A4", "M4A1-S", "FAMAS", "Galil AR", "AUG", "SG 553", "G3SG1", "SCAR-20"],
+    "rifle":    ["AK-47", "M4A4", "M4A1-S", "FAMAS", "Galil AR", "AUG", "SG 553"],
     "sniper":   ["AWP", "SSG 08", "SCAR-20", "G3SG1"],
     "smg":      ["MP9", "MP5-SD", "MAC-10", "PP-Bizon", "UMP-45", "P90", "MP7"],
     "shotgun":  ["XM1014", "MAG-7", "Nova", "Sawed-Off"],
     "mg":       ["M249", "Negev"],
-    "sticker":  ["Sticker |", "Patch |", "Graffiti |", "Autograph Capsule"],
-    "case":     [" Case", "Capsule", " Package", "Souvenir Package"],
+    "sticker":  ["Sticker |"],
+    "patch":    ["Patch |"],
+    "graffiti": ["Sealed Graffiti |"],
+    "charm":    ["Charm |"],
+    "agent":    ["Master Agent", "Distinguished Agent", "Exceptional Agent", "Superior Agent",
+                 "Vypa", "Chem-Haz", "Ground Rebel", "Elite Crew", "KSK", "SAS", "SEAL",
+                 "SWAT", "FBI", "GIGN", "NSWC"],
+    "musickit": ["Music Kit |", "StatTrak™ Music Kit |"],
+    "case":     [" Case", "Capsule", "Package"],
+    "key":      ["Case Key", "Capsule Key", "eSports Key", "Operation"],
+    "tool":     ["Name Tag", "Storage Unit", "Sticker |"],
 }
-_GLOVE_KEYWORDS = ["Gloves", "Wraps", "Hand Wraps"]
+
+# 磨损等级（从 market_hash_name 末尾括号提取）
+_WEAR_PATTERNS = {
+    "fn": "(Factory New)",
+    "mw": "(Minimal Wear)",
+    "ft": "(Field-Tested)",
+    "ww": "(Well-Worn)",
+    "bs": "(Battle-Scarred)",
+}
 
 
 def _category_filter(category: str):
-    """返回对应分类的 SQLAlchemy WHERE 条件（用于 list_items 过滤）"""
+    """返回对应分类的 SQLAlchemy WHERE 条件"""
+    # 特殊品质筛选
+    if category == "stattrak":
+        return InventoryItem.market_hash_name.like("StatTrak™%")
+    if category == "souvenir":
+        return InventoryItem.market_hash_name.like("Souvenir%")
+
+    # 磨损等级筛选
+    if category in _WEAR_PATTERNS:
+        return InventoryItem.market_hash_name.like(f"%{_WEAR_PATTERNS[category]}")
+
+    # 刀具和手套
     if category == "knife":
-        # ★ 开头且不含手套关键词
         return and_(
             InventoryItem.market_hash_name.like("★%"),
             ~InventoryItem.market_hash_name.ilike("%Gloves%"),
@@ -62,6 +89,7 @@ def _category_filter(category: str):
                 InventoryItem.market_hash_name.ilike("%Wraps%"),
             ),
         )
+
     patterns = _CATEGORY_PATTERNS.get(category, [])
     if not patterns:
         return None
