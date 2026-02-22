@@ -387,6 +387,7 @@ def _normalize_shelf_item(item: dict) -> dict:
         "leaseMaxDays": item.get("leaseMaxDays"),
         "leaseMaxDaysDesc": item.get("leaseMaxDaysDesc"),
         "openSublet": item.get("openSublet"),   # 是否开启转租
+        "orderId": item.get("orderId"),          # 租赁订单ID（用于 0CD 开关）
         "steamAssetId": item.get("steamAssetId"),
         "status": item.get("status"),
         "canLease": item.get("canLease"),

@@ -167,7 +167,7 @@ def _headers(pc_market: bool = False) -> dict:
         "authorization": f"Bearer {token}",
         "content-type": "application/json; charset=utf-8",
         "user-agent": "okhttp/3.14.9",
-        "App-Version": "5.28.3",
+        "App-Version": settings.youpin_app_version,
         "AppType": "4",
         "platform": platform,
         "DeviceId": _device_id,
@@ -182,7 +182,7 @@ def _headers(pc_market: bool = False) -> dict:
             "deviceType": _device_id,
             "hasSteamApp": 1,
             "requestTag": _rand_str(32).upper(),
-            "systemName ": "Android",
+            "systemName": "Android",
             "systemVersion": "15",
         }, ensure_ascii=False),
     }

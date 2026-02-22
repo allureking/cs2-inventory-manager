@@ -105,6 +105,24 @@ async def auth_login(body: dict):
         raise HTTPException(status_code=502, detail=str(e))
 
 
+@router.post("/auth/apply-token")
+async def auth_apply_token(body: dict):
+    """手动设置 Token（从浏览器/App 获取后粘贴）"""
+    token = body.get("token", "").strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="请输入 Token")
+    # 设置运行时 token
+    youpin_svc._runtime_token = token
+    # 验证是否有效
+    try:
+        info = await youpin_svc.check_token_status()
+        youpin_svc._runtime_nickname = info.get("nickname")
+        return {"ok": True, "nickname": info.get("nickname"), "token_source": "manual"}
+    except Exception as e:
+        youpin_svc._runtime_token = None
+        raise HTTPException(status_code=401, detail=f"Token 无效: {e}")
+
+
 # ── 模板ID同步 ──────────────────────────────────────────────────────────────
 
 @router.post("/sync/template-ids")

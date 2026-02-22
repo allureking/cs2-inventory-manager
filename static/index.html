@@ -324,9 +324,14 @@
         <template x-if="shelfTab==='lease' || repriceModal.isSublet">
           <div class="space-y-3 mb-4">
             <div>
-              <label class="block text-[11px] text-slate-600 mb-1">日租金（元/天）</label>
+              <label class="block text-[11px] text-slate-600 mb-1">短租日租金（元/天）</label>
               <input x-model.number="repriceModal.newLeaseUnit" type="number" step="0.01" min="0.01"
                 class="w-full px-3 py-2 rounded-xl text-sm border" placeholder="0.01"/>
+            </div>
+            <div>
+              <label class="block text-[11px] text-slate-600 mb-1">长租日租金（元/天，可选）</label>
+              <input x-model.number="repriceModal.newLongLeaseUnit" type="number" step="0.01" min="0.01"
+                class="w-full px-3 py-2 rounded-xl text-sm border" placeholder="留空则按短租价×0.95"/>
             </div>
             <div>
               <label class="block text-[11px] text-slate-600 mb-1">押金（元）</label>
@@ -397,6 +402,18 @@
             <span x-show="!loginModal.logging">登录</span>
             <span x-show="loginModal.logging" x-cloak>登录中…</span>
           </button>
+        </div>
+
+        <!-- Manual token input -->
+        <div class="mt-4 pt-4 border-t" style="border-color:rgba(51,65,85,0.3)">
+          <p class="text-[11px] text-slate-600 mb-2">或直接粘贴 Token（从悠悠 App 或浏览器 DevTools 获取）</p>
+          <div class="flex gap-2">
+            <input x-model="loginModal.manualToken" type="text" placeholder="Bearer Token…"
+              class="flex-1 px-3 py-2 rounded-xl text-xs border font-mono" style="background:rgba(15,23,42,0.8);border-color:rgba(51,65,85,0.3);color:#94a3b8" />
+            <button @click="applyManualToken()" :disabled="!loginModal.manualToken"
+              class="px-3 py-2 rounded-xl text-xs font-medium text-white transition-all disabled:opacity-40"
+              style="background:rgba(16,185,129,0.2);color:#34d399;border:1px solid rgba(16,185,129,0.3)">应用</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1006,7 +1023,7 @@
                         @mouseleave="$el.style.background='rgba(99,102,241,0.08)'">
                         改价
                       </button>
-                      <button @click="cancelSubletOrder(item.commodityId)"
+                      <button @click="cancelSubletOrder(item.orderId || item.commodityId)"
                         class="text-[11px] px-2 py-1 rounded-lg transition-all"
                         style="background:rgba(234,179,8,0.08);color:rgba(234,179,8,0.7);border:1px solid rgba(234,179,8,0.15)"
                         @mouseenter="$el.style.background='rgba(234,179,8,0.18)'"
@@ -2005,8 +2022,8 @@
         unlistedItems: { items: [], total: 0, total_inventory: 0, total_listed: 0, page_size: 50 },
         unlistedLoading: false,
         unlistedPage: 1,
-        repriceModal: { show: false, item: null, newPrice: '', newLeaseUnit: '', newDeposit: '', saving: false },
-        loginModal: { show: false, phone: '', code: '', sessionId: '', smsSending: false, logging: false, cooldown: 0 },
+        repriceModal: { show: false, item: null, newPrice: '', newLeaseUnit: '', newLongLeaseUnit: '', newDeposit: '', saving: false },
+        loginModal: { show: false, phone: '', code: '', sessionId: '', smsSending: false, logging: false, cooldown: 0, manualToken: '' },
         authState: { has_token: false, token_source: 'none', nickname: null },
         selectedItems: [],
         quickList: {
@@ -2095,9 +2112,34 @@
               if (this.loginModal.cooldown <= 0) clearInterval(timer);
             }, 1000);
           } catch (e) {
-            this.showToast('发送失败：' + e.message, 'error');
+            const msg = e.message || '';
+            if (msg.includes('5050') || msg.includes('更新') || msg.includes('版本')) {
+              this.showToast('悠悠有品 API 限制了第三方 SMS 登录。请在悠悠 App 中登录后，将 Token 填入 .env 文件的 YOUPIN_TOKEN 字段，或使用下方手动输入 Token 功能。', 'error');
+            } else {
+              this.showToast('发送失败：' + msg, 'error');
+            }
           }
           finally { this.loginModal.smsSending = false; }
+        },
+
+        async applyManualToken() {
+          const token = (this.loginModal.manualToken || '').trim();
+          if (!token) return;
+          try {
+            const r = await fetch('/api/youpin/auth/apply-token', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token }),
+            });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.detail || 'Token 无效');
+            this.showToast('Token 应用成功' + (d.nickname ? '：' + d.nickname : ''));
+            this.loginModal.show = false;
+            this.tokenExpired = false;
+            await this._loadAuthState();
+          } catch (e) {
+            this.showToast('Token 无效：' + e.message, 'error');
+          }
         },
 
         async doSmsLogin() {
@@ -2157,7 +2199,7 @@
             this.selectedItems = [];
             await this.loadShelf();
             // 3秒后自动刷新待上架列表（等待YouPin API同步延迟）
-            setTimeout(() => { if (this.shelfTab === 'unlisted') this.loadUnlistedItems(1); }, 3000);
+            setTimeout(() => { if (this.shelfTab === 'unlisted') this.loadUnlistedItems(1); }, 30000);
           } catch (e) { this.showToast('批量下架失败：' + e.message, 'error'); }
         },
 
@@ -2378,14 +2420,13 @@
           finally { this.unlistedLoading = false; }
         },
 
-        async cancelSubletOrder(commodityId) {
-          if (!commodityId || !confirm('确认取消该饰品的0CD转租？')) return;
+        async cancelSubletOrder(orderId) {
+          if (!orderId || !confirm('确认取消该饰品的0CD转租？')) return;
           try {
-            // 转租中列表使用 commodityId 作为标识
             const r = await fetch('/api/youpin/lease/disable-zero-cd', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ order_ids: [commodityId] }),
+              body: JSON.stringify({ order_ids: [orderId] }),
             });
             const d = await r.json();
             if (!r.ok) throw new Error(d.detail || '取消失败');
@@ -2401,6 +2442,7 @@
             show: true, item,
             newPrice: item.price ?? '',
             newLeaseUnit: item.leaseUnitPrice ?? '',
+            newLongLeaseUnit: item.longLeasePrice ?? '',
             newDeposit: item.leaseDeposit ?? '',
             saving: false,
             isSublet: false,
@@ -2413,9 +2455,10 @@
             show: true, item,
             newPrice: '',
             newLeaseUnit: item.leaseUnitPrice ?? '',
+            newLongLeaseUnit: item.longLeasePrice ?? '',
             newDeposit: item.leaseDeposit ?? '',
             saving: false,
-            isSublet: true,  // 强制使用 lease 改价路径
+            isSublet: true,
           };
         },
 
@@ -2430,7 +2473,10 @@
             const p = new URLSearchParams({ template_id: item.templateId });
             if (item.abrade != null) p.set('abrade', item.abrade);
             const r = await fetch('/api/youpin/market/price-info?' + p);
-            if (!r.ok) throw new Error('查询失败');
+            if (!r.ok) {
+              const err = await r.json().catch(() => ({}));
+              throw new Error(err.detail || `查询失败 (${r.status})`);
+            }
             const d = await r.json();
             item._mktSell = d.suggested_sell;
             item._mktLease = d.suggested_lease;
@@ -2487,7 +2533,7 @@
         },
 
         async saveReprice() {
-          const { item, newPrice, newLeaseUnit, newDeposit } = this.repriceModal;
+          const { item, newPrice, newLeaseUnit, newLongLeaseUnit, newDeposit } = this.repriceModal;
           if (!item || !item.commodityId) return;
           this.repriceModal.saving = true;
           try {
@@ -2497,7 +2543,7 @@
               is_can_sold: !isLease,
               is_can_lease: isLease,
               ...(isLease
-                ? { lease_unit: parseFloat(newLeaseUnit), deposit: parseFloat(newDeposit) }
+                ? { lease_unit: parseFloat(newLeaseUnit), long_lease_unit: parseFloat(newLongLeaseUnit) || undefined, deposit: parseFloat(newDeposit) }
                 : { sell_price: parseFloat(newPrice) }),
             };
             const r = await fetch('/api/listing/reprice', {
@@ -2555,7 +2601,7 @@
             this.showToast('下架成功（YouPin API 约需 30 秒更新库存，请稍后刷新待上架列表）');
             await this.loadShelf();
             // 5秒后刷新待上架列表
-            setTimeout(() => { if (this.shelfTab === 'unlisted') this.loadUnlistedItems(1); }, 5000);
+            setTimeout(() => { if (this.shelfTab === 'unlisted') this.loadUnlistedItems(1); }, 30000);
           } catch (e) {
             this.showToast('下架失败：' + e.message, 'error');
           }

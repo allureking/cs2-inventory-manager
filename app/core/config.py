@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     # 悠悠有品
     youpin_token: str = ""
     youpin_device_id: str = ""
+    youpin_app_version: str = "5.28.3"  # 可在 .env 中覆盖，如 API 要求更新版本
 
 
 settings = Settings()
