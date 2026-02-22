@@ -322,6 +322,33 @@ async def delist_item(commodity_id: int) -> dict:
 #  货架查询
 # ══════════════════════════════════════════════════════════════
 
+def _normalize_shelf_item(item: dict) -> dict:
+    """将悠悠货架 API 原始字段统一映射为前端通用字段名"""
+    return {
+        "commodityId": item.get("id"),
+        "templateId": item.get("templateId"),
+        "name": item.get("name"),
+        "commodityHashName": item.get("commodityHashName"),
+        "abrade": item.get("abrade"),
+        "imgUrl": item.get("imgUrl"),
+        # 出售
+        "price": item.get("sellAmount"),
+        # 出租
+        "leaseUnitPrice": item.get("shortLeaseAmount"),
+        "longLeasePrice": item.get("longLeaseAmount"),
+        "leaseDeposit": item.get("depositAmount"),
+        "leaseAmountDesc": item.get("leaseAmountDesc"),
+        "depositAmountDesc": item.get("depositAmountDesc"),
+        "leaseMaxDays": item.get("leaseMaxDays"),
+        "leaseMaxDaysDesc": item.get("leaseMaxDaysDesc"),
+        "openSublet": item.get("openSublet"),   # 是否开启转租
+        "steamAssetId": item.get("steamAssetId"),
+        "status": item.get("status"),
+        "canLease": item.get("canLease"),
+        "canSell": item.get("commodityCanSell"),
+    }
+
+
 async def get_sell_shelf(page: int = 1, page_size: int = 50) -> dict:
     """获取当前出售货架列表"""
     async with httpx.AsyncClient(timeout=15) as client:
@@ -335,11 +362,11 @@ async def get_sell_shelf(page: int = 1, page_size: int = 50) -> dict:
     _check(body, "sell_shelf")
     data = _data(body)
     if isinstance(data, dict):
-        items = (data.get("commodityInfoList") or data.get("commodityList") or
-                 data.get("list") or [])
+        raw = (data.get("commodityInfoList") or data.get("commodityList") or
+               data.get("list") or [])
         stats = data.get("statisticalData") or {}
-        total = stats.get("quantity") or data.get("totalCount") or len(items)
-        return {"items": items, "total": total, "stats": stats}
+        total = stats.get("quantity") or data.get("totalCount") or len(raw)
+        return {"items": [_normalize_shelf_item(i) for i in raw], "total": total, "stats": stats}
     return {"items": [], "total": 0, "stats": {}}
 
 
@@ -356,11 +383,11 @@ async def get_lease_shelf(page: int = 1, page_size: int = 50) -> dict:
     _check(body, "lease_shelf")
     data = _data(body)
     if isinstance(data, dict):
-        items = (data.get("commodityInfoList") or data.get("commodityList") or
-                 data.get("list") or [])
+        raw = (data.get("commodityInfoList") or data.get("commodityList") or
+               data.get("list") or [])
         stats = data.get("statisticalData") or {}
-        total = stats.get("quantity") or data.get("totalCount") or len(items)
-        return {"items": items, "total": total, "stats": stats}
+        total = stats.get("quantity") or data.get("totalCount") or len(raw)
+        return {"items": [_normalize_shelf_item(i) for i in raw], "total": total, "stats": stats}
     return {"items": [], "total": 0, "stats": {}}
 
 

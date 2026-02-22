@@ -497,16 +497,27 @@
             :class="shelfTab==='lease' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'">
             出租货架 <span class="font-mono ml-1 text-slate-400" x-text="leaseShelf.total??0"></span>
           </button>
+          <button @click="shelfTab='rented'; loadRentedList(1, false)"
+            class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+            :class="shelfTab==='rented' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'">
+            已租出 <span class="font-mono ml-1 text-slate-400" x-text="rentedList.total??'—'"></span>
+          </button>
+          <button @click="shelfTab='sublet'; loadRentedList(1, true)"
+            class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+            :class="shelfTab==='sublet' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'">
+            白玩中/0CD <span class="font-mono ml-1 text-emerald-600" x-text="rentedList.total??'—'"></span>
+          </button>
         </div>
 
-        <button @click="loadShelf()" :disabled="shelfLoading"
+        <button @click="shelfTab==='rented'?loadRentedList(1,false):(shelfTab==='sublet'?loadRentedList(1,true):loadShelf())"
+          :disabled="shelfLoading || rentedLoading"
           class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs transition-all disabled:opacity-40"
           style="background:rgba(51,65,85,0.3); border:1px solid rgba(51,65,85,0.4); color:#94a3b8">
-          <svg class="w-3 h-3" :class="shelfLoading?'animate-spin':''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg class="w-3 h-3" :class="(shelfLoading||rentedLoading)?'animate-spin':''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
           </svg>
-          刷新货架
+          刷新
         </button>
 
         <div class="ml-auto text-[11px] text-slate-700">
@@ -514,8 +525,8 @@
         </div>
       </div>
 
-      <!-- Template ID sync reminder (if needed) -->
-      <div x-show="!shelfLoading && (sellShelf.total === 0 && leaseShelf.total === 0)" x-cloak
+      <!-- Template ID sync reminder (if needed, only for shelf tabs) -->
+      <div x-show="(shelfTab==='sell'||shelfTab==='lease') && !shelfLoading && (sellShelf.total === 0 && leaseShelf.total === 0)" x-cloak
         class="card p-5 mb-4 text-center">
         <p class="text-slate-500 text-sm mb-3">货架为空，或尚未同步模板ID（用于市场定价）</p>
         <button @click="syncTemplateIds()" :disabled="syncing"
@@ -526,8 +537,8 @@
         </button>
       </div>
 
-      <!-- Shelf table -->
-      <div class="card overflow-hidden">
+      <!-- Shelf table (sell / lease shelves) -->
+      <div x-show="shelfTab==='sell' || shelfTab==='lease'" class="card overflow-hidden">
         <div class="tbl-wrap">
           <table class="w-full text-xs" style="border-collapse: separate; border-spacing: 0;">
             <thead>
@@ -602,6 +613,87 @@
               </template>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- Rented-out / 白玩中 live list (rented / sublet tabs) -->
+      <div x-show="shelfTab==='rented' || shelfTab==='sublet'" class="card overflow-hidden">
+        <!-- Stats banner -->
+        <div x-show="rentedList.stats" x-cloak class="px-4 py-2 text-[11px] text-slate-500 border-b" style="border-color:rgba(51,65,85,0.3)"
+          x-text="rentedList.stats"></div>
+
+        <div class="tbl-wrap">
+          <table class="w-full text-xs" style="border-collapse: separate; border-spacing: 0;">
+            <thead>
+              <tr style="border-bottom: 1px solid rgba(51,65,85,0.3);">
+                <th class="py-3 px-4 text-left font-normal text-slate-700 uppercase tracking-wider">饰品</th>
+                <th class="py-3 px-3 text-left font-normal text-slate-700 uppercase tracking-wider">订单状态</th>
+                <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">租金</th>
+                <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">到期时间</th>
+                <th class="py-3 px-3 text-center font-normal text-slate-700 uppercase tracking-wider">续租</th>
+                <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">磨损</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-if="rentedLoading">
+                <tr><td colspan="6" class="py-16 text-center" style="color:#334155">
+                  <div class="flex flex-col items-center gap-2">
+                    <div class="w-5 h-5 rounded-full border-2 animate-spin" style="border-color:rgba(51,65,85,0.4);border-top-color:#3b82f6"></div>
+                    <span class="text-xs">加载中…</span>
+                  </div>
+                </td></tr>
+              </template>
+              <template x-if="!rentedLoading && (rentedList.items||[]).length === 0">
+                <tr><td colspan="6" class="py-16 text-center text-xs" style="color:#334155">暂无数据，请点击「刷新」</td></tr>
+              </template>
+              <template x-for="item in (rentedList.items||[])" :key="item.orderId">
+                <tr class="tbl-row">
+                  <td class="py-2.5 px-4">
+                    <div class="min-w-0">
+                      <p class="text-slate-100 font-medium leading-tight truncate" style="max-width:300px"
+                        x-text="item.hashName || item.name || '—'"></p>
+                      <p class="text-[11px] mt-0.5 truncate font-mono" style="color:#334155; max-width:300px"
+                        x-text="item.orderId"></p>
+                    </div>
+                  </td>
+                  <td class="py-2.5 px-3">
+                    <span class="px-2 py-0.5 rounded-full text-[11px]"
+                      :style="item.isSublet ? 'background:rgba(16,185,129,0.1);color:#34d399' : 'background:rgba(99,102,241,0.1);color:#818cf8'"
+                      x-text="item.isSublet ? '白玩中/0CD' : (item.orderStatusDesc || '租出中')"></span>
+                  </td>
+                  <td class="py-2.5 px-3 text-right font-semibold text-emerald-300"
+                    x-text="item.leaseAmountDesc || '—'"></td>
+                  <td class="py-2.5 px-3 text-right font-mono text-slate-400"
+                    x-text="item.leaseExpireTime ? item.leaseExpireTime.slice(0,16).replace('T',' ') : (item.leaseDaysDesc || '—')"></td>
+                  <td class="py-2.5 px-3 text-center">
+                    <span x-show="item.hasRenewal" class="px-1.5 py-0.5 rounded text-[10px]"
+                      style="background:rgba(234,179,8,0.1);color:#fbbf24">续租</span>
+                    <span x-show="!item.hasRenewal" class="text-slate-700">—</span>
+                  </td>
+                  <td class="py-2.5 px-3 text-right font-mono" style="color:#475569"
+                    x-text="item.abrade != null ? parseFloat(item.abrade).toFixed(4) : '—'"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination for rented list -->
+        <div x-show="!rentedLoading && rentedList.total > (rentedList.page_size||50)"
+          class="flex items-center justify-between px-4 py-3 border-t" style="border-color:rgba(51,65,85,0.3)">
+          <span class="text-[11px] text-slate-600">
+            共 <span class="text-slate-400 font-mono" x-text="rentedList.total"></span> 条，
+            第 <span class="text-slate-400 font-mono" x-text="rentedPage"></span> 页
+          </span>
+          <div class="flex gap-2">
+            <button @click="loadRentedList(rentedPage-1, shelfTab==='sublet')" :disabled="rentedPage<=1"
+              class="px-3 py-1 rounded-lg text-xs disabled:opacity-30"
+              style="background:rgba(51,65,85,0.3);color:#94a3b8">上一页</button>
+            <button @click="loadRentedList(rentedPage+1, shelfTab==='sublet')"
+              :disabled="rentedPage * (rentedList.page_size||50) >= rentedList.total"
+              class="px-3 py-1 rounded-lg text-xs disabled:opacity-30"
+              style="background:rgba(51,65,85,0.3);color:#94a3b8">下一页</button>
+          </div>
         </div>
       </div>
 
@@ -807,8 +899,12 @@
                 <template x-if="dualPrice">
                   <th class="py-3 px-3 text-right font-normal uppercase tracking-wider" style="color:rgba(202,138,4,0.7)">手动价</th>
                 </template>
-                <th class="py-3 px-3 text-right font-normal uppercase tracking-wider" style="color:#047857">市价</th>
-                <th class="py-3 px-3 text-right font-normal uppercase tracking-wider" style="color:#475569">盈亏</th>
+                <th class="py-3 px-3 text-right font-normal uppercase tracking-wider hover:text-slate-400 cursor-pointer select-none transition-colors" style="color:#047857" @click="setSort('current_price')">
+                  市价 <span x-text="sortIcon('current_price')"></span>
+                </th>
+                <th class="py-3 px-3 text-right font-normal uppercase tracking-wider hover:text-slate-400 cursor-pointer select-none transition-colors" style="color:#475569" @click="setSort('pnl')">
+                  盈亏 <span x-text="sortIcon('pnl')"></span>
+                </th>
                 <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider hover:text-slate-400 cursor-pointer select-none transition-colors" @click="setSort('purchase_date')">
                   购入日期 <span x-text="sortIcon('purchase_date')"></span>
                 </th>
@@ -1149,6 +1245,9 @@
         shelfLoading: false,
         sellShelf: { items: [], total: 0 },
         leaseShelf: { items: [], total: 0 },
+        rentedList: { items: [], total: 0, stats: '', page_size: 50 },
+        rentedLoading: false,
+        rentedPage: 1,
         quickList: {
           assetId: '', templateId: null, mode: 'sell',
           buyPrice: 0, takeProfitRatio: 0, useUndercut: true,
@@ -1359,6 +1458,17 @@
             if (lr.ok) this.leaseShelf = await lr.json();
           } catch {}
           finally { this.shelfLoading = false; }
+        },
+
+        async loadRentedList(page = 1, subletOnly = false) {
+          this.rentedLoading = true;
+          this.rentedPage = page;
+          try {
+            const p = new URLSearchParams({ page, page_size: 50, sublet_only: subletOnly });
+            const r = await fetch('/api/youpin/lease/live-list?' + p);
+            if (r.ok) this.rentedList = await r.json();
+          } catch {}
+          finally { this.rentedLoading = false; }
         },
 
         async syncTemplateIds() {

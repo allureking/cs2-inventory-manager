@@ -89,6 +89,62 @@ async def market_refresh_status():
     return youpin_svc.market_refresh_state
 
 
+# ── 租出订单实时列表 ─────────────────────────────────────────────────────────
+
+@router.get("/lease/live-list")
+async def lease_live_list(
+    page: int = 1,
+    page_size: int = 50,
+    sublet_only: bool = False,   # True → 只返回白玩中(orderSubStatus=1064)
+):
+    """
+    实时拉取当前租出订单列表（直接从悠悠API，不走DB）。
+    sublet_only=true 时仅返回白玩中/0CD饰品。
+    """
+    _require_token()
+    try:
+        records, total_count, stats_desc = await youpin_svc.fetch_lease_records(
+            page=page, page_size=page_size
+        )
+    except youpin_svc.TokenExpiredError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    items = []
+    for rec in records:
+        info = rec.get("commodityInfo") or {}
+        is_sublet = rec.get("orderSubStatus") == 1064
+        if sublet_only and not is_sublet:
+            continue
+        items.append({
+            "orderId": rec.get("orderId"),
+            "orderStatus": rec.get("orderStatus"),
+            "orderSubStatus": rec.get("orderSubStatus"),
+            "orderStatusDesc": rec.get("orderStatusDesc"),
+            "isSublet": is_sublet,
+            "onShelfFlag": rec.get("onShelfFlag"),
+            "leaseDaysDesc": rec.get("leaseDaysDesc"),
+            "leaseAmountDesc": rec.get("leaseAmountDesc"),
+            "leaseExpireTime": rec.get("leaseExpireTime"),
+            "hasRenewal": rec.get("hasRenewal"),
+            "commodityId": info.get("commodityId"),
+            "name": info.get("name"),
+            "hashName": info.get("commodityHashName"),
+            "abrade": info.get("abrade"),
+            "shortLeasePrice": info.get("shortLeasePrice"),
+            "longLeasePrice": info.get("longLeasePrice"),
+        })
+
+    return {
+        "items": items,
+        "total": total_count if not sublet_only else len(items),
+        "stats": stats_desc,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
 # ── 数据导入 ────────────────────────────────────────────────────────────────
 
 @router.get("/preview/buy")

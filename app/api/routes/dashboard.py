@@ -17,7 +17,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, or_, select, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal, get_db
@@ -277,13 +277,40 @@ async def get_overview(db: AsyncSession = Depends(get_db)):
         if name in price_map and price_map[name] is not None
     )
 
-    # 只有在有实际市价覆盖时才计算 P&L（避免 0 市值误导）
-    if market_value > 0 and total_cost > 0:
-        # 按覆盖比例换算总成本，使 P&L 基于同一分母
-        covered_cost_ratio = market_priced_count / active_count if active_count else 0
-        covered_cost = total_cost * covered_cost_ratio
-        pnl = market_value - covered_cost
-        pnl_pct = (pnl / covered_cost * 100) if covered_cost else None
+    # P&L：仅对同时有【购入价】AND【市价】的物品精确逐件对比
+    # 拉取活跃物品中有购入价的每一件
+    item_cost_rows = (
+        await db.execute(
+            select(
+                InventoryItem.market_hash_name,
+                func.coalesce(
+                    InventoryItem.purchase_price_manual,
+                    InventoryItem.purchase_price,
+                ).label("cost"),
+            )
+            .where(
+                InventoryItem.status.in_(_ACTIVE),
+                or_(
+                    InventoryItem.purchase_price.isnot(None),
+                    InventoryItem.purchase_price_manual.isnot(None),
+                ),
+            )
+        )
+    ).all()
+
+    pnl_market_sum = 0.0
+    pnl_cost_sum = 0.0
+    pnl_count = 0
+    for row in item_cost_rows:
+        mp = price_map.get(row[0])
+        if mp is not None and row[1] is not None:
+            pnl_market_sum += mp
+            pnl_cost_sum += float(row[1])
+            pnl_count += 1
+
+    if pnl_count > 0 and pnl_cost_sum > 0:
+        pnl = round(pnl_market_sum - pnl_cost_sum, 2)
+        pnl_pct = round((pnl_market_sum - pnl_cost_sum) / pnl_cost_sum * 100, 2)
     else:
         pnl = None
         pnl_pct = None
@@ -330,6 +357,7 @@ async def get_overview(db: AsyncSession = Depends(get_db)):
         "market_priced_count": market_priced_count,
         "pnl": round(pnl, 2) if pnl is not None else None,
         "pnl_pct": round(pnl_pct, 2) if pnl_pct is not None else None,
+        "pnl_covered_count": pnl_count,   # 同时有购入价+市价的件数
         "price_updated_at": price_updated_at,
         "price_refresh_status": price_refresh_status,
         "price_refresh_progress": price_refresh_progress,
@@ -395,11 +423,42 @@ async def list_items(
         "abrade": InventoryItem.abrade,
         "first_seen_at": InventoryItem.first_seen_at,
     }
-    col = sortable.get(sort_by, InventoryItem.first_seen_at)
-    if sort_order == "asc":
-        q = q.order_by(col.asc().nulls_last())
+
+    if sort_by in ("current_price", "pnl"):
+        # 按市价/盈亏排序：JOIN price_snapshot 子查询
+        latest_sq = (
+            select(
+                PriceSnapshot.market_hash_name,
+                func.max(PriceSnapshot.snapshot_minute).label("lm"),
+            )
+            .group_by(PriceSnapshot.market_hash_name)
+            .subquery()
+        )
+        price_sq = (
+            select(
+                PriceSnapshot.market_hash_name.label("mhn"),
+                func.min(PriceSnapshot.sell_price).label("cp"),
+            )
+            .join(
+                latest_sq,
+                and_(
+                    PriceSnapshot.market_hash_name == latest_sq.c.market_hash_name,
+                    PriceSnapshot.snapshot_minute == latest_sq.c.lm,
+                ),
+            )
+            .where(PriceSnapshot.sell_price > 0)
+            .group_by(PriceSnapshot.market_hash_name)
+            .subquery()
+        )
+        q = q.outerjoin(price_sq, InventoryItem.market_hash_name == price_sq.c.mhn)
+        sort_col = price_sq.c.cp if sort_by == "current_price" else (price_sq.c.cp - _effective)
     else:
-        q = q.order_by(col.desc().nulls_last())
+        sort_col = sortable.get(sort_by, InventoryItem.first_seen_at)
+
+    if sort_order == "asc":
+        q = q.order_by(sort_col.asc().nulls_last())
+    else:
+        q = q.order_by(sort_col.desc().nulls_last())
 
     q = q.offset((page - 1) * page_size).limit(page_size)
     rows = (await db.execute(q)).scalars().all()
