@@ -310,12 +310,26 @@ async def delist_item(commodity_id: int) -> dict:
         resp = await client.put(
             f"{YOUPIN_API}/api/commodity/Commodity/OffShelf",
             headers=_headers(),
-            json={"CommodityId": commodity_id},
+            json={"Ids": [commodity_id]},   # API 需要 list 格式
         )
     resp.raise_for_status()
     body = resp.json()
     _check(body, "delist_item")
     return {"ok": True, "commodity_id": commodity_id}
+
+
+async def cancel_sublet(order_id: str) -> dict:
+    """取消0CD转租（将白玩中订单改回普通租出）"""
+    async with httpx.AsyncClient(timeout=12) as client:
+        resp = await client.post(
+            f"{YOUPIN_API}/api/youpin/bff/trade/v1/order/lease/sublet/close",
+            headers=_headers(),
+            json={"orderId": order_id},
+        )
+    resp.raise_for_status()
+    body = resp.json()
+    _check(body, "cancel_sublet")
+    return {"ok": True, "order_id": order_id}
 
 
 # ══════════════════════════════════════════════════════════════
@@ -389,6 +403,70 @@ async def get_lease_shelf(page: int = 1, page_size: int = 50) -> dict:
         total = stats.get("quantity") or data.get("totalCount") or len(raw)
         return {"items": [_normalize_shelf_item(i) for i in raw], "total": total, "stats": stats}
     return {"items": [], "total": 0, "stats": {}}
+
+
+# ══════════════════════════════════════════════════════════════
+#  待上架（完整库存 - 已在货架）
+# ══════════════════════════════════════════════════════════════
+
+async def get_unlisted_items(page: int = 1, page_size: int = 50) -> dict:
+    """
+    获取可上架但尚未上架的饰品。
+    逻辑：GetUserInventoryDataListV3（Steam 库存）- 出售货架 - 出租货架。
+    """
+    from app.services.youpin import fetch_full_inventory  # 避免循环引用
+
+    # 1. 拉取完整 Steam 库存（通常 ≤500 件，一页搞定）
+    all_items, total_inv = await fetch_full_inventory(page=1, page_size=500)
+    if total_inv > 500:
+        for p in range(2, (total_inv + 499) // 500 + 1):
+            batch, _ = await fetch_full_inventory(page=p, page_size=500)
+            if not batch:
+                break
+            all_items.extend(batch)
+
+    # 2. 获取当前货架上的 steamAssetId 集合
+    sell = await get_sell_shelf(page_size=200)
+    lease = await get_lease_shelf(page_size=200)
+    listed_ids: set = set()
+    for item in sell.get("items", []):
+        aid = item.get("steamAssetId")
+        if aid:
+            listed_ids.add(str(aid))
+    for item in lease.get("items", []):
+        aid = item.get("steamAssetId")
+        if aid:
+            listed_ids.add(str(aid))
+
+    # 3. 过滤：未在货架的库存饰品
+    unlisted = []
+    for item in all_items:
+        asset_id = str(item.get("AssetId") or item.get("assetId") or "")
+        if not asset_id or asset_id in listed_ids:
+            continue
+        ti = item.get("TemplateInfo") or {}
+        unlisted.append({
+            "assetId": asset_id,
+            "name": item.get("Name") or item.get("name"),
+            "commodityHashName": (item.get("CommodityHashName") or
+                                  item.get("commodityHashName")),
+            "abrade": item.get("Abrade") if item.get("Abrade") is not None
+                      else item.get("abrade"),
+            "templateId": ti.get("Id"),
+            "imgUrl": (ti.get("IconUrl") or item.get("SteamPic") or
+                       item.get("steamPic")),
+        })
+
+    total = len(unlisted)
+    start = (page - 1) * page_size
+    return {
+        "items": unlisted[start: start + page_size],
+        "total": total,
+        "total_inventory": len(all_items),
+        "total_listed": len(listed_ids),
+        "page": page,
+        "page_size": page_size,
+    }
 
 
 # ══════════════════════════════════════════════════════════════

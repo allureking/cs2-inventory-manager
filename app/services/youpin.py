@@ -211,6 +211,29 @@ async def check_token_status() -> dict:
 
 # ── 原始数据拉取 ────────────────────────────────────────────────────────────
 
+async def fetch_sublet_records(page: int = 1, page_size: int = 50) -> tuple:
+    """获取白玩中/转租中订单（尝试服务端 orderSubStatus=1064 过滤）"""
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            f"{YOUPIN_API}/api/youpin/bff/trade/v1/order/lease/out/list",
+            headers=_headers(),
+            json={
+                "pageIndex": page,
+                "pageSize": page_size,
+                "gameId": 730,
+                "orderSubStatus": 1064,   # 白玩中
+            },
+        )
+    resp.raise_for_status()
+    body = resp.json()
+    _check(body, "sublet_records")
+    data = _data(body)
+    records = data.get("orderDataList", []) if isinstance(data, dict) else []
+    total_count = data.get("totalCount", 0) if isinstance(data, dict) else 0
+    stats_desc = data.get("statisticsDataDesc", "") if isinstance(data, dict) else ""
+    return records, total_count, stats_desc
+
+
 async def fetch_lease_records(page: int = 1, page_size: int = 30) -> tuple:
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(

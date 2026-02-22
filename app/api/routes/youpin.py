@@ -32,6 +32,28 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.services import youpin as youpin_svc
 
+# 转租中记录格式化（复用）
+def _fmt_lease_record(rec: dict) -> dict:
+    info = rec.get("commodityInfo") or {}
+    return {
+        "orderId":         rec.get("orderId"),
+        "orderStatus":     rec.get("orderStatus"),
+        "orderSubStatus":  rec.get("orderSubStatus"),
+        "orderStatusDesc": rec.get("orderStatusDesc"),
+        "isSublet":        rec.get("orderSubStatus") == 1064,
+        "onShelfFlag":     rec.get("onShelfFlag"),
+        "leaseDaysDesc":   rec.get("leaseDaysDesc"),
+        "leaseAmountDesc": rec.get("leaseAmountDesc"),
+        "leaseExpireTime": rec.get("leaseExpireTime"),
+        "hasRenewal":      rec.get("hasRenewal"),
+        "commodityId":     info.get("commodityId"),
+        "name":            info.get("name"),
+        "hashName":        info.get("commodityHashName"),
+        "abrade":          info.get("abrade"),
+        "shortLeasePrice": info.get("shortLeasePrice"),
+        "longLeasePrice":  info.get("longLeasePrice"),
+    }
+
 router = APIRouter()
 
 
@@ -95,12 +117,8 @@ async def market_refresh_status():
 async def lease_live_list(
     page: int = 1,
     page_size: int = 50,
-    sublet_only: bool = False,   # True → 只返回白玩中(orderSubStatus=1064)
 ):
-    """
-    实时拉取当前租出订单列表（直接从悠悠API，不走DB）。
-    sublet_only=true 时仅返回白玩中/0CD饰品。
-    """
+    """实时拉取当前租出订单列表（直接从悠悠API，不走DB）"""
     _require_token()
     try:
         records, total_count, stats_desc = await youpin_svc.fetch_lease_records(
@@ -111,34 +129,37 @@ async def lease_live_list(
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
 
-    items = []
-    for rec in records:
-        info = rec.get("commodityInfo") or {}
-        is_sublet = rec.get("orderSubStatus") == 1064
-        if sublet_only and not is_sublet:
-            continue
-        items.append({
-            "orderId": rec.get("orderId"),
-            "orderStatus": rec.get("orderStatus"),
-            "orderSubStatus": rec.get("orderSubStatus"),
-            "orderStatusDesc": rec.get("orderStatusDesc"),
-            "isSublet": is_sublet,
-            "onShelfFlag": rec.get("onShelfFlag"),
-            "leaseDaysDesc": rec.get("leaseDaysDesc"),
-            "leaseAmountDesc": rec.get("leaseAmountDesc"),
-            "leaseExpireTime": rec.get("leaseExpireTime"),
-            "hasRenewal": rec.get("hasRenewal"),
-            "commodityId": info.get("commodityId"),
-            "name": info.get("name"),
-            "hashName": info.get("commodityHashName"),
-            "abrade": info.get("abrade"),
-            "shortLeasePrice": info.get("shortLeasePrice"),
-            "longLeasePrice": info.get("longLeasePrice"),
-        })
+    return {
+        "items": [_fmt_lease_record(r) for r in records],
+        "total": total_count,
+        "stats": stats_desc,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+@router.get("/lease/sublet-list")
+async def lease_sublet_list(
+    page: int = 1,
+    page_size: int = 50,
+):
+    """
+    实时拉取转租中（白玩中/0CD）订单列表。
+    使用服务端 orderSubStatus=1064 过滤，直接返回准确的转租件数。
+    """
+    _require_token()
+    try:
+        records, total_count, stats_desc = await youpin_svc.fetch_sublet_records(
+            page=page, page_size=page_size
+        )
+    except youpin_svc.TokenExpiredError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
     return {
-        "items": items,
-        "total": total_count if not sublet_only else len(items),
+        "items": [_fmt_lease_record(r) for r in records],
+        "total": total_count,
         "stats": stats_desc,
         "page": page,
         "page_size": page_size,

@@ -23,12 +23,14 @@ from app.services.youpin import TokenExpiredError
 from app.services.youpin_listing import (
     calc_lease_price,
     calc_sell_price,
+    cancel_sublet,
     change_price,
     delist_item,
     fetch_market_lease_price,
     fetch_market_sell_price,
     get_lease_shelf,
     get_sell_shelf,
+    get_unlisted_items,
     list_for_both,
     list_for_lease,
     list_for_sell,
@@ -66,6 +68,31 @@ async def get_lease_shelf_api(
     """获取当前悠悠出租货架列表"""
     try:
         return await get_lease_shelf(page=page, page_size=page_size)
+    except Exception as e:
+        _handle_token_error(e)
+
+
+@router.get("/shelf/unlisted")
+async def get_unlisted_api(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+):
+    """获取完整库存中尚未上架的饰品（可快速上架）"""
+    try:
+        return await get_unlisted_items(page=page, page_size=page_size)
+    except Exception as e:
+        _handle_token_error(e)
+
+
+class CancelSubletRequest(BaseModel):
+    order_id: str
+
+
+@router.post("/cancel-sublet")
+async def cancel_sublet_api(body: CancelSubletRequest):
+    """取消0CD转租（将白玩中订单改回普通租出状态）"""
+    try:
+        return await cancel_sublet(body.order_id)
     except Exception as e:
         _handle_token_error(e)
 
