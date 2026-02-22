@@ -190,15 +190,21 @@ def _headers(pc_market: bool = False) -> dict:
 
 # ── 响应统一校验 ────────────────────────────────────────────────────────────
 
+_EMPTY_LIST_CODES = {9004001}  # "暂无商品" 等空列表状态码，视为正常
+
+
 def _check(body: dict, source: str = "API") -> None:
     """
     统一校验悠悠 API 响应 code 字段。
-    - code=84101 → TokenExpiredError（需要重新登录）
-    - code≠0     → RuntimeError
+    - code=84101  → TokenExpiredError（需要重新登录）
+    - code=9004001 → 空列表，视为正常
+    - code≠0      → RuntimeError
     """
     code = body.get("Code", body.get("code"))
     if code == 84101:
         raise TokenExpiredError("悠悠有品 Token 已过期（code=84101），请重新获取 Token")
+    if code in _EMPTY_LIST_CODES:
+        return  # 空列表是正常状态
     if code not in (0, None):
         msg = body.get("Msg", body.get("msg", "未知错误"))
         raise RuntimeError(f"{source} 错误 [{code}]: {msg}")
