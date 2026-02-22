@@ -636,7 +636,7 @@ async def spread_radar(
             ) lt ON ps.market_hash_name = lt.market_hash_name
                 AND ps.platform = lt.platform
                 AND ps.snapshot_minute = lt.latest
-            WHERE ps.sell_price IS NOT NULL AND ps.sell_price > 0
+            WHERE ps.sell_price IS NOT NULL AND ps.sell_price > 0 AND ps.platform != 'STEAM'
         ),
         spreads AS (
             SELECT market_hash_name,
@@ -674,7 +674,7 @@ async def spread_radar(
                 WHERE market_hash_name = :name
                 GROUP BY platform
             ) lt ON ps.platform = lt.platform AND ps.snapshot_minute = lt.latest
-            WHERE ps.market_hash_name = :name AND ps.sell_price > 0
+            WHERE ps.market_hash_name = :name AND ps.sell_price > 0 AND ps.platform != 'STEAM'
         """), {"name": name})
         platforms = [
             {"platform": p[0], "sell_price": p[1], "sell_count": p[2]}
@@ -698,7 +698,7 @@ async def spread_radar(
                 SELECT market_hash_name m, platform p, MAX(snapshot_minute) AS latest
                 FROM price_snapshot GROUP BY market_hash_name, platform
             ) lt ON ps.market_hash_name = lt.m AND ps.platform = lt.p AND ps.snapshot_minute = lt.latest
-            WHERE ps.sell_price > 0
+            WHERE ps.sell_price > 0 AND ps.platform != 'STEAM'
             GROUP BY ps.market_hash_name
             HAVING COUNT(*) >= 2
                AND (MAX(ps.sell_price) - MIN(ps.sell_price)) * 100.0 / MIN(ps.sell_price) >= :min_spread

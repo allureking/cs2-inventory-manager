@@ -1140,7 +1140,7 @@
 
       <!-- Sub-tabs -->
       <div class="flex gap-1 mb-4">
-        <template x-for="t in [{k:'overview',l:'市场总览'},{k:'detail',l:'个股分析'},{k:'alerts',l:'预警中心'},{k:'spreads',l:'套利雷达'}]">
+        <template x-for="t in [{k:'overview',l:'市场总览'},{k:'detail',l:'饰品分析'},{k:'alerts',l:'预警中心'},{k:'spreads',l:'套利雷达'}]">
           <button @click="analysisTab=t.k; loadAnalysisSubTab(t.k)"
             class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
             :class="analysisTab===t.k ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'"
@@ -1172,19 +1172,37 @@
           </div>
         </div>
 
-        <!-- Sell Score Distribution -->
+        <!-- Sell Score Distribution (clickable bars) -->
         <div class="card p-4 mb-5">
-          <p class="text-[11px] text-slate-500 mb-3 font-medium">卖出评分分布（持仓饰品）</p>
+          <p class="text-[11px] text-slate-500 mb-3 font-medium">卖出评分分布（持仓饰品） <span class="text-slate-700">— 点击柱状查看详情</span></p>
           <div class="flex items-end gap-1.5 h-20">
             <template x-for="(v,i) in (ao.score_distribution||[0,0,0,0,0])">
-              <div class="flex-1 flex flex-col items-center gap-1">
+              <div class="flex-1 flex flex-col items-center gap-1 cursor-pointer"
+                @click="openScoreBucket(i)">
                 <span class="text-[10px] font-mono text-slate-400" x-text="v"></span>
-                <div class="w-full rounded-t transition-all duration-500"
+                <div class="w-full rounded-t transition-all duration-500 hover:opacity-80"
                   :style="'height:'+Math.max(4, v/Math.max(1,...(ao.score_distribution||[1]))*60)+'px'"
                   :class="['bg-emerald-500/60','bg-slate-500/60','bg-yellow-500/60','bg-orange-500/60','bg-red-500/60'][i]"></div>
                 <span class="text-[9px] text-slate-600" x-text="['持有','中性','考虑卖','强卖','急卖'][i]"></span>
               </div>
             </template>
+          </div>
+          <!-- Expanded bucket list -->
+          <div x-show="scoreBucket.show" x-cloak class="mt-3 border-t pt-3" style="border-color:rgba(51,65,85,0.3)">
+            <div class="flex items-center justify-between mb-2">
+              <p class="text-[11px] text-slate-400" x-text="scoreBucket.label+' (评分 '+scoreBucket.min+'~'+scoreBucket.max+')'"></p>
+              <button @click="scoreBucket.show=false" class="text-[10px] text-slate-600 hover:text-slate-400">收起</button>
+            </div>
+            <div class="space-y-1 max-h-48 overflow-y-auto">
+              <template x-for="s in scoreBucket.items">
+                <div class="flex items-center justify-between px-2 py-1.5 rounded hover:bg-slate-800/30 cursor-pointer"
+                  @click="analysisTab='detail'; analysisSelectedItem=s.market_hash_name; loadItemSignals(s.market_hash_name)">
+                  <span class="text-xs truncate max-w-[250px]" :class="rarityClass(s.market_hash_name)" x-text="s.market_hash_name"></span>
+                  <span class="text-xs font-mono ml-2 flex-shrink-0" :class="scoreColor(s.sell_score)" x-text="s.sell_score"></span>
+                </div>
+              </template>
+              <div x-show="!scoreBucket.items?.length" class="text-[10px] text-slate-700 text-center py-2">暂无数据</div>
+            </div>
           </div>
         </div>
 
@@ -1308,30 +1326,42 @@
 
             <!-- Signal Gauges (2x3) -->
             <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
-              <div class="card p-3 text-center">
-                <p class="text-[10px] text-slate-600 mb-1">RSI(14)</p>
+              <div class="card p-3 text-center relative">
+                <p class="text-[10px] text-slate-600 mb-1">RSI(14)
+                  <span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 cursor-help ml-0.5"
+                    title="相对强弱指标 (14日)。计算近14日涨跌幅比例。>70超买(可能回调)，<30超卖(可能反弹)，50中性。">i</span></p>
                 <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.rsi_14||0)>70?'text-red-400':(itemSignals.signal?.rsi_14||0)<30?'text-emerald-400':'text-slate-300'" x-text="itemSignals.signal?.rsi_14??'—'"></p>
                 <p class="text-[9px] mt-0.5" :class="(itemSignals.signal?.rsi_14||0)>70?'text-red-500':'text-slate-600'" x-text="(itemSignals.signal?.rsi_14||0)>70?'超买':(itemSignals.signal?.rsi_14||0)<30?'超卖':'中性'"></p>
               </div>
               <div class="card p-3 text-center">
-                <p class="text-[10px] text-slate-600 mb-1">Bollinger %B</p>
+                <p class="text-[10px] text-slate-600 mb-1">Bollinger %B
+                  <span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 cursor-help ml-0.5"
+                    title="布林带位置。基于20日均线±2倍标准差。>1突破上轨(强势/超涨)，<0跌破下轨(超跌)，0.5居中。">i</span></p>
                 <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.bb_position||0)>1?'text-red-400':(itemSignals.signal?.bb_position||0)<0?'text-emerald-400':'text-slate-300'" x-text="itemSignals.signal?.bb_position??'—'"></p>
                 <p class="text-[9px] mt-0.5 text-slate-600" x-text="(itemSignals.signal?.bb_position||0)>1?'突破上轨':(itemSignals.signal?.bb_position||0)<0?'低于下轨':'带内'"></p>
               </div>
               <div class="card p-3 text-center">
-                <p class="text-[10px] text-slate-600 mb-1">7D 动量</p>
+                <p class="text-[10px] text-slate-600 mb-1">7D 动量
+                  <span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 cursor-help ml-0.5"
+                    title="7天价格变化率。(今价-7天前价)/7天前价×100%。正值=上涨趋势，负值=下跌趋势。">i</span></p>
                 <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.momentum_7||0)>0?'text-emerald-400':'text-red-400'" x-text="itemSignals.signal?.momentum_7!==null?(itemSignals.signal.momentum_7>0?'+':'')+itemSignals.signal.momentum_7+'%':'—'"></p>
               </div>
               <div class="card p-3 text-center">
-                <p class="text-[10px] text-slate-600 mb-1">30D 动量</p>
+                <p class="text-[10px] text-slate-600 mb-1">30D 动量
+                  <span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 cursor-help ml-0.5"
+                    title="30天价格变化率。反映中期趋势方向和力度。>10%强势上涨，<-10%显著下跌。">i</span></p>
                 <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.momentum_30||0)>0?'text-emerald-400':'text-red-400'" x-text="itemSignals.signal?.momentum_30!==null?(itemSignals.signal.momentum_30>0?'+':'')+itemSignals.signal.momentum_30+'%':'—'"></p>
               </div>
               <div class="card p-3 text-center">
-                <p class="text-[10px] text-slate-600 mb-1">波动率</p>
+                <p class="text-[10px] text-slate-600 mb-1">波动率
+                  <span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 cursor-help ml-0.5"
+                    title="30日年化波动率。基于每日收益率的标准差×√365。高波动=价格不稳定/交易机会大，低波动=稳定/低风险。">i</span></p>
                 <p class="text-xl font-bold font-mono text-slate-300" x-text="itemSignals.signal?.volatility_30?itemSignals.signal.volatility_30+'%':'—'"></p>
               </div>
               <div class="card p-3 text-center">
-                <p class="text-[10px] text-slate-600 mb-1">ATH 距离</p>
+                <p class="text-[10px] text-slate-600 mb-1">ATH 距离
+                  <span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 cursor-help ml-0.5"
+                    title="当前价格占历史最高价的百分比。>90%接近峰值(考虑出售)，<50%远离高点(可能低估)。">i</span></p>
                 <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.ath_pct||0)>90?'text-yellow-300':'text-slate-300'" x-text="itemSignals.signal?.ath_pct?itemSignals.signal.ath_pct+'%':'—'"></p>
                 <p class="text-[9px] mt-0.5 text-slate-600" x-text="itemSignals.signal?.ath_price?'ATH ¥'+itemSignals.signal.ath_price:''"></p>
               </div>
@@ -1347,8 +1377,9 @@
                     <p class="text-xs mt-1" :class="scoreColor(itemSignals.signal?.sell_score)" x-text="scoreLabel(itemSignals.signal?.sell_score)"></p>
                   </div>
                   <div class="text-right">
-                    <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-1">买入机会评分</p>
+                    <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-1">买入机会评分 <span class="text-[8px] px-1 py-0.5 rounded bg-cyan-900/30 text-cyan-500 normal-case tracking-normal">β测试</span></p>
                     <p class="text-xl font-bold font-mono text-cyan-400" x-text="itemSignals.signal?.opportunity_score??'—'"></p>
+                    <p class="text-[9px] text-slate-700 mt-0.5">仅基于持仓数据，全市场分析待完善</p>
                   </div>
                 </div>
               </div>
@@ -1391,8 +1422,23 @@
             </div>
           </div>
         </template>
-        <div x-show="!itemSignals" class="card p-8 text-center text-slate-600 text-sm">
-          在上方搜索框中输入饰品名称，查看量化分析详情
+        <div x-show="!itemSignals">
+          <p class="text-xs text-slate-600 mb-3">在上方搜索框输入饰品名称查看分析，或点击以下推荐饰品：</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3" x-show="analysisTopItems.length">
+            <template x-for="t in analysisTopItems">
+              <div class="card p-3 cursor-pointer hover:ring-1 hover:ring-slate-600 transition-all"
+                @click="analysisSelectedItem=t.market_hash_name; analysisSearch=t.market_hash_name; loadItemSignals(t.market_hash_name)">
+                <p class="text-xs font-medium truncate" :class="rarityClass(t.market_hash_name)" x-text="t.market_hash_name"></p>
+                <div class="flex items-center gap-3 mt-2 text-[10px]">
+                  <span class="font-mono" :class="scoreColor(t.sell_score)">评分 <span x-text="t.sell_score??'—'"></span></span>
+                  <span class="text-slate-500" x-text="t.rsi_14?'RSI '+t.rsi_14:'RSI —'"></span>
+                  <span class="font-mono" :class="(t.momentum_30||0)>0?'text-emerald-400':'text-red-400'"
+                    x-text="t.momentum_30!=null?((t.momentum_30>0?'+':'')+t.momentum_30+'%'):'—'"></span>
+                </div>
+              </div>
+            </template>
+          </div>
+          <div x-show="!analysisTopItems.length" class="card p-8 text-center text-slate-700 text-xs">暂无推荐数据，请先触发信号计算</div>
         </div>
       </div>
 
@@ -2006,12 +2052,14 @@
         analysisSpreads: { items: [], total: 0 },
         analysisSearch: '',
         analysisSearchResults: [],
+        analysisTopItems: [],
         analysisSelectedItem: null,
         unreadAlertCount: 0,
         alertFilter: { severity: '', type: '', unreadOnly: false },
         alertPage: 1,
         minSpread: 5,
         chartDays: 90,
+        scoreBucket: { show: false, label: '', min: 0, max: 0, items: [] },
         backfillRunning: false,
         backfillProgress: '',
         computingSignals: false,
@@ -2730,8 +2778,28 @@
 
         loadAnalysisSubTab(tab) {
           if (tab === 'overview') this.loadAnalysis();
+          else if (tab === 'detail') this.loadTopItems();
           else if (tab === 'alerts') this.loadAlerts(1);
           else if (tab === 'spreads') this.loadSpreads(1);
+        },
+
+        async loadTopItems() {
+          if (this.analysisTopItems.length) return;
+          try {
+            const r = await fetch('/api/analysis/rankings?sort_by=sell_score&sort_order=desc&page_size=6');
+            if (r.ok) { const d = await r.json(); this.analysisTopItems = d.items || []; }
+          } catch {}
+        },
+
+        async openScoreBucket(i) {
+          const ranges = [[0,30],[30,50],[50,70],[70,85],[85,100]];
+          const labels = ['持有','中性','考虑卖','强卖','急卖'];
+          const [min, max] = ranges[i];
+          this.scoreBucket = { show: true, label: labels[i], min, max, items: [] };
+          try {
+            const r = await fetch(`/api/analysis/rankings?sort_by=sell_score&sort_order=desc&min_score=${min}&max_score=${max}&page_size=50`);
+            if (r.ok) { const d = await r.json(); this.scoreBucket.items = d.items || []; }
+          } catch {}
         },
 
         async loadAlerts(page) {
