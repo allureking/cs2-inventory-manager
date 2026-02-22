@@ -744,7 +744,7 @@ async def import_stock_records(db: AsyncSession) -> dict:
 
     await db.commit()
 
-    # ── 对账：保护期已过的物品（class_id 改为 STEAM_RETURNED，仍计入 in_steam）──
+    # ── 对账：保护期已过的物品（状态改为 unknown，下次 stock sync 再确认）──
     reconciled_stock = 0
     if upserted:
         seen_instance_ids = [rec["asset_id"] for rec in upserted]
@@ -754,7 +754,7 @@ async def import_stock_records(db: AsyncSession) -> dict:
                 InventoryItem.class_id == "STEAM_PROTECTED",
                 InventoryItem.instance_id.notin_(seen_instance_ids),
             )
-            .values(class_id="STEAM_RETURNED")
+            .values(status="unknown")
         )
         reconciled_stock = r.rowcount
         await db.commit()
@@ -794,9 +794,10 @@ async def import_lease_records(db: AsyncSession) -> dict:
     steam_id = cfg.steam_steam_id or "unknown"
     upserted, skipped = [], []
 
-    # ── 对账第一步：把旧的租出物品临时重置为 in_steam ──────────────────────────
+    # ── 对账第一步：把旧的租出物品临时重置为 unknown ─────────────────────────
     # 导入后，本次租出的物品会重新标回 rented_out；
-    # 没出现在本次导入中的（租约已到期/归还）就自然停留在 in_steam。
+    # 没出现在本次导入中的（租约已到期/归还）留在 unknown，
+    # 等下次 import_stock 确认它们回到保护期后再变回 in_steam。
     prev_rented_count_r = await db.execute(
         select(func.count()).where(
             InventoryItem.status == "rented_out",
@@ -811,7 +812,7 @@ async def import_lease_records(db: AsyncSession) -> dict:
             InventoryItem.status == "rented_out",
             InventoryItem.class_id == "YOUPIN",
         )
-        .values(status="in_steam")
+        .values(status="unknown")
     )
     # flush 使后续 select 看到最新状态（不提交，保留事务）
     await db.flush()

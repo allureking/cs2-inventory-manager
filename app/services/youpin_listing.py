@@ -335,11 +335,12 @@ async def get_sell_shelf(page: int = 1, page_size: int = 50) -> dict:
     _check(body, "sell_shelf")
     data = _data(body)
     if isinstance(data, dict):
-        return {
-            "items": data.get("commodityList", data.get("list", [])),
-            "total": data.get("totalCount", 0),
-        }
-    return {"items": [], "total": 0}
+        items = (data.get("commodityInfoList") or data.get("commodityList") or
+                 data.get("list") or [])
+        stats = data.get("statisticalData") or {}
+        total = stats.get("quantity") or data.get("totalCount") or len(items)
+        return {"items": items, "total": total, "stats": stats}
+    return {"items": [], "total": 0, "stats": {}}
 
 
 async def get_lease_shelf(page: int = 1, page_size: int = 50) -> dict:
@@ -355,11 +356,12 @@ async def get_lease_shelf(page: int = 1, page_size: int = 50) -> dict:
     _check(body, "lease_shelf")
     data = _data(body)
     if isinstance(data, dict):
-        return {
-            "items": data.get("commodityList", data.get("list", [])),
-            "total": data.get("totalCount", 0),
-        }
-    return {"items": [], "total": 0}
+        items = (data.get("commodityInfoList") or data.get("commodityList") or
+                 data.get("list") or [])
+        stats = data.get("statisticalData") or {}
+        total = stats.get("quantity") or data.get("totalCount") or len(items)
+        return {"items": items, "total": total, "stats": stats}
+    return {"items": [], "total": 0, "stats": {}}
 
 
 # ══════════════════════════════════════════════════════════════
