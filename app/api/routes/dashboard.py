@@ -505,8 +505,8 @@ async def list_items(
         "first_seen_at": InventoryItem.first_seen_at,
     }
 
-    if sort_by in ("current_price", "pnl"):
-        # 按市价/盈亏排序：JOIN price_snapshot 子查询
+    if sort_by in ("current_price", "pnl", "pnl_pct"):
+        # 按市价/盈亏/盈亏%排序：JOIN price_snapshot 子查询
         latest_sq = (
             select(
                 PriceSnapshot.market_hash_name,
@@ -532,7 +532,16 @@ async def list_items(
             .subquery()
         )
         q = q.outerjoin(price_sq, InventoryItem.market_hash_name == price_sq.c.mhn)
-        sort_col = price_sq.c.cp if sort_by == "current_price" else (price_sq.c.cp - _effective)
+        if sort_by == "current_price":
+            sort_col = price_sq.c.cp
+        elif sort_by == "pnl_pct":
+            # PnL% = (price - cost) / cost, use case to avoid div-by-zero
+            sort_col = case(
+                (_effective > 0, (price_sq.c.cp - _effective) / _effective),
+                else_=None,
+            )
+        else:
+            sort_col = price_sq.c.cp - _effective
     else:
         sort_col = sortable.get(sort_by, InventoryItem.first_seen_at)
 

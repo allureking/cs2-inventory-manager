@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CS2 Inventory Manager</title>
+  <title>CS2 Arsenal — 饰品管家</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
@@ -11,6 +11,7 @@
   <style>
     /* ── Base ────────────────────────────────────────────────────────── */
     html { color-scheme: dark; scroll-behavior: smooth; }
+    html.light { color-scheme: light; }
     [x-cloak] { display: none !important; }
     * { box-sizing: border-box; }
 
@@ -23,6 +24,25 @@
         radial-gradient(ellipse 30% 25% at 50% 50%, rgba(16,185,129,0.02) 0%, transparent 70%);
       min-height: 100vh;
     }
+    /* ── Light theme override ───────────────────────────────────────── */
+    html.light body {
+      background: #f1f5f9;
+      background-image: none;
+      color: #1e293b;
+    }
+    html.light .card {
+      background: rgba(255,255,255,0.85) !important;
+      border-color: rgba(203,213,225,0.6) !important;
+    }
+    html.light input, html.light select, html.light textarea {
+      background: rgba(255,255,255,0.9) !important;
+      color: #1e293b !important;
+      border-color: rgba(203,213,225,0.8) !important;
+    }
+    html.light input::placeholder { color: #94a3b8 !important; }
+    html.light select option { background: #fff; color: #1e293b; }
+    html.light .tbl-row:hover { background: rgba(241,245,249,0.7) !important; }
+    html.light .tbl-row { border-color: rgba(226,232,240,0.6) !important; }
 
     /* ── Scrollbar ───────────────────────────────────────────────────── */
     ::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -179,11 +199,11 @@
 
       <!-- Logo -->
       <div class="flex items-center gap-2.5 mr-3 flex-shrink-0">
-        <div class="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black text-slate-900"
-          style="background: linear-gradient(135deg,#f59e0b,#ea580c); box-shadow: 0 0 18px rgba(245,158,11,0.35);">CS</div>
+        <img src="https://cdn.cloudflare.steamstatic.com/apps/csgo/images/csgo_react/global/logo_cs_sm.svg"
+          alt="CS2" class="h-7 w-auto opacity-90" onerror="this.style.display='none'" />
         <div class="hidden sm:block">
-          <p class="text-sm font-bold text-white leading-tight tracking-tight">CS2 Inventory</p>
-          <p class="text-[10px] text-slate-600 leading-tight">Portfolio Manager</p>
+          <p class="text-sm font-bold text-white leading-tight tracking-tight" x-text="nameLang==='cn'?'CS2 饰品管家':'CS2 Arsenal'"></p>
+          <p class="text-[10px] text-slate-600 leading-tight" x-text="nameLang==='cn'?'量化交易 · 智能管理':'Quantitative Trading · Smart Management'"></p>
         </div>
       </div>
 
@@ -216,6 +236,17 @@
 
       <!-- Right side -->
       <div class="ml-auto flex items-center gap-3">
+        <!-- Global toggles -->
+        <div class="flex items-center gap-1.5">
+          <button @click="nameLang = nameLang==='cn' ? 'en' : 'cn'"
+            class="px-2 py-1 rounded-lg text-[10px] transition-all"
+            :style="nameLang==='en' ? 'background:rgba(59,130,246,0.12);color:#60a5fa' : 'background:rgba(51,65,85,0.2);color:#64748b'"
+            x-text="nameLang==='cn' ? '中' : 'EN'"></button>
+          <button @click="toggleTheme()"
+            class="px-2 py-1 rounded-lg text-[10px] transition-all"
+            :style="theme==='light' ? 'background:rgba(251,191,36,0.15);color:#fbbf24' : 'background:rgba(51,65,85,0.2);color:#64748b'"
+            x-text="theme==='light' ? '☀' : '🌙'"></button>
+        </div>
         <!-- Import status -->
         <div x-show="importing" x-cloak class="flex items-center gap-2 text-xs text-slate-500">
           <span class="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse inline-block"></span>
@@ -271,16 +302,7 @@
           <span x-text="colorMode==='cn' ? '🟢跌' : '🔴跌'"></span>
         </button>
 
-        <!-- 会员等级选择 -->
-        <div class="flex items-center gap-1.5" title="出租大会员等级，影响最长出租天数（V3=90天）">
-          <span class="text-[10px] text-slate-700">会员</span>
-          <select x-model.number="memberLevel"
-            class="py-1 pl-2 rounded-lg text-xs border" style="width:52px; background:rgba(8,15,30,0.85)!important">
-            <option value="1">V1</option>
-            <option value="2">V2</option>
-            <option value="3">V3</option>
-          </select>
-        </div>
+        <!-- 会员等级: 默认V3, 已移到内部配置 -->
 
         <!-- Import button -->
         <button @click="triggerImport()" :disabled="importing"
@@ -1712,8 +1734,9 @@
                 <th class="py-3 px-3 text-right font-normal uppercase tracking-wider hover:text-slate-400 cursor-pointer select-none transition-colors" style="color:#047857" @click="setSort('current_price')">
                   市价 <span x-text="sortIcon('current_price')"></span>
                 </th>
-                <th class="py-3 px-3 text-right font-normal uppercase tracking-wider hover:text-slate-400 cursor-pointer select-none transition-colors" style="color:#475569" @click="setSort('pnl')">
-                  盈亏 <span x-text="sortIcon('pnl')"></span>
+                <th class="py-3 px-3 text-right font-normal uppercase tracking-wider hover:text-slate-400 cursor-pointer select-none transition-colors" style="color:#475569"
+                  @click="setSort(sortBy==='pnl'?'pnl_pct':'pnl')">
+                  盈亏<span class="text-[9px] ml-0.5" x-text="sortBy==='pnl_pct'?'%':''"></span> <span x-text="sortBy==='pnl'?sortIcon('pnl'):(sortBy==='pnl_pct'?sortIcon('pnl_pct'):'↕')"></span>
                 </th>
                 <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider hover:text-slate-400 cursor-pointer select-none transition-colors" @click="setSort('purchase_date')">
                   购入日期 <span x-text="sortIcon('purchase_date')"></span>
@@ -2036,6 +2059,7 @@
 
         // 名称语言模式: 'cn'=中文优先 / 'en'=英文优先
         nameLang: localStorage.getItem('nameLang') || 'cn',
+        theme: localStorage.getItem('theme') || 'dark',
 
         // 批量智能改价状态
         batchRepricing: false,
@@ -2141,6 +2165,8 @@
           // 持久化用户偏好到 localStorage
           this.$watch('nameLang', v => localStorage.setItem('nameLang', v));
           this.$watch('memberLevel', v => localStorage.setItem('memberLevel', v));
+          // Apply saved theme
+          if (this.theme === 'light') document.documentElement.classList.add('light');
           // 初始获取未读预警数（用于 tab badge）
           try {
             const ar = await fetch('/api/analysis/alerts?page_size=1&unread_only=true');
@@ -2946,6 +2972,12 @@
             this.showToast('价格采集已触发，后台运行中（约8分钟）', 'success');
             // The scheduler's collect_prices will handle it; alternatively we could add a manual endpoint
           } catch {}
+        },
+
+        toggleTheme() {
+          this.theme = this.theme === 'dark' ? 'light' : 'dark';
+          localStorage.setItem('theme', this.theme);
+          document.documentElement.classList.toggle('light', this.theme === 'light');
         },
 
         scoreColor(s) {
