@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CS2 Arsenal — 饰品管家</title>
+  <title>CS2 库存管理系统 — CS2 Inventory Manager</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
@@ -31,18 +31,42 @@
       color: #1e293b;
     }
     html.light .card {
-      background: rgba(255,255,255,0.85) !important;
-      border-color: rgba(203,213,225,0.6) !important;
+      background: rgba(255,255,255,0.92) !important;
+      border-color: rgba(203,213,225,0.7) !important;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
     }
     html.light input, html.light select, html.light textarea {
-      background: rgba(255,255,255,0.9) !important;
+      background: #fff !important;
       color: #1e293b !important;
-      border-color: rgba(203,213,225,0.8) !important;
+      border-color: #cbd5e1 !important;
     }
     html.light input::placeholder { color: #94a3b8 !important; }
     html.light select option { background: #fff; color: #1e293b; }
-    html.light .tbl-row:hover { background: rgba(241,245,249,0.7) !important; }
-    html.light .tbl-row { border-color: rgba(226,232,240,0.6) !important; }
+    html.light .tbl-row:hover { background: rgba(241,245,249,0.8) !important; }
+    html.light .tbl-row { border-color: #e2e8f0 !important; }
+    /* Fix all dark text colors in light mode */
+    html.light [style*="color:#334155"],
+    html.light [style*="color:#475569"],
+    html.light [style*="color:#1e293b"] { color: #334155 !important; }
+    html.light [style*="color:#94a3b8"] { color: #64748b !important; }
+    html.light [style*="color:#64748b"] { color: #475569 !important; }
+    html.light .text-slate-100, html.light .text-slate-200, html.light .text-slate-300 { color: #1e293b !important; }
+    html.light .text-slate-400, html.light .text-slate-500 { color: #475569 !important; }
+    html.light .text-slate-600, html.light .text-slate-700 { color: #64748b !important; }
+    html.light .text-white { color: #0f172a !important; }
+    /* Light mode backgrounds */
+    html.light [style*="background:rgba(15,23,42"],
+    html.light [style*="background:rgba(10,18,35"],
+    html.light [style*="background:rgba(20,30,48"],
+    html.light [style*="background:rgba(8,15,30"],
+    html.light [style*="background:#0f172a"],
+    html.light [style*="background:#0d1829"] { background: #fff !important; }
+    html.light [style*="background:rgba(51,65,85,0.3)"] { background: rgba(203,213,225,0.4) !important; }
+    html.light [style*="border-color:rgba(51,65,85"] { border-color: #e2e8f0 !important; }
+    html.light nav[style*="background: rgba(20,30,48"] { background: rgba(241,245,249,0.9) !important; border-color: #e2e8f0 !important; }
+    html.light th { color: #475569 !important; }
+    html.light .bg-slate-700 { background-color: #3b82f6 !important; }
+    html.light .bg-slate-800 { background-color: #e2e8f0 !important; }
 
     /* ── Scrollbar ───────────────────────────────────────────────────── */
     ::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -74,6 +98,22 @@
       background-position: right 10px center !important;
       padding-right: 30px !important;
     }
+
+    /* ── Info tooltip (CSS-based, works on mobile) ───────────────────── */
+    .info-tip { position: relative; display: inline-block; cursor: help; }
+    .info-tip .tip-text {
+      visibility: hidden; opacity: 0;
+      position: absolute; z-index: 100;
+      bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+      width: 220px; padding: 8px 10px;
+      background: #0f172a; color: #94a3b8; border: 1px solid rgba(51,65,85,0.6);
+      border-radius: 8px; font-size: 10px; line-height: 1.4;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      transition: opacity 0.15s, visibility 0.15s;
+      pointer-events: none; text-align: left; font-weight: normal;
+    }
+    .info-tip:hover .tip-text { visibility: visible; opacity: 1; }
+    html.light .info-tip .tip-text { background: #fff; color: #475569; border-color: #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
 
     /* ── Top import progress bar ─────────────────────────────────────── */
     #progress-bar {
@@ -202,7 +242,7 @@
         <img src="https://cdn.cloudflare.steamstatic.com/apps/csgo/images/csgo_react/global/logo_cs_sm.svg"
           alt="CS2" class="h-7 w-auto opacity-90" onerror="this.style.display='none'" />
         <div class="hidden sm:block">
-          <p class="text-sm font-bold text-white leading-tight tracking-tight" x-text="nameLang==='cn'?'CS2 饰品管家':'CS2 Arsenal'"></p>
+          <p class="text-sm font-bold text-white leading-tight tracking-tight" x-text="nameLang==='cn'?'CS2 库存管理系统':'CS2 Inventory Manager'"></p>
           <p class="text-[10px] text-slate-600 leading-tight" x-text="nameLang==='cn'?'量化交易 · 智能管理':'Quantitative Trading · Smart Management'"></p>
         </div>
       </div>
@@ -292,14 +332,13 @@
           </button>
         </div>
 
-        <!-- 涨跌颜色 toggle -->
+        <!-- 涨跌颜色 toggle (半圆切换) -->
         <button @click="colorMode = colorMode==='cn' ? 'us' : 'cn'"
-          class="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all"
-          style="background:rgba(51,65,85,0.3); border:1px solid rgba(51,65,85,0.4); color:#94a3b8"
-          :title="colorMode==='cn' ? '当前：红涨绿跌（A股模式），点击切换' : '当前：绿涨红跌（美股模式），点击切换'">
-          <span x-text="colorMode==='cn' ? '🔴涨' : '🟢涨'"></span>
-          <span class="text-slate-600">/</span>
-          <span x-text="colorMode==='cn' ? '🟢跌' : '🔴跌'"></span>
+          class="w-5 h-5 rounded-full overflow-hidden flex-shrink-0 transition-transform hover:scale-110"
+          :title="colorMode==='cn' ? '红涨绿跌（A股），点击切换' : '绿涨红跌（美股），点击切换'"
+          :style="colorMode==='cn'
+            ? 'background:linear-gradient(135deg, #ef4444 50%, #10b981 50%)'
+            : 'background:linear-gradient(135deg, #10b981 50%, #ef4444 50%)'">
         </button>
 
         <!-- 会员等级: 默认V3, 已移到内部配置 -->
@@ -1348,42 +1387,42 @@
 
             <!-- Signal Gauges (2x3) -->
             <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
-              <div class="card p-3 text-center relative">
+              <div class="card p-3 text-center">
                 <p class="text-[10px] text-slate-600 mb-1">RSI(14)
-                  <span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 cursor-help ml-0.5"
-                    title="相对强弱指标 (14日)。计算近14日涨跌幅比例。>70超买(可能回调)，<30超卖(可能反弹)，50中性。">i</span></p>
+                  <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
+                    <span class="tip-text">相对强弱指标 (14日)。计算近14日涨跌幅比例。&gt;70 超买(可能回调)，&lt;30 超卖(可能反弹)，50 中性。</span></span></p>
                 <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.rsi_14||0)>70?'text-red-400':(itemSignals.signal?.rsi_14||0)<30?'text-emerald-400':'text-slate-300'" x-text="itemSignals.signal?.rsi_14??'—'"></p>
                 <p class="text-[9px] mt-0.5" :class="(itemSignals.signal?.rsi_14||0)>70?'text-red-500':'text-slate-600'" x-text="(itemSignals.signal?.rsi_14||0)>70?'超买':(itemSignals.signal?.rsi_14||0)<30?'超卖':'中性'"></p>
               </div>
               <div class="card p-3 text-center">
                 <p class="text-[10px] text-slate-600 mb-1">Bollinger %B
-                  <span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 cursor-help ml-0.5"
-                    title="布林带位置。基于20日均线±2倍标准差。>1突破上轨(强势/超涨)，<0跌破下轨(超跌)，0.5居中。">i</span></p>
+                  <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
+                    <span class="tip-text">布林带位置。基于20日均线±2倍标准差。&gt;1 突破上轨(强势/超涨)，&lt;0 跌破下轨(超跌)，0.5 居中。</span></span></p>
                 <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.bb_position||0)>1?'text-red-400':(itemSignals.signal?.bb_position||0)<0?'text-emerald-400':'text-slate-300'" x-text="itemSignals.signal?.bb_position??'—'"></p>
                 <p class="text-[9px] mt-0.5 text-slate-600" x-text="(itemSignals.signal?.bb_position||0)>1?'突破上轨':(itemSignals.signal?.bb_position||0)<0?'低于下轨':'带内'"></p>
               </div>
               <div class="card p-3 text-center">
                 <p class="text-[10px] text-slate-600 mb-1">7D 动量
-                  <span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 cursor-help ml-0.5"
-                    title="7天价格变化率。(今价-7天前价)/7天前价×100%。正值=上涨趋势，负值=下跌趋势。">i</span></p>
+                  <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
+                    <span class="tip-text">7天价格变化率。(今价-7天前价)/7天前价×100%。正值=上涨趋势，负值=下跌趋势。</span></span></p>
                 <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.momentum_7||0)>0?'text-emerald-400':'text-red-400'" x-text="itemSignals.signal?.momentum_7!==null?(itemSignals.signal.momentum_7>0?'+':'')+itemSignals.signal.momentum_7+'%':'—'"></p>
               </div>
               <div class="card p-3 text-center">
                 <p class="text-[10px] text-slate-600 mb-1">30D 动量
-                  <span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 cursor-help ml-0.5"
-                    title="30天价格变化率。反映中期趋势方向和力度。>10%强势上涨，<-10%显著下跌。">i</span></p>
+                  <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
+                    <span class="tip-text">30天价格变化率。反映中期趋势方向和力度。&gt;10% 强势上涨，&lt;-10% 显著下跌。</span></span></p>
                 <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.momentum_30||0)>0?'text-emerald-400':'text-red-400'" x-text="itemSignals.signal?.momentum_30!==null?(itemSignals.signal.momentum_30>0?'+':'')+itemSignals.signal.momentum_30+'%':'—'"></p>
               </div>
               <div class="card p-3 text-center">
                 <p class="text-[10px] text-slate-600 mb-1">波动率
-                  <span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 cursor-help ml-0.5"
-                    title="30日年化波动率。基于每日收益率的标准差×√365。高波动=价格不稳定/交易机会大，低波动=稳定/低风险。">i</span></p>
+                  <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
+                    <span class="tip-text">30日年化波动率。基于每日收益率标准差×√365。高波动=价格不稳定/交易机会大，低波动=稳定。</span></span></p>
                 <p class="text-xl font-bold font-mono text-slate-300" x-text="itemSignals.signal?.volatility_30?itemSignals.signal.volatility_30+'%':'—'"></p>
               </div>
               <div class="card p-3 text-center">
                 <p class="text-[10px] text-slate-600 mb-1">ATH 距离
-                  <span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 cursor-help ml-0.5"
-                    title="当前价格占历史最高价的百分比。>90%接近峰值(考虑出售)，<50%远离高点(可能低估)。">i</span></p>
+                  <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
+                    <span class="tip-text">当前价格占历史最高价的百分比。&gt;90% 接近峰值(考虑出售)，&lt;50% 远离高点(可能低估)。</span></span></p>
                 <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.ath_pct||0)>90?'text-yellow-300':'text-slate-300'" x-text="itemSignals.signal?.ath_pct?itemSignals.signal.ath_pct+'%':'—'"></p>
                 <p class="text-[9px] mt-0.5 text-slate-600" x-text="itemSignals.signal?.ath_price?'ATH ¥'+itemSignals.signal.ath_price:''"></p>
               </div>
@@ -1394,7 +1433,9 @@
               <div class="card p-4">
                 <div class="flex items-center justify-between">
                   <div>
-                    <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-1">综合卖出评分</p>
+                    <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-1">综合卖出评分
+                      <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
+                        <span class="tip-text">综合 RSI(25%)、布林带(20%)、动量(15%)、ATH距离(20%)、盈亏(20%) 加权计算。注意：暂未纳入租金年化收益率，高租金收益饰品即使评分高也可考虑继续持有出租。</span></span></p>
                     <p class="text-3xl font-bold font-mono" :class="scoreColor(itemSignals.signal?.sell_score)" x-text="itemSignals.signal?.sell_score??'—'"></p>
                     <p class="text-xs mt-1" :class="scoreColor(itemSignals.signal?.sell_score)" x-text="scoreLabel(itemSignals.signal?.sell_score)"></p>
                   </div>
@@ -1665,13 +1706,6 @@
             <option value="unpriced">未定价</option>
           </select>
 
-          <!-- Name lang toggle -->
-          <button @click="nameLang = nameLang==='cn' ? 'en' : 'cn'"
-            class="pill-toggle" :class="nameLang==='en' ? 'active-blue' : ''"
-            title="切换饰品名称语言">
-            <span x-text="nameLang==='cn' ? '中文名' : 'EN Name'"></span>
-          </button>
-
           <!-- Show sold toggle -->
           <label class="pill-toggle" :class="showSold ? 'active-slate' : ''"
             @click="showSold=!showSold; page=1; loadItems()">
@@ -1734,9 +1768,11 @@
                 <th class="py-3 px-3 text-right font-normal uppercase tracking-wider hover:text-slate-400 cursor-pointer select-none transition-colors" style="color:#047857" @click="setSort('current_price')">
                   市价 <span x-text="sortIcon('current_price')"></span>
                 </th>
-                <th class="py-3 px-3 text-right font-normal uppercase tracking-wider hover:text-slate-400 cursor-pointer select-none transition-colors" style="color:#475569"
-                  @click="setSort(sortBy==='pnl'?'pnl_pct':'pnl')">
-                  盈亏<span class="text-[9px] ml-0.5" x-text="sortBy==='pnl_pct'?'%':''"></span> <span x-text="sortBy==='pnl'?sortIcon('pnl'):(sortBy==='pnl_pct'?sortIcon('pnl_pct'):'↕')"></span>
+                <th class="py-3 px-2 text-right font-normal uppercase tracking-wider hover:text-slate-400 cursor-pointer select-none transition-colors" style="color:#475569" @click="setSort('pnl')">
+                  盈亏 <span x-text="sortIcon('pnl')"></span>
+                </th>
+                <th class="py-3 px-2 text-right font-normal uppercase tracking-wider hover:text-slate-400 cursor-pointer select-none transition-colors" style="color:#475569" @click="setSort('pnl_pct')">
+                  涨跌% <span x-text="sortIcon('pnl_pct')"></span>
                 </th>
                 <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider hover:text-slate-400 cursor-pointer select-none transition-colors" @click="setSort('purchase_date')">
                   购入日期 <span x-text="sortIcon('purchase_date')"></span>
@@ -1749,7 +1785,7 @@
               <!-- Loading -->
               <template x-if="loading">
                 <tr>
-                  <td :colspan="dualPrice ? 11 : 10" class="py-24 text-center" style="color:#334155">
+                  <td :colspan="dualPrice ? 12 : 11" class="py-24 text-center" style="color:#334155">
                     <div class="flex flex-col items-center gap-3">
                       <div class="w-6 h-6 rounded-full border-2 border-t-blue-500 animate-spin" style="border-color: rgba(51,65,85,0.4); border-top-color: #3b82f6"></div>
                       <span class="text-xs">加载中…</span>
@@ -1761,7 +1797,7 @@
               <!-- Empty -->
               <template x-if="!loading && items.length === 0">
                 <tr>
-                  <td :colspan="dualPrice ? 11 : 10" class="py-24 text-center text-xs" style="color:#334155">
+                  <td :colspan="dualPrice ? 12 : 11" class="py-24 text-center text-xs" style="color:#334155">
                     没有找到匹配的饰品
                   </td>
                 </tr>
@@ -1781,7 +1817,7 @@
                       </div>
                       <div class="min-w-0">
                         <p class="font-medium leading-tight truncate" style="max-width:260px"
-                          :class="rarityClass(item.market_hash_name)"
+                          :class="rarityClass(item.market_hash_name, item.item_type)"
                           x-text="nameLang==='cn' ? (item.name || item.market_hash_name) : item.market_hash_name"></p>
                         <p class="leading-tight truncate mt-0.5" style="max-width:260px; color:#334155"
                           x-text="nameLang==='cn' ? item.market_hash_name : item.name"></p>
@@ -1835,19 +1871,17 @@
                     <span x-show="item.current_price == null" style="color:#1e293b">—</span>
                   </td>
 
-                  <!-- P&L -->
-                  <td class="py-2.5 px-3 text-right font-mono">
-                    <template x-if="item.pnl != null">
-                      <div class="flex flex-col items-end leading-tight">
-                        <span class="text-xs font-semibold" :class="pnlClass(item.pnl)"
-                          x-text="(item.pnl >= 0 ? '+¥' : '-¥') + fmt(Math.abs(item.pnl))"></span>
-                        <span class="text-[10px]" :class="pnlClassMd(item.pnl_pct)"
-                          x-text="(item.pnl_pct >= 0 ? '+' : '') + item.pnl_pct + '%'"></span>
-                      </div>
-                    </template>
-                    <template x-if="item.pnl == null">
-                      <span style="color:#1e293b">—</span>
-                    </template>
+                  <!-- P&L amount -->
+                  <td class="py-2.5 px-2 text-right font-mono">
+                    <span x-show="item.pnl != null" class="text-xs font-semibold" :class="pnlClass(item.pnl)"
+                      x-text="(item.pnl >= 0 ? '+¥' : '-¥') + fmt(Math.abs(item.pnl))"></span>
+                    <span x-show="item.pnl == null" class="text-slate-700">—</span>
+                  </td>
+                  <!-- P&L % -->
+                  <td class="py-2.5 px-2 text-right font-mono">
+                    <span x-show="item.pnl_pct != null" class="text-xs font-semibold" :class="pnlClass(item.pnl_pct)"
+                      x-text="(item.pnl_pct >= 0 ? '+' : '') + item.pnl_pct + '%'"></span>
+                    <span x-show="item.pnl_pct == null" class="text-slate-700">—</span>
                   </td>
 
                   <!-- Date -->
@@ -3013,20 +3047,31 @@
           return `https://community.fastly.steamstatic.com/economy/image/${raw}/62fx62f`;
         },
 
-        // CS2 品质色 (Exceedingly Rare=Gold, Contraband=Orange, Covert=Red, Classified=Pink,
-        // Restricted=Purple, Mil-Spec=Blue, Industrial=LightBlue, Consumer=White)
-        // 无法从名字判定所有 rarity tier，标注已知特殊品质
-        rarityClass(hashName) {
+        // CS2 品质色 — 优先使用 item_type 字段（精确），回退到名字前缀判定
+        // Consumer=White, Industrial=LightBlue, Mil-Spec=Blue, Restricted=Purple,
+        // Classified=Pink, Covert=Red, Extraordinary/Special=Gold, Contraband=Orange
+        rarityClass(hashName, itemType) {
+          // 从 item_type 精确判断 (如 "Covert Rifle", "Classified Pistol")
+          if (itemType) {
+            const t = itemType.toLowerCase();
+            if (t.includes('contraband')) return 'text-orange-500';      // Contraband
+            if (t.includes('extraordinary') || t.includes('covert')) {
+              if (hashName && hashName.startsWith('★')) return 'text-yellow-400'; // Gold
+              return 'text-red-400';                                    // Covert (Red)
+            }
+            if (t.includes('classified')) return 'text-pink-400';       // Classified (Pink)
+            if (t.includes('restricted')) return 'text-purple-400';     // Restricted (Purple)
+            if (t.includes('mil-spec') || t.includes('mil_spec')) return 'text-blue-400'; // Mil-Spec (Blue)
+            if (t.includes('industrial')) return 'text-sky-300';        // Industrial (Light Blue)
+            if (t.includes('consumer') || t.includes('base grade')) return 'text-slate-300'; // Consumer (White)
+            if (t.includes('high grade')) return 'text-purple-300';     // High Grade (Music Kits etc)
+          }
+          // 回退: 从名字判断
           if (!hashName) return 'text-slate-200';
-          // Gold — ★ knives/gloves (Exceedingly Rare / Special)
           if (hashName.startsWith('★')) return 'text-yellow-400';
-          // Orange — Contraband (M4A4 Howl)
           if (hashName.includes('M4A4 | Howl')) return 'text-orange-500';
-          // StatTrak™ prefix — keep original rarity but add visual distinction
           if (hashName.startsWith('StatTrak™')) return 'text-orange-400';
-          // Souvenir prefix
           if (hashName.startsWith('Souvenir')) return 'text-yellow-200';
-          // Default: white (full rarity requires item metadata)
           return 'text-slate-200';
         },
 

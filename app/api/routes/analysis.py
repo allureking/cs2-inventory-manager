@@ -107,12 +107,20 @@ async def analysis_overview(db: AsyncSession = Depends(get_db)):
     dist_row = dist_r.one()
     distribution = [int(v or 0) for v in dist_row]
 
-    # Top 10 sell signals
+    # Top 10 sell signals (only items with known purchase price for meaningful P&L)
+    priced_names_q = (
+        select(InventoryItem.market_hash_name)
+        .where(
+            InventoryItem.status.in_(["in_steam", "rented_out"]),
+            func.coalesce(InventoryItem.purchase_price_manual, InventoryItem.purchase_price).isnot(None),
+        )
+        .distinct()
+    )
     top_r = await db.execute(
         select(QuantSignal)
         .where(
             QuantSignal.signal_date == latest_date,
-            QuantSignal.market_hash_name.in_(owned_names_q),
+            QuantSignal.market_hash_name.in_(priced_names_q),
             QuantSignal.sell_score.isnot(None),
         )
         .order_by(QuantSignal.sell_score.desc())

@@ -578,6 +578,7 @@ async def list_items(
             "class_id": item.class_id,
             "abrade": item.abrade,
             "icon_url": item.icon_url,
+            "item_type": item.item_type,
             "purchase_price": item.purchase_price,
             "purchase_price_manual": item.purchase_price_manual,
             "effective_price": effective,
