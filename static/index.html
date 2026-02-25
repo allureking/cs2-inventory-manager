@@ -3037,11 +3037,29 @@
           this.syncing = true;
           try {
             const r = await fetch('/api/youpin/sync/template-ids', { method: 'POST' });
-            const d = await r.json();
-            if (!r.ok) throw new Error(d.detail || '同步失败');
-            this.showToast(`模板ID同步完成：更新 ${d.synced} 件，映射 ${d.unique_names_mapped || 0} 个品类`);
+            if (!r.ok) { const d = await r.json(); throw new Error(d.detail || 'Sync failed'); }
+            // Poll status until done
+            await new Promise((resolve) => {
+              const poll = setInterval(async () => {
+                try {
+                  const sr = await fetch('/api/youpin/sync/template-ids/status');
+                  const st = await sr.json();
+                  if (st.status === 'done') {
+                    clearInterval(poll);
+                    const d = st.result || {};
+                    this.showToast(`模板ID同步完成：更新 ${d.synced||0} 件，映射 ${d.unique_names_mapped||0} 个品类`);
+                    resolve();
+                  } else if (st.status === 'error') {
+                    clearInterval(poll);
+                    this.showToast((this.nameLang==='cn'?'同步失败: ':'Sync failed: ') + (st.error||''), 'error');
+                    resolve();
+                  }
+                } catch {}
+              }, 2000);
+              setTimeout(() => { clearInterval(poll); resolve(); }, 5 * 60 * 1000);
+            });
           } catch (e) {
-            this.showToast('同步失败：' + e.message, 'error');
+            this.showToast((this.nameLang==='cn'?'同步失败: ':'Sync failed: ') + e.message, 'error');
           }
           finally { this.syncing = false; }
         },
@@ -3118,29 +3136,58 @@
         async triggerImport() {
           this.importing = true;
           this.importProgress = 0;
-          let elapsed = 0;
-          // Asymptotic curve: approaches 80% over ~5 minutes
-          this._progressTimer = setInterval(() => {
-            elapsed += 300;
-            this.importProgress = 80 * (1 - Math.exp(-elapsed / 250000));
-          }, 300);
+          const stepMap = { stock: 0, lease: 25, buy: 50, sell: 75 };
 
           try {
-            const ctrl = new AbortController();
-            const timer = setTimeout(() => ctrl.abort(), 12 * 60 * 1000);
-            const r = await fetch('/api/youpin/import/all', { method: 'POST', signal: ctrl.signal });
-            clearTimeout(timer);
+            // 1) Fire-and-forget: start background import
+            const r = await fetch('/api/youpin/import/all', { method: 'POST' });
             if (!r.ok) throw new Error(await r.text());
-            clearInterval(this._progressTimer);
-            this.importProgress = 100;
-            setTimeout(() => { this.importProgress = -1; }, 700);
-            const d = await r.json();
-            this.importResult = d;
-            this.lastImportAt = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+            const start = await r.json();
+            if (start.started === false && start.state?.status !== 'running') {
+              this.showToast(start.message || 'Import busy', 'error');
+              this.importing = false;
+              return;
+            }
+
+            // 2) Poll /import/status every 2s until done/error
+            await new Promise((resolve, reject) => {
+              this._importPoll = setInterval(async () => {
+                try {
+                  const sr = await fetch('/api/youpin/import/status');
+                  const st = await sr.json();
+                  // progress bar: base from completed steps + partial for current
+                  const base = (st.completed || []).length * 25;
+                  this.importProgress = Math.min(base + 10, 95);
+
+                  if (st.status === 'done') {
+                    clearInterval(this._importPoll);
+                    this.importProgress = 100;
+                    setTimeout(() => { this.importProgress = -1; }, 700);
+                    this.importResult = st.results;
+                    this.lastImportAt = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+                    resolve();
+                  } else if (st.status === 'error') {
+                    clearInterval(this._importPoll);
+                    this.importProgress = -1;
+                    this.showToast((this.nameLang==='cn'?'导入出错: ':'Import error: ') + (st.error || 'unknown'), 'error');
+                    resolve();
+                  }
+                } catch (pe) {
+                  // network glitch during poll — ignore, retry next tick
+                }
+              }, 2000);
+
+              // safety timeout: 15 minutes
+              setTimeout(() => {
+                clearInterval(this._importPoll);
+                this.importProgress = -1;
+                this.showToast(this.nameLang==='cn'?'导入超时，请刷新页面查看':'Import timeout, refresh page', 'error');
+                resolve();
+              }, 15 * 60 * 1000);
+            });
           } catch (e) {
-            clearInterval(this._progressTimer);
             this.importProgress = -1;
-            this.showToast(e.name === 'AbortError' ? '导入超时，请稍后刷新' : '导入失败：' + e.message, 'error');
+            this.showToast((this.nameLang==='cn'?'导入失败: ':'Import failed: ') + e.message, 'error');
           } finally {
             this.importing = false;
           }

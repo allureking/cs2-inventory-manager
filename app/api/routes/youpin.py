@@ -126,20 +126,47 @@ async def auth_apply_token(body: dict):
 
 # ── 模板ID同步 ──────────────────────────────────────────────────────────────
 
+_sync_tpl_state: dict = {
+    "status": "idle",  # idle | running | done | error
+    "result": None,
+    "error": None,
+}
+
+
+async def _run_sync_template_ids():
+    from app.core.database import AsyncSessionLocal
+    _sync_tpl_state["status"] = "running"
+    _sync_tpl_state["result"] = None
+    _sync_tpl_state["error"] = None
+    try:
+        async with AsyncSessionLocal() as db:
+            _sync_tpl_state["result"] = await youpin_svc.sync_template_ids(db)
+        _sync_tpl_state["status"] = "done"
+    except youpin_svc.TokenExpiredError as e:
+        _sync_tpl_state["error"] = str(e)
+        _sync_tpl_state["status"] = "error"
+    except Exception as e:
+        _sync_tpl_state["error"] = str(e)
+        _sync_tpl_state["status"] = "error"
+
+
 @router.post("/sync/template-ids")
-async def sync_template_ids(db: AsyncSession = Depends(get_db)):
+async def sync_template_ids():
     """
     从悠悠完整库存（GetUserInventoryDataListV3）同步 youpin_template_id。
     同步后可使用悠悠市场价格接口刷新市价（替代 SteamDT）。
     """
     _require_token()
-    try:
-        result = await youpin_svc.sync_template_ids(db)
-    except youpin_svc.TokenExpiredError as e:
-        raise HTTPException(status_code=401, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    return result
+    if _sync_tpl_state["status"] == "running":
+        return {"started": False, "message": "同步正在进行中", "state": _sync_tpl_state}
+    asyncio.create_task(_run_sync_template_ids())
+    return {"started": True, "message": "模板ID同步已启动"}
+
+
+@router.get("/sync/template-ids/status")
+async def sync_template_ids_status():
+    """查询模板ID同步进度"""
+    return _sync_tpl_state
 
 
 # ── 市价刷新 ────────────────────────────────────────────────────────────────
@@ -367,22 +394,62 @@ async def import_sell(db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=502, detail=str(e))
 
 
-@router.post("/import/all")
-async def import_all(db: AsyncSession = Depends(get_db)):
-    """全量导入：stock → lease → buy → sell"""
-    _require_token()
-    results = {}
-    for name, fn in [
+# ── 后台导入状态 ──────────────────────────────────────────────────────────
+_import_state: dict = {
+    "status": "idle",      # idle | running | done | error
+    "current_step": None,  # stock / lease / buy / sell
+    "completed": [],       # 已完成的步骤名
+    "results": {},
+    "error": None,
+}
+
+
+async def _run_import_all():
+    """后台执行全量导入（不阻塞 HTTP 请求）"""
+    from app.core.database import AsyncSessionLocal
+
+    steps = [
         ("stock", youpin_svc.import_stock_records),
         ("lease", youpin_svc.import_lease_records),
         ("buy",   youpin_svc.import_buy_records),
         ("sell",  youpin_svc.import_sell_records),
-    ]:
-        try:
-            results[name] = await fn(db)
-        except youpin_svc.TokenExpiredError as e:
-            results[name] = {"error": str(e), "token_expired": True}
-            break  # Token 过期后续全部跳过
-        except Exception as e:
-            results[name] = {"error": str(e)}
-    return results
+    ]
+    _import_state["status"] = "running"
+    _import_state["completed"] = []
+    _import_state["results"] = {}
+    _import_state["error"] = None
+
+    async with AsyncSessionLocal() as db:
+        for name, fn in steps:
+            _import_state["current_step"] = name
+            try:
+                _import_state["results"][name] = await fn(db)
+                _import_state["completed"].append(name)
+            except youpin_svc.TokenExpiredError as e:
+                _import_state["results"][name] = {"error": str(e), "token_expired": True}
+                _import_state["error"] = str(e)
+                _import_state["status"] = "error"
+                return
+            except Exception as e:
+                _import_state["results"][name] = {"error": str(e)}
+                _import_state["completed"].append(name)  # 单步失败不阻塞后续
+
+    _import_state["current_step"] = None
+    _import_state["status"] = "done"
+
+
+@router.post("/import/all")
+async def import_all():
+    """全量导入：启动后台任务，立即返回"""
+    _require_token()
+    if _import_state["status"] == "running":
+        return {"started": False, "message": "导入正在进行中", "state": _import_state}
+
+    asyncio.create_task(_run_import_all())
+    return {"started": True, "message": "导入已启动", "state": _import_state}
+
+
+@router.get("/import/status")
+async def import_status():
+    """查询后台导入进度（供前端轮询）"""
+    return _import_state
