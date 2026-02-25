@@ -535,6 +535,25 @@
     <!-- ════════════ OVERVIEW TAB ════════════ -->
     <div x-show="activeTab==='overview'" class="fade-up">
 
+      <!-- Data freshness bar -->
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mb-4 px-1 text-[10px] text-slate-700">
+        <span x-show="overview.price_updated_at">
+          <span class="inline-block w-1.5 h-1.5 rounded-full mr-1" :class="monitorStatus.data_freshness?.is_fresh ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'"></span>
+          <span x-text="t('ts_price')"></span>
+          <span class="text-slate-500 font-mono" x-text="overview.price_updated_at"></span>
+        </span>
+        <span x-show="monitorStatus.data_freshness?.latest_portfolio_snapshot">
+          <span class="text-slate-800">|</span>
+          <span x-text="t('ts_portfolio')"></span>
+          <span class="text-slate-500 font-mono" x-text="fmtMinute(monitorStatus.data_freshness?.latest_portfolio_snapshot)"></span>
+        </span>
+        <span x-show="monitorStatus.data_freshness?.latest_signal_date">
+          <span class="text-slate-800">|</span>
+          <span x-text="t('ts_signal')"></span>
+          <span class="text-slate-500 font-mono" x-text="fmtDate(monitorStatus.data_freshness?.latest_signal_date)"></span>
+        </span>
+      </div>
+
       <!-- Stat cards -->
       <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-5">
 
@@ -755,7 +774,11 @@
       <!-- Portfolio Value Trend Chart -->
       <div class="card p-5 mt-5">
         <div class="flex items-center justify-between mb-4">
-          <p class="text-[11px] text-slate-600 uppercase tracking-widest" x-text="t('portfolio_trend')"></p>
+          <div class="flex items-center gap-3">
+            <p class="text-[11px] text-slate-600 uppercase tracking-widest" x-text="t('portfolio_trend')"></p>
+            <span x-show="portfolioData.length" class="text-[9px] text-slate-700 font-mono"
+              x-text="t('ts_latest') + ': ' + (portfolioData.length ? fmtMinute(portfolioData[portfolioData.length-1]?.snapshot_minute) : '')"></span>
+          </div>
           <div class="flex gap-0.5 p-0.5 rounded-lg" style="background: rgba(20,30,48,0.7); border: 1px solid rgba(51,65,85,0.3)">
             <template x-for="r in ['24h','7d','30d','90d','all']">
               <button @click="portfolioRange=r; loadPortfolioHistory()"
@@ -1286,6 +1309,26 @@
 
     <!-- ════════════ ANALYSIS TAB ════════════ -->
     <div x-show="activeTab==='analysis'" class="fade-up">
+
+      <!-- Data freshness bar -->
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3 px-1 text-[10px] text-slate-700">
+        <span x-show="ao.signal_date">
+          <span class="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 mr-1"></span>
+          <span x-text="t('ts_signal')"></span>
+          <span class="text-slate-500 font-mono" x-text="fmtDate(ao.signal_date)"></span>
+        </span>
+        <span x-show="ao.collector">
+          <span class="text-slate-800">|</span>
+          <span x-text="t('ts_collector')"></span>
+          <span class="font-mono" :class="ao.collector?.status==='running' ? 'text-blue-400' : 'text-slate-500'"
+            x-text="ao.collector?.status==='running' ? t('ts_running') : (ao.collector?.last_run ? fmtMinute(ao.collector.last_run.replace(/[-T:]/g,'').slice(0,12)) : '—')"></span>
+        </span>
+        <span x-show="overview.price_updated_at">
+          <span class="text-slate-800">|</span>
+          <span x-text="t('ts_price')"></span>
+          <span class="text-slate-500 font-mono" x-text="overview.price_updated_at"></span>
+        </span>
+      </div>
 
       <!-- Sub-tabs -->
       <div class="flex gap-1 mb-4">
@@ -1835,6 +1878,18 @@
     <div x-show="activeTab==='inventory'">
 
       <!-- Mini strip -->
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mb-2 px-1 text-[10px] text-slate-700">
+        <span x-show="overview.price_updated_at">
+          <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse mr-1"></span>
+          <span x-text="t('ts_price')"></span>
+          <span class="text-slate-500 font-mono" x-text="overview.price_updated_at"></span>
+        </span>
+        <span x-show="lastImportAt">
+          <span class="text-slate-800">|</span>
+          <span x-text="t('ts_sync')"></span>
+          <span class="text-slate-500 font-mono" x-text="lastImportAt"></span>
+        </span>
+      </div>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         <div class="card px-4 py-3">
           <p class="text-[11px] text-slate-600 mb-0.5" x-text="t('mini_cost')"></p>
@@ -2550,6 +2605,14 @@
           sys_db_size: ['数据库大小', 'DB Size'],
           sys_collector: ['采集器', 'Collector'],
           btn_refresh: ['刷新', 'Refresh'],
+          // Timestamps
+          ts_price: ['市价更新', 'Prices'],
+          ts_portfolio: ['组合快照', 'Snapshot'],
+          ts_signal: ['信号计算', 'Signals'],
+          ts_sync: ['库存同步', 'Synced'],
+          ts_collector: ['采集器', 'Collector'],
+          ts_running: ['运行中…', 'Running…'],
+          ts_latest: ['最新', 'Latest'],
           // Changelog
           changelog_title: ['更新日志', 'Changelog'],
           changelog_subtitle: ['项目版本更新记录', 'Project version history'],
@@ -3924,6 +3987,16 @@
           return S.base;
         },
 
+        // Format "YYYYMMDDHHmm" → "MM-DD HH:mm"
+        fmtMinute(s) {
+          if (!s || s.length < 12) return '—';
+          return s.slice(4,6) + '-' + s.slice(6,8) + ' ' + s.slice(8,10) + ':' + s.slice(10,12);
+        },
+        // Format "YYYYMMDD" → "MM-DD"
+        fmtDate(s) {
+          if (!s || s.length < 8) return '—';
+          return s.slice(4,6) + '-' + s.slice(6,8);
+        },
         fmt(n) {
           if (n == null) return '—';
           return Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
