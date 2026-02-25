@@ -126,15 +126,35 @@ async def analysis_overview(db: AsyncSession = Depends(get_db)):
         .order_by(QuantSignal.sell_score.desc())
         .limit(10)
     )
+    top_signals = top_r.scalars().all()
+
+    # Enrich top_sell with name + icon_url from inventory_item
+    top_names = [s.market_hash_name for s in top_signals]
+    inv_info: dict[str, dict] = {}
+    if top_names:
+        inv_r = await db.execute(
+            select(
+                InventoryItem.market_hash_name,
+                InventoryItem.name,
+                InventoryItem.icon_url,
+            )
+            .where(InventoryItem.market_hash_name.in_(top_names))
+            .distinct(InventoryItem.market_hash_name)
+        )
+        for row in inv_r.all():
+            inv_info[row[0]] = {"name": row[1], "icon_url": row[2]}
+
     top_sell = [
         {
             "market_hash_name": s.market_hash_name,
+            "name": (inv_info.get(s.market_hash_name) or {}).get("name"),
+            "icon_url": (inv_info.get(s.market_hash_name) or {}).get("icon_url"),
             "sell_score": round(s.sell_score, 1) if s.sell_score else None,
             "rsi_14": round(s.rsi_14, 1) if s.rsi_14 else None,
             "momentum_30": round(s.momentum_30, 1) if s.momentum_30 else None,
             "ath_pct": round(s.ath_pct, 1) if s.ath_pct else None,
         }
-        for s in top_r.scalars().all()
+        for s in top_signals
     ]
 
     # Category trends — using market_hash_name patterns
@@ -355,8 +375,18 @@ async def get_item_signals(
             "opportunity_score": round(sig.opportunity_score, 1) if sig.opportunity_score else None,
         }
 
+    # Fetch name + icon_url for display
+    item_info_r = await db.execute(
+        select(InventoryItem.name, InventoryItem.icon_url)
+        .where(InventoryItem.market_hash_name == market_hash_name)
+        .limit(1)
+    )
+    item_info = item_info_r.one_or_none()
+
     return {
         "market_hash_name": market_hash_name,
+        "name": item_info[0] if item_info else None,
+        "icon_url": item_info[1] if item_info else None,
         "signal": signal_data,
         "chart_data": chart_data,
         "platforms": platforms,
@@ -500,10 +530,28 @@ async def signal_rankings(
     q = q.offset((page - 1) * page_size).limit(page_size)
     rows = (await db.execute(q)).scalars().all()
 
+    # Enrich with name + icon_url from inventory_item
+    rank_names = [s.market_hash_name for s in rows]
+    rank_inv: dict[str, dict] = {}
+    if rank_names:
+        inv_r = await db.execute(
+            select(
+                InventoryItem.market_hash_name,
+                InventoryItem.name,
+                InventoryItem.icon_url,
+            )
+            .where(InventoryItem.market_hash_name.in_(rank_names))
+            .distinct(InventoryItem.market_hash_name)
+        )
+        for row in inv_r.all():
+            rank_inv[row[0]] = {"name": row[1], "icon_url": row[2]}
+
     return {
         "items": [
             {
                 "market_hash_name": s.market_hash_name,
+                "name": (rank_inv.get(s.market_hash_name) or {}).get("name"),
+                "icon_url": (rank_inv.get(s.market_hash_name) or {}).get("icon_url"),
                 "sell_score": round(s.sell_score, 1) if s.sell_score else None,
                 "opportunity_score": round(s.opportunity_score, 1) if s.opportunity_score else None,
                 "rsi_14": round(s.rsi_14, 1) if s.rsi_14 else None,
@@ -808,7 +856,11 @@ async def search_items(
 
     # Search by name
     result = await db.execute(
-        select(InventoryItem.market_hash_name)
+        select(
+            InventoryItem.market_hash_name,
+            InventoryItem.name,
+            InventoryItem.icon_url,
+        )
         .where(
             InventoryItem.status.in_(["in_steam", "rented_out"]),
             or_(
@@ -816,7 +868,7 @@ async def search_items(
                 InventoryItem.name.ilike(f"%{q}%"),
             ),
         )
-        .distinct()
+        .distinct(InventoryItem.market_hash_name)
         .limit(limit)
     )
-    return {"items": [{"market_hash_name": r[0]} for r in result.all()]}
+    return {"items": [{"market_hash_name": r[0], "name": r[1], "icon_url": r[2]} for r in result.all()]}

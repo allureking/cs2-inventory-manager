@@ -24,27 +24,31 @@
         radial-gradient(ellipse 30% 25% at 50% 50%, rgba(16,185,129,0.02) 0%, transparent 70%);
       min-height: 100vh;
     }
-    /* ── Light theme override ───────────────────────────────────────── */
+    /* ── Light theme override — soft azure/cyan-white ────────────── */
     html.light body {
-      background: #f1f5f9;
-      background-image: none;
+      background: linear-gradient(160deg, #ecf5ff 0%, #f0fafb 30%, #f8fafc 60%, #eef4fb 100%);
+      background-attachment: fixed;
       color: #1e293b;
     }
     html.light .card {
-      background: rgba(255,255,255,0.92) !important;
-      border-color: rgba(203,213,225,0.7) !important;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      background: rgba(255,255,255,0.88) !important;
+      border-color: rgba(186,214,235,0.55) !important;
+      box-shadow: 0 1px 4px rgba(56,132,188,0.07), 0 0 0 1px rgba(186,214,235,0.2);
     }
     html.light input, html.light select, html.light textarea {
       background: #fff !important;
       color: #1e293b !important;
-      border-color: #cbd5e1 !important;
+      border-color: #bdd6eb !important;
+    }
+    html.light input:focus, html.light select:focus {
+      border-color: #60a5fa !important;
+      box-shadow: 0 0 0 3px rgba(96,165,250,0.15) !important;
     }
     html.light input::placeholder { color: #94a3b8 !important; }
     html.light select option { background: #fff; color: #1e293b; }
-    html.light .tbl-row:hover { background: rgba(241,245,249,0.8) !important; }
-    html.light .tbl-row { border-color: #e2e8f0 !important; }
-    /* Fix all dark text colors in light mode */
+    html.light .tbl-row:hover { background: rgba(224,242,254,0.5) !important; }
+    html.light .tbl-row { border-color: rgba(186,214,235,0.35) !important; }
+    /* Fix text colors in light mode — ensure contrast */
     html.light [style*="color:#334155"],
     html.light [style*="color:#475569"],
     html.light [style*="color:#1e293b"] { color: #334155 !important; }
@@ -54,19 +58,46 @@
     html.light .text-slate-400, html.light .text-slate-500 { color: #475569 !important; }
     html.light .text-slate-600, html.light .text-slate-700 { color: #64748b !important; }
     html.light .text-white { color: #0f172a !important; }
-    /* Light mode backgrounds */
+    /* Light mode backgrounds — dark inline styles → white/azure */
     html.light [style*="background:rgba(15,23,42"],
     html.light [style*="background:rgba(10,18,35"],
     html.light [style*="background:rgba(20,30,48"],
     html.light [style*="background:rgba(8,15,30"],
     html.light [style*="background:#0f172a"],
+    html.light [style*="background:#07101f"],
+    html.light [style*="background:#080f1d"],
     html.light [style*="background:#0d1829"] { background: #fff !important; }
-    html.light [style*="background:rgba(51,65,85,0.3)"] { background: rgba(203,213,225,0.4) !important; }
-    html.light [style*="border-color:rgba(51,65,85"] { border-color: #e2e8f0 !important; }
-    html.light nav[style*="background: rgba(20,30,48"] { background: rgba(241,245,249,0.9) !important; border-color: #e2e8f0 !important; }
+    html.light [style*="background:rgba(51,65,85,0.3)"],
+    html.light [style*="background:rgba(51,65,85,0.2)"] { background: rgba(186,214,235,0.3) !important; }
+    html.light [style*="border-color:rgba(51,65,85"] { border-color: rgba(186,214,235,0.5) !important; }
+    html.light [style*="background: rgba(6,13,26"],
+    html.light nav[style*="background: rgba(20,30,48"] {
+      background: rgba(240,249,255,0.92) !important;
+      border-color: rgba(186,214,235,0.5) !important;
+      backdrop-filter: blur(20px) saturate(1.3);
+    }
     html.light th { color: #475569 !important; }
+    html.light thead th { background: #f0f7ff !important; }
     html.light .bg-slate-700 { background-color: #3b82f6 !important; }
-    html.light .bg-slate-800 { background-color: #e2e8f0 !important; }
+    html.light .bg-slate-800 { background-color: #e0f2fe !important; }
+    /* Light mode stat card hover */
+    html.light .stat-card:hover { box-shadow: 0 8px 30px rgba(56,132,188,0.12) !important; }
+    /* Light mode side panel */
+    html.light [style*="background:#07101f"] { background: #f8fbff !important; }
+    /* Light mode pill toggles */
+    html.light .pill-toggle { background: rgba(240,249,255,0.8); border-color: rgba(186,214,235,0.5); color: #475569; }
+    html.light .pill-toggle:hover { border-color: #93c5fd; color: #1e40af; }
+    html.light .pill-toggle.active-blue { background: rgba(59,130,246,0.1); border-color: rgba(59,130,246,0.35); color: #1d4ed8; }
+    /* Light mode pagination */
+    html.light .pg-btn { background: #fff; border-color: rgba(186,214,235,0.5); color: #475569; }
+    html.light .pg-btn:hover:not(:disabled) { color: #1e40af; border-color: #93c5fd; }
+    html.light .pg-btn.active { background: linear-gradient(135deg,#2563eb,#3b82f6); color: #fff; }
+    /* Light mode tooltip */
+    html.light .info-tip .tip-text { background: #fff; color: #475569; border-color: rgba(186,214,235,0.5); box-shadow: 0 4px 16px rgba(56,132,188,0.12); }
+    /* Light mode header background */
+    html.light header.sticky { background: rgba(240,249,255,0.92) !important; border-bottom-color: rgba(186,214,235,0.5) !important; }
+    /* Light modal overlays */
+    html.light [style*="background:#0f172a"] { background: #f8fbff !important; }
 
     /* ── Scrollbar ───────────────────────────────────────────────────── */
     ::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -234,7 +265,7 @@
 
   <!-- ── Navbar ─────────────────────────────────────────────────────────── -->
   <header class="sticky top-0 z-40"
-    style="background: rgba(6,13,26,0.88); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(51,65,85,0.25);">
+    style="background: rgba(6,13,26,0.88); backdrop-filter: blur(20px) saturate(1.2); border-bottom: 1px solid rgba(51,65,85,0.25);">
     <div class="max-w-[1800px] mx-auto px-6 h-14 flex items-center gap-3">
 
       <!-- Logo -->
@@ -251,23 +282,20 @@
       <nav class="flex gap-0.5 p-1 rounded-xl" style="background: rgba(20,30,48,0.7); border: 1px solid rgba(51,65,85,0.3)">
         <button @click="activeTab='inventory'"
           class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
-          :class="activeTab==='inventory' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'">
-          持仓列表
-        </button>
+          :class="activeTab==='inventory' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'"
+          x-text="t('tab_inventory')"></button>
         <button @click="activeTab='overview'"
           class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
-          :class="activeTab==='overview' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'">
-          资产概览
-        </button>
+          :class="activeTab==='overview' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'"
+          x-text="t('tab_overview')"></button>
         <button @click="activeTab='listing'; loadShelf()"
           class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
-          :class="activeTab==='listing' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'">
-          上架管理
-        </button>
+          :class="activeTab==='listing' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'"
+          x-text="t('tab_listing')"></button>
         <button @click="activeTab='analysis'; loadAnalysis()"
           class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 relative"
           :class="activeTab==='analysis' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'">
-          量化分析
+          <span x-text="t('tab_analysis')"></span>
           <span x-show="unreadAlertCount>0" x-cloak
             class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center font-bold"
             x-text="unreadAlertCount>9?'9+':unreadAlertCount"></span>
@@ -290,10 +318,10 @@
         <!-- Import status -->
         <div x-show="importing" x-cloak class="flex items-center gap-2 text-xs text-slate-500">
           <span class="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse inline-block"></span>
-          同步中，请耐心等待…
+          <span x-text="t('syncing_wait')"></span>
         </div>
         <span x-show="lastImportAt && !importing" x-cloak class="text-[11px] text-slate-700 hidden md:block">
-          上次同步 <span class="text-slate-500" x-text="lastImportAt"></span>
+          <span x-text="t('last_sync')"></span> <span class="text-slate-500" x-text="lastImportAt"></span>
         </span>
 
         <!-- Refresh Prices button -->
@@ -307,12 +335,12 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
-            <span x-show="!refreshing">刷新市价</span>
+            <span x-show="!refreshing" x-text="t('btn_refresh_price')"></span>
             <span x-show="refreshing" x-cloak x-text="refreshProgress + '%'"></span>
           </button>
           <span x-show="overview.price_updated_at && !refreshing" x-cloak
             class="text-[10px] text-slate-700 hidden lg:block">
-            市价 <span class="text-slate-600" x-text="overview.price_updated_at"></span>
+            <span x-text="t('market_price')"></span> <span class="text-slate-600" x-text="overview.price_updated_at"></span>
           </span>
         </div>
 
@@ -328,14 +356,14 @@
           <button @click="loginModal.show=true"
             class="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-medium transition-all"
             :style="authState.has_token ? 'background:rgba(51,65,85,0.2);color:#64748b;border:1px solid rgba(51,65,85,0.3)' : 'background:rgba(234,179,8,0.12);color:#fbbf24;border:1px solid rgba(234,179,8,0.2)'">
-            <span x-text="authState.has_token ? '切换账号' : '登录悠悠'"></span>
+            <span x-text="authState.has_token ? t('btn_switch_account') : t('btn_login_youpin')"></span>
           </button>
         </div>
 
         <!-- 涨跌颜色 toggle (半圆切换) -->
         <button @click="colorMode = colorMode==='cn' ? 'us' : 'cn'"
           class="w-5 h-5 rounded-full overflow-hidden flex-shrink-0 transition-transform hover:scale-110"
-          :title="colorMode==='cn' ? '红涨绿跌（A股），点击切换' : '绿涨红跌（美股），点击切换'"
+          :title="colorMode==='cn' ? t('color_cn_tip') : t('color_us_tip')"
           :style="colorMode==='cn'
             ? 'background:linear-gradient(135deg, #ef4444 50%, #10b981 50%)'
             : 'background:linear-gradient(135deg, #10b981 50%, #ef4444 50%)'">
@@ -353,7 +381,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
           </svg>
-          <span x-text="importing ? '同步中…' : '同步数据'"></span>
+          <span x-text="importing ? t('btn_syncing') : t('btn_sync')"></span>
         </button>
       </div>
     </div>
@@ -366,16 +394,16 @@
       style="background:rgba(0,0,0,0.6); backdrop-filter:blur(4px)"
       @keydown.escape.window="repriceModal.show=false">
       <div class="w-full max-w-sm rounded-2xl p-6" style="background:#0f172a; border:1px solid rgba(51,65,85,0.5)">
-        <p class="text-slate-300 font-medium mb-1 truncate" x-text="repriceModal.item?.commodityHashName || repriceModal.item?.name || '改价'"></p>
+        <p class="text-slate-300 font-medium mb-1 truncate" x-text="repriceModal.item?.commodityHashName || repriceModal.item?.name || t('reprice_title')"></p>
         <p class="text-[11px] text-slate-600 mb-4">
           CommodityId: <span x-text="repriceModal.item?.commodityId"></span>
-          <span x-show="repriceModal.isSublet" class="ml-2 px-1.5 py-0.5 rounded text-[10px]" style="background:rgba(234,179,8,0.1);color:#fbbf24">转租中改价</span>
+          <span x-show="repriceModal.isSublet" class="ml-2 px-1.5 py-0.5 rounded text-[10px]" style="background:rgba(234,179,8,0.1);color:#fbbf24" x-text="t('subletting')+'→'+t('btn_reprice')"></span>
         </p>
 
         <!-- Sell price -->
         <template x-if="shelfTab==='sell' && !repriceModal.isSublet">
           <div class="mb-4">
-            <label class="block text-[11px] text-slate-600 mb-1">出售价（元）</label>
+            <label class="block text-[11px] text-slate-600 mb-1" x-text="t('sell_price_label')"></label>
             <input x-model.number="repriceModal.newPrice" type="number" step="0.01" min="0.01"
               class="w-full px-3 py-2 rounded-xl text-sm border" placeholder="0.01"/>
           </div>
@@ -385,17 +413,17 @@
         <template x-if="shelfTab==='lease' || repriceModal.isSublet">
           <div class="space-y-3 mb-4">
             <div>
-              <label class="block text-[11px] text-slate-600 mb-1">短租日租金（元/天）</label>
+              <label class="block text-[11px] text-slate-600 mb-1" x-text="t('short_rent_label')"></label>
               <input x-model.number="repriceModal.newLeaseUnit" type="number" step="0.01" min="0.01"
                 class="w-full px-3 py-2 rounded-xl text-sm border" placeholder="0.01"/>
             </div>
             <div>
-              <label class="block text-[11px] text-slate-600 mb-1">长租日租金（元/天，可选）</label>
+              <label class="block text-[11px] text-slate-600 mb-1" x-text="t('long_rent_label')"></label>
               <input x-model.number="repriceModal.newLongLeaseUnit" type="number" step="0.01" min="0.01"
-                class="w-full px-3 py-2 rounded-xl text-sm border" placeholder="留空则按短租价×0.95"/>
+                class="w-full px-3 py-2 rounded-xl text-sm border" :placeholder="t('long_rent_hint')"/>
             </div>
             <div>
-              <label class="block text-[11px] text-slate-600 mb-1">押金（元）</label>
+              <label class="block text-[11px] text-slate-600 mb-1" x-text="t('deposit_label')"></label>
               <input x-model.number="repriceModal.newDeposit" type="number" step="0.01" min="0"
                 class="w-full px-3 py-2 rounded-xl text-sm border" placeholder="0"/>
             </div>
@@ -405,12 +433,12 @@
         <div class="flex gap-3">
           <button @click="repriceModal.show=false"
             class="flex-1 py-2 rounded-xl text-sm transition-all"
-            style="background:rgba(51,65,85,0.3); color:#94a3b8">取消</button>
+            style="background:rgba(51,65,85,0.3); color:#94a3b8" x-text="t('btn_cancel')"></button>
           <button @click="saveReprice()" :disabled="repriceModal.saving"
             class="flex-1 py-2 rounded-xl text-sm font-medium text-white transition-all disabled:opacity-40"
             style="background:linear-gradient(135deg,#6366f1,#4f46e5)">
-            <span x-show="!repriceModal.saving">确认改价</span>
-            <span x-show="repriceModal.saving" x-cloak>保存中…</span>
+            <span x-show="!repriceModal.saving" x-text="t('btn_confirm_reprice')"></span>
+            <span x-show="repriceModal.saving" x-cloak x-text="t('saving_text')"></span>
           </button>
         </div>
       </div>
@@ -424,29 +452,29 @@
       style="background:rgba(0,0,0,0.6);backdrop-filter:blur(4px)"
       @keydown.escape.window="loginModal.show=false">
       <div class="w-full max-w-sm rounded-2xl p-6" style="background:#0f172a;border:1px solid rgba(51,65,85,0.5)">
-        <p class="text-slate-200 font-medium mb-4">悠悠有品 手机号登录</p>
-        <p class="text-[11px] text-slate-600 mb-4">通过手机号+验证码获取 App 端 Token（支持上架/下架/改价等操作）</p>
+        <p class="text-slate-200 font-medium mb-4" x-text="t('login_title')"></p>
+        <p class="text-[11px] text-slate-600 mb-4" x-text="t('login_desc')"></p>
 
         <div class="space-y-3 mb-4">
           <div>
-            <label class="block text-[11px] text-slate-600 mb-1">手机号</label>
+            <label class="block text-[11px] text-slate-600 mb-1" x-text="t('phone_label')"></label>
             <div class="flex gap-2">
               <span class="flex items-center px-2 text-xs text-slate-500" style="background:rgba(51,65,85,0.3);border-radius:0.75rem">+86</span>
-              <input x-model="loginModal.phone" type="tel" placeholder="手机号"
+              <input x-model="loginModal.phone" type="tel" :placeholder="t('phone_label')"
                 class="flex-1 px-3 py-2 rounded-xl text-sm border" />
             </div>
           </div>
           <div class="flex gap-2">
             <div class="flex-1">
-              <label class="block text-[11px] text-slate-600 mb-1">验证码</label>
-              <input x-model="loginModal.code" type="text" placeholder="短信验证码"
+              <label class="block text-[11px] text-slate-600 mb-1" x-text="t('code_label')"></label>
+              <input x-model="loginModal.code" type="text" :placeholder="t('code_label')"
                 class="w-full px-3 py-2 rounded-xl text-sm border" />
             </div>
             <div class="flex items-end">
               <button @click="sendSmsCode()" :disabled="loginModal.smsSending || loginModal.cooldown > 0"
                 class="px-3 py-2 rounded-xl text-xs font-medium transition-all disabled:opacity-40"
                 style="background:rgba(59,130,246,0.12);color:#60a5fa;border:1px solid rgba(59,130,246,0.2)">
-                <span x-show="loginModal.cooldown <= 0" x-text="loginModal.smsSending ? '发送中…' : '发送验证码'"></span>
+                <span x-show="loginModal.cooldown <= 0" x-text="loginModal.smsSending ? t('sending_code') : t('btn_send_code')"></span>
                 <span x-show="loginModal.cooldown > 0" x-text="loginModal.cooldown + 's'"></span>
               </button>
             </div>
@@ -456,24 +484,24 @@
         <div class="flex gap-3">
           <button @click="loginModal.show=false"
             class="flex-1 py-2 rounded-xl text-sm transition-all"
-            style="background:rgba(51,65,85,0.3);color:#94a3b8">取消</button>
+            style="background:rgba(51,65,85,0.3);color:#94a3b8" x-text="t('btn_cancel')"></button>
           <button @click="doSmsLogin()" :disabled="loginModal.logging || !loginModal.code"
             class="flex-1 py-2 rounded-xl text-sm font-medium text-white transition-all disabled:opacity-40"
             style="background:linear-gradient(135deg,#f59e0b,#d97706)">
-            <span x-show="!loginModal.logging">登录</span>
-            <span x-show="loginModal.logging" x-cloak>登录中…</span>
+            <span x-show="!loginModal.logging" x-text="t('btn_login')"></span>
+            <span x-show="loginModal.logging" x-cloak x-text="t('logging_in')"></span>
           </button>
         </div>
 
         <!-- Manual token input -->
         <div class="mt-4 pt-4 border-t" style="border-color:rgba(51,65,85,0.3)">
-          <p class="text-[11px] text-slate-600 mb-2">或直接粘贴 Token（从悠悠 App 或浏览器 DevTools 获取）</p>
+          <p class="text-[11px] text-slate-600 mb-2" x-text="t('manual_token_desc')"></p>
           <div class="flex gap-2">
             <input x-model="loginModal.manualToken" type="text" placeholder="Bearer Token…"
               class="flex-1 px-3 py-2 rounded-xl text-xs border font-mono" style="background:rgba(15,23,42,0.8);border-color:rgba(51,65,85,0.3);color:#94a3b8" />
             <button @click="applyManualToken()" :disabled="!loginModal.manualToken"
               class="px-3 py-2 rounded-xl text-xs font-medium text-white transition-all disabled:opacity-40"
-              style="background:rgba(16,185,129,0.2);color:#34d399;border:1px solid rgba(16,185,129,0.3)">应用</button>
+              style="background:rgba(16,185,129,0.2);color:#34d399;border:1px solid rgba(16,185,129,0.3)" x-text="t('btn_apply')"></button>
           </div>
         </div>
       </div>
@@ -490,8 +518,8 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
             d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
         </svg>
-        <span class="text-red-100 font-medium">悠悠有品 Token 已过期，所有同步/上架功能不可用</span>
-        <span class="text-red-300 text-xs">→ 登录 www.youpin898.com → DevTools → Network → 复制 Authorization header 中的 Bearer Token → 更新 .env 重启服务</span>
+        <span class="text-red-100 font-medium" x-text="t('token_expired_msg')"></span>
+        <span class="text-red-300 text-xs" x-text="t('token_expired_hint')"></span>
       </div>
       <button @click="tokenExpired=false" class="text-red-300 hover:text-white text-lg leading-none ml-4">✕</button>
     </div>
@@ -510,48 +538,48 @@
         <div class="card stat-card p-5 relative overflow-hidden">
           <div class="absolute -top-10 -right-10 w-40 h-40 rounded-full pointer-events-none"
             style="background: radial-gradient(circle, rgba(59,130,246,0.08), transparent 70%)"></div>
-          <p class="text-[11px] text-slate-600 uppercase tracking-widest mb-2">总持仓成本</p>
+          <p class="text-[11px] text-slate-600 uppercase tracking-widest mb-2" x-text="t('total_cost')"></p>
           <p class="text-3xl font-bold text-white mb-1">¥<span x-text="fmt(overview.total_cost)">—</span></p>
           <div class="flex gap-3 text-[11px] text-slate-700 mb-3">
-            <span>出租 ¥<span x-text="fmt(overview.cost_breakdown?.rented_out)"></span></span>
+            <span><span x-text="t('cost_rented')"></span> ¥<span x-text="fmt(overview.cost_breakdown?.rented_out)"></span></span>
             <span>·</span>
-            <span>Steam ¥<span x-text="fmt(overview.cost_breakdown?.in_steam)"></span></span>
+            <span><span x-text="t('cost_steam')"></span> ¥<span x-text="fmt(overview.cost_breakdown?.in_steam)"></span></span>
           </div>
           <div class="h-1 rounded-full overflow-hidden" style="background: rgba(51,65,85,0.4)">
             <div class="h-full rounded-full transition-all duration-1000"
               style="background: linear-gradient(90deg,#3b82f6,#8b5cf6)"
               :style="'width:' + (overview.coverage_pct||0) + '%'"></div>
           </div>
-          <p class="text-[11px] text-slate-700 mt-1.5">定价覆盖
+          <p class="text-[11px] text-slate-700 mt-1.5"><span x-text="t('price_coverage')"></span>
             <span class="text-blue-400 font-medium" x-text="(overview.coverage_pct||0) + '%'"></span>
           </p>
         </div>
 
         <!-- Active breakdown -->
         <div class="card stat-card p-5">
-          <p class="text-[11px] text-slate-600 uppercase tracking-widest mb-2">活跃持仓</p>
+          <p class="text-[11px] text-slate-600 uppercase tracking-widest mb-2" x-text="t('active_holdings')"></p>
           <p class="text-3xl font-bold text-white mb-3" x-text="overview.total_active ?? '—'"></p>
           <div class="space-y-1.5">
             <div class="flex justify-between items-center text-xs">
               <span class="text-slate-500 flex items-center gap-1.5">
-                <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>出租中
+                <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span><span x-text="t('status_rented')"></span>
               </span>
               <span class="font-mono font-semibold text-green-300" x-text="overview.status_breakdown?.rented_out ?? 0"></span>
             </div>
             <div class="flex justify-between items-center text-xs">
               <span class="text-slate-500 flex items-center gap-1.5">
-                <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>Steam中
+                <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span><span x-text="t('status_steam')"></span>
               </span>
               <span class="font-mono font-semibold text-blue-300" x-text="overview.status_breakdown?.in_steam ?? 0"></span>
             </div>
             <div class="flex justify-between items-center text-xs">
               <span class="text-slate-500 flex items-center gap-1.5">
-                <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>收藏
+                <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span><span x-text="t('status_storage')"></span>
               </span>
               <span class="font-mono font-semibold text-purple-300" x-text="overview.status_breakdown?.in_storage ?? 0"></span>
             </div>
             <div class="flex justify-between items-center text-xs pt-1.5" style="border-top: 1px solid rgba(51,65,85,0.3)">
-              <span class="text-slate-700">已售</span>
+              <span class="text-slate-700" x-text="t('status_sold')"></span>
               <span class="font-mono text-slate-700" x-text="overview.status_breakdown?.sold ?? 0"></span>
             </div>
           </div>
@@ -559,19 +587,19 @@
 
         <!-- Pricing -->
         <div class="card stat-card p-5">
-          <p class="text-[11px] text-slate-600 uppercase tracking-widest mb-2">定价情况</p>
+          <p class="text-[11px] text-slate-600 uppercase tracking-widest mb-2" x-text="t('pricing_status')"></p>
           <p class="text-3xl font-bold text-white mb-3" x-text="overview.priced_count ?? '—'"></p>
           <div class="space-y-1.5">
             <div class="flex justify-between items-center text-xs">
-              <span class="text-slate-500">自动定价</span>
+              <span class="text-slate-500" x-text="t('auto_priced')"></span>
               <span class="font-mono text-slate-300" x-text="(overview.priced_count??0)-(overview.manual_price_count??0)"></span>
             </div>
             <div class="flex justify-between items-center text-xs">
-              <span class="text-yellow-500/70">手动定价</span>
+              <span class="text-yellow-500/70" x-text="t('manual_priced')"></span>
               <span class="font-mono text-yellow-300 font-semibold" x-text="overview.manual_price_count ?? 0"></span>
             </div>
             <div class="flex justify-between items-center text-xs pt-1.5" style="border-top: 1px solid rgba(51,65,85,0.3)">
-              <span class="text-red-500/60">未定价</span>
+              <span class="text-red-500/60" x-text="t('unpriced')"></span>
               <span class="font-mono text-red-400" x-text="overview.unpriced_count ?? 0"></span>
             </div>
           </div>
@@ -579,27 +607,27 @@
 
         <!-- Quick actions -->
         <div class="card stat-card p-5 flex flex-col gap-2">
-          <p class="text-[11px] text-slate-600 uppercase tracking-widest mb-1">快捷操作</p>
+          <p class="text-[11px] text-slate-600 uppercase tracking-widest mb-1" x-text="t('quick_actions')"></p>
           <button @click="activeTab='inventory'; filters.status=''; showSold=false; filters.pricedFilter='unpriced'; page=1; loadItems()"
             class="w-full text-left px-3 py-2.5 rounded-xl text-xs transition-all duration-150"
             style="background: rgba(239,68,68,0.07); border: 1px solid rgba(239,68,68,0.15); color: #fca5a5;"
             @mouseenter="$el.style.background='rgba(239,68,68,0.13)'"
             @mouseleave="$el.style.background='rgba(239,68,68,0.07)'">
-            → 未定价饰品 (<span x-text="overview.unpriced_count??0"></span>)
+            → <span x-text="t('goto_unpriced')"></span> (<span x-text="overview.unpriced_count??0"></span>)
           </button>
           <button @click="activeTab='inventory'; filters.status='rented_out'; showSold=false; page=1; loadItems()"
             class="w-full text-left px-3 py-2.5 rounded-xl text-xs transition-all duration-150"
             style="background: rgba(34,197,94,0.07); border: 1px solid rgba(34,197,94,0.15); color: #86efac;"
             @mouseenter="$el.style.background='rgba(34,197,94,0.13)'"
             @mouseleave="$el.style.background='rgba(34,197,94,0.07)'">
-            → 出租中 (<span x-text="overview.status_breakdown?.rented_out??0"></span>)
+            → <span x-text="t('goto_rented')"></span> (<span x-text="overview.status_breakdown?.rented_out??0"></span>)
           </button>
           <button @click="activeTab='inventory'; filters.status=''; showSold=false; filters.pricedFilter=''; page=1; loadItems()"
             class="w-full text-left px-3 py-2.5 rounded-xl text-xs transition-all duration-150"
             style="background: rgba(71,85,105,0.15); border: 1px solid rgba(71,85,105,0.25); color: #94a3b8;"
             @mouseenter="$el.style.background='rgba(71,85,105,0.25)'"
             @mouseleave="$el.style.background='rgba(71,85,105,0.15)'">
-            → 全部持仓
+            → <span x-text="t('goto_all')"></span>
           </button>
         </div>
       </div>
@@ -611,33 +639,33 @@
         <div class="card stat-card p-5 relative overflow-hidden">
           <div class="absolute -top-10 -right-10 w-40 h-40 rounded-full pointer-events-none"
             style="background: radial-gradient(circle, rgba(16,185,129,0.07), transparent 70%)"></div>
-          <p class="text-[11px] text-slate-600 uppercase tracking-widest mb-2">当前市值</p>
+          <p class="text-[11px] text-slate-600 uppercase tracking-widest mb-2" x-text="t('market_value')"></p>
           <template x-if="overview.market_value > 0">
             <div>
               <p class="text-3xl font-bold text-emerald-300 mb-1">¥<span x-text="fmt(overview.market_value)"></span></p>
               <div class="space-y-1 mb-1">
                 <div class="flex justify-between text-[11px]">
-                  <span class="text-slate-600">库存市值</span>
+                  <span class="text-slate-600" x-text="t('inv_value')"></span>
                   <span class="text-blue-300 font-mono">¥<span x-text="fmt(overview.market_value_steam??0)"></span></span>
                 </div>
                 <div class="flex justify-between text-[11px]">
-                  <span class="text-slate-600">出租市值</span>
+                  <span class="text-slate-600" x-text="t('rented_value')"></span>
                   <span class="text-green-300 font-mono">¥<span x-text="fmt(overview.market_value_rented??0)"></span></span>
                 </div>
               </div>
               <p class="text-[11px] text-slate-700">
-                覆盖 <span class="text-emerald-500/70" x-text="overview.market_priced_count ?? 0"></span> 件
-                / 共 <span x-text="overview.total_active ?? 0"></span> 件
+                <span x-text="t('covers')"></span> <span class="text-emerald-500/70" x-text="overview.market_priced_count ?? 0"></span> <span x-text="t('items_unit')"></span>
+                / <span x-text="t('total_items')"></span> <span x-text="overview.total_active ?? 0"></span> <span x-text="t('items_unit')"></span>
               </p>
-              <p class="text-[10px] mt-1" style="color:#1e3a5f" title="出租市值 = 悠悠市价快照 × 租出件数，与悠悠官方估值可能有出入（快照更新时间/覆盖率差异）">
-                ⓘ 出租市值基于市价快照计算，与悠悠官方估值可能略有差异
+              <p class="text-[10px] mt-1" style="color:#1e3a5f">
+                ⓘ <span x-text="t('rented_value_note')"></span>
               </p>
             </div>
           </template>
           <template x-if="!overview.market_value">
             <div>
-              <p class="text-2xl font-bold text-slate-700 mb-1">暂无市价</p>
-              <p class="text-[11px] text-slate-700">点击「刷新市价」获取实时数据</p>
+              <p class="text-2xl font-bold text-slate-700 mb-1" x-text="t('no_market_price')"></p>
+              <p class="text-[11px] text-slate-700" x-text="t('click_refresh')"></p>
             </div>
           </template>
         </div>
@@ -646,19 +674,19 @@
         <div class="card stat-card p-5 relative overflow-hidden">
           <div class="absolute -top-10 -right-10 w-40 h-40 rounded-full pointer-events-none"
             :style="overview.pnl != null ? 'background: radial-gradient(circle, ' + pnlBg(overview.pnl) + ', transparent 70%)' : ''"></div>
-          <p class="text-[11px] text-slate-600 uppercase tracking-widest mb-2">盈亏金额</p>
+          <p class="text-[11px] text-slate-600 uppercase tracking-widest mb-2" x-text="t('pnl_amount')"></p>
           <template x-if="overview.pnl != null">
             <div>
               <p class="text-3xl font-bold mb-1" :class="pnlClass(overview.pnl)">
                 <span x-text="overview.pnl >= 0 ? '+¥' : '-¥'"></span><span x-text="fmt(Math.abs(overview.pnl))"></span>
               </p>
-              <p class="text-[11px] text-slate-700">基于已有市价估算</p>
+              <p class="text-[11px] text-slate-700" x-text="t('based_on_estimate')"></p>
             </div>
           </template>
           <template x-if="overview.pnl == null">
             <div>
               <p class="text-2xl font-bold text-slate-700 mb-1">—</p>
-              <p class="text-[11px] text-slate-700">需要成本价 + 市价数据</p>
+              <p class="text-[11px] text-slate-700" x-text="t('need_data')"></p>
             </div>
           </template>
         </div>
@@ -667,7 +695,7 @@
         <div class="card stat-card p-5 relative overflow-hidden">
           <div class="absolute -top-10 -right-10 w-40 h-40 rounded-full pointer-events-none"
             :style="overview.pnl_pct != null ? 'background: radial-gradient(circle, ' + pnlBg(overview.pnl_pct) + ', transparent 70%)' : ''"></div>
-          <p class="text-[11px] text-slate-600 uppercase tracking-widest mb-2">盈亏率</p>
+          <p class="text-[11px] text-slate-600 uppercase tracking-widest mb-2" x-text="t('pnl_rate')"></p>
           <template x-if="overview.pnl_pct != null">
             <div>
               <p class="text-3xl font-bold mb-1" :class="pnlClass(overview.pnl_pct)">
@@ -684,7 +712,7 @@
           <template x-if="overview.pnl_pct == null">
             <div>
               <p class="text-2xl font-bold text-slate-700 mb-1">—</p>
-              <p class="text-[11px] text-slate-700">待市价刷新后计算</p>
+              <p class="text-[11px] text-slate-700" x-text="t('wait_refresh')"></p>
             </div>
           </template>
         </div>
@@ -692,7 +720,7 @@
 
       <!-- Distribution bar -->
       <div class="card p-5">
-        <p class="text-[11px] text-slate-600 uppercase tracking-widest mb-4">持仓状态分布</p>
+        <p class="text-[11px] text-slate-600 uppercase tracking-widest mb-4" x-text="t('status_distribution')"></p>
         <div class="flex h-3 rounded-full overflow-hidden gap-0.5" x-show="overview.total_active > 0">
           <div class="rounded-sm transition-all duration-1000"
             style="background: linear-gradient(90deg,#22c55e,#16a34a)"
@@ -705,15 +733,15 @@
             :style="'width:'+pct(overview.status_breakdown?.in_storage,overview.total_active)+'%'"></div>
         </div>
         <div class="flex flex-wrap gap-x-6 gap-y-1 mt-3 text-xs text-slate-600">
-          <span><span class="text-green-400">●</span> 出租中
+          <span><span class="text-green-400">●</span> <span x-text="t('status_rented')"></span>
             <span class="font-mono text-green-300 ml-1" x-text="overview.status_breakdown?.rented_out??0"></span>
             (<span x-text="pct(overview.status_breakdown?.rented_out,overview.total_active)+'%'"></span>)
           </span>
-          <span><span class="text-blue-400">●</span> Steam中
+          <span><span class="text-blue-400">●</span> <span x-text="t('status_steam')"></span>
             <span class="font-mono text-blue-300 ml-1" x-text="overview.status_breakdown?.in_steam??0"></span>
             (<span x-text="pct(overview.status_breakdown?.in_steam,overview.total_active)+'%'"></span>)
           </span>
-          <span><span class="text-purple-400">●</span> 收藏
+          <span><span class="text-purple-400">●</span> <span x-text="t('status_storage')"></span>
             <span class="font-mono text-purple-300 ml-1" x-text="overview.status_breakdown?.in_storage??0"></span>
             (<span x-text="pct(overview.status_breakdown?.in_storage,overview.total_active)+'%'"></span>)
           </span>
@@ -730,27 +758,27 @@
           <button @click="shelfTab='sell'; selectedItems=[]; loadShelf()"
             class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
             :class="shelfTab==='sell' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'">
-            出售货架 <span class="font-mono ml-1 text-slate-400" x-text="sellShelf.total??0"></span>
+            <span x-text="t('shelf_sell')"></span> <span class="font-mono ml-1 text-slate-400" x-text="sellShelf.total??0"></span>
           </button>
           <button @click="shelfTab='lease'; selectedItems=[]; loadShelf()"
             class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
             :class="shelfTab==='lease' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'">
-            出租货架 <span class="font-mono ml-1 text-slate-400" x-text="leaseShelf.total??0"></span>
+            <span x-text="t('shelf_lease')"></span> <span class="font-mono ml-1 text-slate-400" x-text="leaseShelf.total??0"></span>
           </button>
           <button @click="shelfTab='rented'; selectedItems=[]; loadRentedList(1)"
             class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
             :class="shelfTab==='rented' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'">
-            已租出 <span class="font-mono ml-1 text-slate-400" x-text="rentedList.total??'—'"></span>
+            <span x-text="t('shelf_rented')"></span> <span class="font-mono ml-1 text-slate-400" x-text="rentedList.total??'—'"></span>
           </button>
           <button @click="shelfTab='sublet'; selectedItems=[]; loadSubletList(1)"
             class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
             :class="shelfTab==='sublet' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'">
-            转租中/0CD <span class="font-mono ml-1 text-amber-500" x-text="subletList.total??'—'"></span>
+            <span x-text="t('shelf_sublet')"></span> <span class="font-mono ml-1 text-amber-500" x-text="subletList.total??'—'"></span>
           </button>
           <button @click="shelfTab='unlisted'; selectedItems=[]; loadUnlistedItems(1)"
             class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
             :class="shelfTab==='unlisted' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'">
-            待上架 <span class="font-mono ml-1 text-blue-400" x-text="unlistedItems.total??'—'"></span>
+            <span x-text="t('shelf_unlisted')"></span> <span class="font-mono ml-1 text-blue-400" x-text="unlistedItems.total??'—'"></span>
           </button>
         </div>
 
@@ -762,23 +790,22 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
           </svg>
-          刷新
+          <span x-text="t('btn_refresh')"></span>
         </button>
 
-        <div class="ml-auto text-[11px] text-slate-700">
-          智能上架功能需先完成「同步数据」→「同步模板ID」以获取市场定价参考
+        <div class="ml-auto text-[11px] text-slate-700" x-text="t('smart_listing_note')">
         </div>
       </div>
 
       <!-- Template ID sync reminder (if needed, only for shelf tabs) -->
       <div x-show="(shelfTab==='sell'||shelfTab==='lease') && !shelfLoading && sellShelf.total === 0 && leaseShelf.total === 0" x-cloak
         class="card p-5 mb-4 text-center">
-        <p class="text-slate-500 text-sm mb-3">货架为空，或尚未同步模板ID（用于市场定价）</p>
+        <p class="text-slate-500 text-sm mb-3" x-text="t('shelf_empty_sync')"></p>
         <button @click="syncTemplateIds()" :disabled="syncing"
           class="px-5 py-2 rounded-xl text-sm font-medium text-white transition-all disabled:opacity-40"
           style="background:linear-gradient(135deg,#7c3aed,#6d28d9); box-shadow:0 0 16px rgba(124,58,237,0.25)">
-          <span x-show="!syncing">同步模板ID（用于市场定价）</span>
-          <span x-show="syncing" x-cloak>同步中…</span>
+          <span x-show="!syncing" x-text="t('btn_sync_template')"></span>
+          <span x-show="syncing" x-cloak x-text="t('syncing_text')"></span>
         </button>
       </div>
 
@@ -787,17 +814,16 @@
         <!-- 批量操作栏 -->
         <div x-show="selectedItems.length > 0"
           class="px-4 py-2 flex items-center gap-3 border-b" style="border-color:rgba(51,65,85,0.3);background:rgba(99,102,241,0.05)">
-          <span class="text-[11px] text-indigo-400">已选 <span class="font-mono" x-text="selectedItems.length"></span> 件</span>
+          <span class="text-[11px] text-indigo-400"><span x-text="t('selected_count')"></span> <span class="font-mono" x-text="selectedItems.length"></span></span>
           <button @click="batchDelist()"
-            class="text-[11px] px-2 py-1 rounded-lg" style="background:rgba(239,68,68,0.08);color:rgba(239,68,68,0.7);border:1px solid rgba(239,68,68,0.15)">
-            批量下架
-          </button>
+            class="text-[11px] px-2 py-1 rounded-lg" style="background:rgba(239,68,68,0.08);color:rgba(239,68,68,0.7);border:1px solid rgba(239,68,68,0.15)"
+            x-text="t('btn_batch_delist')"></button>
           <button @click="batchSmartReprice()" :disabled="batchRepricing"
             class="text-[11px] px-2 py-1 rounded-lg disabled:opacity-40" style="background:rgba(99,102,241,0.08);color:rgba(99,102,241,0.8);border:1px solid rgba(99,102,241,0.2)">
-            <span x-show="!batchRepricing">批量智能改价</span>
-            <span x-show="batchRepricing" x-cloak>改价中… (<span x-text="batchRepriceProgress"></span>)</span>
+            <span x-show="!batchRepricing" x-text="t('btn_batch_reprice')"></span>
+            <span x-show="batchRepricing" x-cloak><span x-text="t('btn_repricing')"></span> (<span x-text="batchRepriceProgress"></span>)</span>
           </button>
-          <button @click="selectedItems=[]" class="text-[11px] text-slate-600 ml-auto">清除选择</button>
+          <button @click="selectedItems=[]" class="text-[11px] text-slate-600 ml-auto" x-text="t('clear_selection')"></button>
         </div>
         <div class="tbl-wrap">
           <table class="w-full text-xs" style="border-collapse: separate; border-spacing: 0;">
@@ -808,25 +834,25 @@
                     :checked="currentShelf.length>0 && currentShelf.every(i=>selectedItems.includes(i.commodityId))"/>
                 </th>
                 <th class="py-3 px-2 w-12"></th>
-                <th class="py-3 px-4 text-left font-normal text-slate-700 uppercase tracking-wider">饰品</th>
+                <th class="py-3 px-4 text-left font-normal text-slate-700 uppercase tracking-wider" x-text="t('th_item')"></th>
                 <template x-if="shelfTab==='sell'">
-                  <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">出售价</th>
+                  <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider" x-text="t('th_sell_price')"></th>
                 </template>
                 <template x-if="shelfTab==='sell'">
-                  <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider" style="color:#0f766e" title="市场最低参考价（点击行内「查」按钮获取）">市场参考价</th>
+                  <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider" style="color:#0f766e" x-text="t('th_market_ref')"></th>
                 </template>
                 <template x-if="shelfTab==='lease'">
-                  <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">日租金</th>
+                  <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider" x-text="t('th_daily_rent')"></th>
                 </template>
                 <template x-if="shelfTab==='lease'">
-                  <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">押金</th>
+                  <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider" x-text="t('th_deposit')"></th>
                 </template>
                 <template x-if="shelfTab==='lease'">
-                  <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider" style="color:#0f766e" title="市场参考租金/押金（点击「查」获取）">市场参考租金</th>
+                  <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider" style="color:#0f766e" x-text="t('th_market_ref_rent')"></th>
                 </template>
-                <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">磨损</th>
-                <th class="py-3 px-3 text-left font-normal text-slate-700 uppercase tracking-wider">状态</th>
-                <th class="py-3 px-4 w-32 text-center font-normal text-slate-700 uppercase tracking-wider">操作</th>
+                <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider" x-text="t('th_abrade')"></th>
+                <th class="py-3 px-3 text-left font-normal text-slate-700 uppercase tracking-wider" x-text="t('th_status')"></th>
+                <th class="py-3 px-4 w-32 text-center font-normal text-slate-700 uppercase tracking-wider" x-text="t('th_operation')"></th>
               </tr>
             </thead>
             <tbody>
@@ -834,12 +860,12 @@
                 <tr><td colspan="10" class="py-16 text-center" style="color:#334155">
                   <div class="flex flex-col items-center gap-2">
                     <div class="w-5 h-5 rounded-full border-2 animate-spin" style="border-color:rgba(51,65,85,0.4);border-top-color:#3b82f6"></div>
-                    <span class="text-xs">加载货架…</span>
+                    <span class="text-xs" x-text="t('loading_shelf')"></span>
                   </div>
                 </td></tr>
               </template>
               <template x-if="!shelfLoading && currentShelf.length === 0">
-                <tr><td colspan="10" class="py-16 text-center text-xs" style="color:#334155">货架为空</td></tr>
+                <tr><td colspan="10" class="py-16 text-center text-xs" style="color:#334155" x-text="t('shelf_empty')"></td></tr>
               </template>
               <template x-for="item in currentShelf" :key="item.commodityId || item.CommodityId">
                 <tr class="tbl-row">
@@ -858,7 +884,7 @@
                     <div class="flex items-center gap-2.5">
                       <div class="min-w-0">
                         <p class="leading-tight truncate font-medium" style="max-width:280px"
-                          :class="rarityClass(item.commodityHashName || item.marketHashName)"
+                          :style="rarityStyle(item.commodityHashName || item.marketHashName)"
                           x-text="nameLang==='cn' ? (item.name||item.Name||item.commodityHashName||'—') : (item.commodityHashName||item.marketHashName||item.market_hash_name||'—')"></p>
                         <p class="text-[11px] mt-0.5 truncate" style="color:#334155; max-width:280px"
                           x-text="nameLang==='cn' ? (item.commodityHashName||item.marketHashName||'') : (item.name||item.Name||'')"></p>
@@ -914,7 +940,7 @@
                     x-text="(item.abrade || item.Abrade) != null ? parseFloat(item.abrade || item.Abrade).toFixed(4) : '—'"></td>
                   <td class="py-2.5 px-3">
                     <span class="px-2 py-0.5 rounded-full text-[11px]"
-                      style="background:rgba(34,197,94,0.1); color:#4ade80">在售</span>
+                      style="background:rgba(34,197,94,0.1); color:#4ade80" x-text="t('on_sale')"></span>
                   </td>
                   <td class="py-2.5 px-4 text-center">
                     <div class="flex items-center justify-center gap-1.5">
@@ -923,14 +949,14 @@
                         style="background:rgba(99,102,241,0.08); color:rgba(99,102,241,0.7); border:1px solid rgba(99,102,241,0.15)"
                         @mouseenter="$el.style.background='rgba(99,102,241,0.18)'"
                         @mouseleave="$el.style.background='rgba(99,102,241,0.08)'">
-                        改价
+                        <span x-text="t('btn_reprice')"></span>
                       </button>
                       <button @click="delistItem(item.commodityId || item.CommodityId)"
                         class="text-[11px] px-2 py-1 rounded-lg transition-all"
                         style="background:rgba(239,68,68,0.08); color:rgba(239,68,68,0.6); border:1px solid rgba(239,68,68,0.15)"
                         @mouseenter="$el.style.background='rgba(239,68,68,0.15)'"
-                        @mouseleave="$el.style.background='rgba(239,68,68,0.08)'">
-                        下架
+                        @mouseleave="$el.style.background='rgba(239,68,68,0.08)'"
+                        x-text="t('btn_delist')">
                       </button>
                     </div>
                   </td>
@@ -949,12 +975,12 @@
           <table class="w-full text-xs" style="border-collapse: separate; border-spacing: 0;">
             <thead>
               <tr style="border-bottom: 1px solid rgba(51,65,85,0.3);">
-                <th class="py-3 px-4 text-left font-normal text-slate-700 uppercase tracking-wider">饰品</th>
-                <th class="py-3 px-3 text-left font-normal text-slate-700 uppercase tracking-wider">状态</th>
-                <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">租金</th>
-                <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">到期时间</th>
-                <th class="py-3 px-3 text-center font-normal text-slate-700 uppercase tracking-wider">续租</th>
-                <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">磨损</th>
+                <th class="py-3 px-4 text-left font-normal text-slate-700 uppercase tracking-wider" x-text="t('th_item')"></th>
+                <th class="py-3 px-3 text-left font-normal text-slate-700 uppercase tracking-wider" x-text="t('th_status')"></th>
+                <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider" x-text="t('th_daily_rent')"></th>
+                <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider" x-text="t('th_expire')"></th>
+                <th class="py-3 px-3 text-center font-normal text-slate-700 uppercase tracking-wider" x-text="t('th_renewal')"></th>
+                <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider" x-text="t('th_abrade')"></th>
               </tr>
             </thead>
             <tbody>
@@ -962,12 +988,12 @@
                 <tr><td colspan="6" class="py-16 text-center" style="color:#334155">
                   <div class="flex flex-col items-center gap-2">
                     <div class="w-5 h-5 rounded-full border-2 animate-spin" style="border-color:rgba(51,65,85,0.4);border-top-color:#3b82f6"></div>
-                    <span class="text-xs">加载中…</span>
+                    <span class="text-xs" x-text="t('loading_data')"></span>
                   </div>
                 </td></tr>
               </template>
               <template x-if="!rentedLoading && (rentedList.items||[]).length === 0">
-                <tr><td colspan="6" class="py-16 text-center text-xs" style="color:#334155">暂无数据，请点击「刷新」</td></tr>
+                <tr><td colspan="6" class="py-16 text-center text-xs" style="color:#334155" x-text="t('no_data')"></td></tr>
               </template>
               <template x-for="item in (rentedList.items||[])" :key="item.orderId">
                 <tr class="tbl-row">
@@ -979,7 +1005,7 @@
                       </div>
                       <div class="min-w-0">
                         <p class="font-medium leading-tight truncate" style="max-width:260px"
-                          :class="rarityClass(item.hashName)"
+                          :style="rarityStyle(item.hashName)"
                           x-text="nameLang==='cn' ? (item.name||item.hashName||'—') : (item.hashName||item.name||'—')"></p>
                         <p class="leading-tight truncate mt-0.5" style="max-width:260px; color:#475569"
                           x-text="nameLang==='cn' ? (item.hashName||'') : (item.name||'')"></p>
@@ -989,7 +1015,7 @@
                   <td class="py-2.5 px-3">
                     <span class="px-2 py-0.5 rounded-full text-[11px]"
                       :style="item.isSublet ? 'background:rgba(234,179,8,0.1);color:#fbbf24' : 'background:rgba(99,102,241,0.1);color:#818cf8'"
-                      x-text="item.isSublet ? '转租中' : (item.orderStatusDesc || '租出中')"></span>
+                      x-text="item.isSublet ? t('subletting') : (item.orderStatusDesc || t('status_rented'))"></span>
                   </td>
                   <td class="py-2.5 px-3 text-right font-semibold text-emerald-300" x-text="item.leaseAmountDesc || '—'"></td>
                   <td class="py-2.5 px-3 text-right font-mono text-slate-400"
@@ -1007,12 +1033,12 @@
         </div>
         <div x-show="!rentedLoading && rentedList.total > (rentedList.page_size||50)"
           class="flex items-center justify-between px-4 py-3 border-t" style="border-color:rgba(51,65,85,0.3)">
-          <span class="text-[11px] text-slate-600">共 <span class="font-mono text-slate-400" x-text="rentedList.total"></span> 条 · 第 <span class="font-mono text-slate-400" x-text="rentedPage"></span> 页</span>
+          <span class="text-[11px] text-slate-600"><span x-text="t('total_records')"></span> <span class="font-mono text-slate-400" x-text="rentedList.total"></span> <span x-text="t('records_unit')"></span> · <span x-text="t('page_prefix')"></span> <span class="font-mono text-slate-400" x-text="rentedPage"></span> <span x-text="t('page_unit')"></span></span>
           <div class="flex gap-2">
             <button @click="loadRentedList(rentedPage-1)" :disabled="rentedPage<=1"
-              class="px-3 py-1 rounded-lg text-xs disabled:opacity-30" style="background:rgba(51,65,85,0.3);color:#94a3b8">上一页</button>
+              class="px-3 py-1 rounded-lg text-xs disabled:opacity-30" style="background:rgba(51,65,85,0.3);color:#94a3b8">‹</button>
             <button @click="loadRentedList(rentedPage+1)" :disabled="rentedPage*(rentedList.page_size||50)>=rentedList.total"
-              class="px-3 py-1 rounded-lg text-xs disabled:opacity-30" style="background:rgba(51,65,85,0.3);color:#94a3b8">下一页</button>
+              class="px-3 py-1 rounded-lg text-xs disabled:opacity-30" style="background:rgba(51,65,85,0.3);color:#94a3b8">›</button>
           </div>
         </div>
       </div>
@@ -1021,12 +1047,11 @@
       <div x-show="shelfTab==='sublet'" class="card overflow-hidden">
         <!-- 批量操作栏 -->
         <div x-show="selectedItems.length > 0" class="px-4 py-2 flex items-center gap-3 border-b" style="border-color:rgba(51,65,85,0.3);background:rgba(234,179,8,0.05)">
-          <span class="text-[11px] text-amber-400">已选 <span class="font-mono" x-text="selectedItems.length"></span> 件</span>
+          <span class="text-[11px] text-amber-400"><span x-text="t('selected_count')"></span> <span class="font-mono" x-text="selectedItems.length"></span></span>
           <button @click="batchDisableZeroCd()"
-            class="text-[11px] px-2 py-1 rounded-lg" style="background:rgba(234,179,8,0.1);color:#fbbf24;border:1px solid rgba(234,179,8,0.15)">
-            批量取消转租
-          </button>
-          <button @click="selectedItems=[]" class="text-[11px] text-slate-600 ml-auto">清除选择</button>
+            class="text-[11px] px-2 py-1 rounded-lg" style="background:rgba(234,179,8,0.1);color:#fbbf24;border:1px solid rgba(234,179,8,0.15)"
+            x-text="t('btn_cancel_sublet')+'('+t('btn_batch_delist')+')'"></button>
+          <button @click="selectedItems=[]" class="text-[11px] text-slate-600 ml-auto" x-text="t('clear_selection')"></button>
         </div>
         <div class="tbl-wrap">
           <table class="w-full text-xs" style="border-collapse: separate; border-spacing: 0;">
@@ -1037,11 +1062,11 @@
                     :checked="(subletList.items||[]).length>0 && (subletList.items||[]).every(i=>selectedItems.includes(i.commodityId))"/>
                 </th>
                 <th class="py-3 px-2 w-12"></th>
-                <th class="py-3 px-3 text-left font-normal text-slate-700 uppercase tracking-wider">饰品</th>
-                <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">日租金</th>
-                <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">押金</th>
-                <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">磨损</th>
-                <th class="py-3 px-4 text-center font-normal text-slate-700 uppercase tracking-wider">操作</th>
+                <th class="py-3 px-3 text-left font-normal text-slate-700 uppercase tracking-wider" x-text="t('th_item')"></th>
+                <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider" x-text="t('th_daily_rent')"></th>
+                <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider" x-text="t('th_deposit')"></th>
+                <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider" x-text="t('th_abrade')"></th>
+                <th class="py-3 px-4 text-center font-normal text-slate-700 uppercase tracking-wider" x-text="t('th_operation')"></th>
               </tr>
             </thead>
             <tbody>
@@ -1049,12 +1074,12 @@
                 <tr><td colspan="7" class="py-16 text-center" style="color:#334155">
                   <div class="flex flex-col items-center gap-2">
                     <div class="w-5 h-5 rounded-full border-2 animate-spin" style="border-color:rgba(51,65,85,0.4);border-top-color:#f59e0b"></div>
-                    <span class="text-xs">加载转租中饰品…</span>
+                    <span class="text-xs" x-text="t('loading_data')"></span>
                   </div>
                 </td></tr>
               </template>
               <template x-if="!subletLoading && (subletList.items||[]).length === 0">
-                <tr><td colspan="7" class="py-16 text-center text-xs" style="color:#334155">暂无转租中饰品，请点击「刷新」</td></tr>
+                <tr><td colspan="7" class="py-16 text-center text-xs" style="color:#334155" x-text="t('no_data')"></td></tr>
               </template>
               <template x-for="item in (subletList.items||[])" :key="item.commodityId">
                 <tr class="tbl-row">
@@ -1072,7 +1097,7 @@
                   <td class="py-2.5 px-3">
                     <div class="min-w-0">
                       <p class="leading-tight truncate font-medium" style="max-width:260px"
-                        :class="rarityClass(item.commodityHashName)"
+                        :style="rarityStyle(item.commodityHashName)"
                         x-text="nameLang==='cn' ? (item.name||item.commodityHashName||'—') : (item.commodityHashName||item.name||'—')"></p>
                     </div>
                   </td>
@@ -1088,16 +1113,14 @@
                         class="text-[11px] px-2 py-1 rounded-lg transition-all"
                         style="background:rgba(99,102,241,0.08);color:rgba(99,102,241,0.7);border:1px solid rgba(99,102,241,0.15)"
                         @mouseenter="$el.style.background='rgba(99,102,241,0.18)'"
-                        @mouseleave="$el.style.background='rgba(99,102,241,0.08)'">
-                        改价
-                      </button>
+                        @mouseleave="$el.style.background='rgba(99,102,241,0.08)'"
+                        x-text="t('btn_reprice')"></button>
                       <button @click="cancelSubletOrder(item.orderId || item.commodityId)"
                         class="text-[11px] px-2 py-1 rounded-lg transition-all"
                         style="background:rgba(234,179,8,0.08);color:rgba(234,179,8,0.7);border:1px solid rgba(234,179,8,0.15)"
                         @mouseenter="$el.style.background='rgba(234,179,8,0.18)'"
-                        @mouseleave="$el.style.background='rgba(234,179,8,0.08)'">
-                        取消转租
-                      </button>
+                        @mouseleave="$el.style.background='rgba(234,179,8,0.08)'"
+                        x-text="t('btn_cancel_sublet')"></button>
                     </div>
                   </td>
                 </tr>
@@ -1107,12 +1130,12 @@
         </div>
         <div x-show="!subletLoading && subletList.total > (subletList.page_size||50)"
           class="flex items-center justify-between px-4 py-3 border-t" style="border-color:rgba(51,65,85,0.3)">
-          <span class="text-[11px] text-slate-600">共 <span class="font-mono text-slate-400" x-text="subletList.total"></span> 件 · 第 <span class="font-mono text-slate-400" x-text="subletPage"></span> 页</span>
+          <span class="text-[11px] text-slate-600"><span x-text="t('total_records')"></span> <span class="font-mono text-slate-400" x-text="subletList.total"></span> · <span x-text="t('page_prefix')"></span> <span class="font-mono text-slate-400" x-text="subletPage"></span> <span x-text="t('page_unit')"></span></span>
           <div class="flex gap-2">
             <button @click="loadSubletList(subletPage-1)" :disabled="subletPage<=1"
-              class="px-3 py-1 rounded-lg text-xs disabled:opacity-30" style="background:rgba(51,65,85,0.3);color:#94a3b8">上一页</button>
+              class="px-3 py-1 rounded-lg text-xs disabled:opacity-30" style="background:rgba(51,65,85,0.3);color:#94a3b8">‹</button>
             <button @click="loadSubletList(subletPage+1)" :disabled="subletPage*(subletList.page_size||50)>=subletList.total"
-              class="px-3 py-1 rounded-lg text-xs disabled:opacity-30" style="background:rgba(51,65,85,0.3);color:#94a3b8">下一页</button>
+              class="px-3 py-1 rounded-lg text-xs disabled:opacity-30" style="background:rgba(51,65,85,0.3);color:#94a3b8">›</button>
           </div>
         </div>
       </div>
@@ -1120,18 +1143,18 @@
       <!-- ── 待上架饰品 ── -->
       <div x-show="shelfTab==='unlisted'" class="card overflow-hidden">
         <div x-show="unlistedItems.total > 0" x-cloak class="px-4 py-2 text-[11px] text-slate-500 border-b" style="border-color:rgba(51,65,85,0.3)">
-          Steam库存 <span class="text-slate-400 font-mono" x-text="unlistedItems.total_inventory"></span> 件 ·
-          已上架 <span class="text-slate-400 font-mono" x-text="unlistedItems.total_listed"></span> 件 ·
-          可上架 <span class="text-blue-400 font-mono" x-text="unlistedItems.total"></span> 件
+          Steam <span class="text-slate-400 font-mono" x-text="unlistedItems.total_inventory"></span> ·
+          <span x-text="t('on_sale')"></span> <span class="text-slate-400 font-mono" x-text="unlistedItems.total_listed"></span> ·
+          <span x-text="t('shelf_unlisted')"></span> <span class="text-blue-400 font-mono" x-text="unlistedItems.total"></span>
         </div>
         <div class="tbl-wrap">
           <table class="w-full text-xs" style="border-collapse: separate; border-spacing: 0;">
             <thead>
               <tr style="border-bottom: 1px solid rgba(51,65,85,0.3);">
-                <th class="py-3 px-4 text-left font-normal text-slate-700 uppercase tracking-wider">饰品</th>
-                <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider">磨损</th>
-                <th class="py-3 px-3 text-center font-normal text-slate-700 uppercase tracking-wider">模板ID</th>
-                <th class="py-3 px-4 text-center font-normal text-slate-700 uppercase tracking-wider">快捷上架</th>
+                <th class="py-3 px-4 text-left font-normal text-slate-700 uppercase tracking-wider" x-text="t('th_item')"></th>
+                <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider" x-text="t('th_abrade')"></th>
+                <th class="py-3 px-3 text-center font-normal text-slate-700 uppercase tracking-wider">Template ID</th>
+                <th class="py-3 px-4 text-center font-normal text-slate-700 uppercase tracking-wider" x-text="t('th_operation')"></th>
               </tr>
             </thead>
             <tbody>
@@ -1139,13 +1162,13 @@
                 <tr><td colspan="4" class="py-16 text-center" style="color:#334155">
                   <div class="flex flex-col items-center gap-2">
                     <div class="w-5 h-5 rounded-full border-2 animate-spin" style="border-color:rgba(51,65,85,0.4);border-top-color:#60a5fa"></div>
-                    <span class="text-xs">拉取库存对比中…（需几秒）</span>
+                    <span class="text-xs" x-text="t('loading_data')"></span>
                   </div>
                 </td></tr>
               </template>
               <template x-if="!unlistedLoading && (unlistedItems.items||[]).length === 0">
                 <tr><td colspan="4" class="py-16 text-center text-xs" style="color:#334155">
-                  暂无待上架饰品，或请点击「刷新」加载
+                  <span x-text="t('no_data')"></span>
                 </td></tr>
               </template>
               <template x-for="item in (unlistedItems.items||[])" :key="item.assetId">
@@ -1169,9 +1192,9 @@
                       style="background:rgba(59,130,246,0.08); color:rgba(59,130,246,0.7); border:1px solid rgba(59,130,246,0.15)"
                       @mouseenter="$el.style.background='rgba(59,130,246,0.18)'"
                       @mouseleave="$el.style.background='rgba(59,130,246,0.08)'">
-                      → 上架面板
+                      → List
                     </button>
-                    <span x-show="!item.templateId" class="text-[11px] text-slate-700">无模板ID</span>
+                    <span x-show="!item.templateId" class="text-[11px] text-slate-700">—</span>
                   </td>
                 </tr>
               </template>
@@ -1180,19 +1203,18 @@
         </div>
         <div x-show="!unlistedLoading && unlistedItems.total > (unlistedItems.page_size||50)"
           class="flex items-center justify-between px-4 py-3 border-t" style="border-color:rgba(51,65,85,0.3)">
-          <span class="text-[11px] text-slate-600">共 <span class="font-mono text-slate-400" x-text="unlistedItems.total"></span> 件 · 第 <span class="font-mono text-slate-400" x-text="unlistedPage"></span> 页</span>
+          <span class="text-[11px] text-slate-600"><span x-text="t('total_records')"></span> <span class="font-mono text-slate-400" x-text="unlistedItems.total"></span> · <span x-text="t('page_prefix')"></span> <span class="font-mono text-slate-400" x-text="unlistedPage"></span> <span x-text="t('page_unit')"></span></span>
           <div class="flex gap-2">
             <button @click="loadUnlistedItems(unlistedPage-1)" :disabled="unlistedPage<=1"
-              class="px-3 py-1 rounded-lg text-xs disabled:opacity-30" style="background:rgba(51,65,85,0.3);color:#94a3b8">上一页</button>
+              class="px-3 py-1 rounded-lg text-xs disabled:opacity-30" style="background:rgba(51,65,85,0.3);color:#94a3b8">‹</button>
             <button @click="loadUnlistedItems(unlistedPage+1)" :disabled="unlistedPage*(unlistedItems.page_size||50)>=unlistedItems.total"
-              class="px-3 py-1 rounded-lg text-xs disabled:opacity-30" style="background:rgba(51,65,85,0.3);color:#94a3b8">下一页</button>
+              class="px-3 py-1 rounded-lg text-xs disabled:opacity-30" style="background:rgba(51,65,85,0.3);color:#94a3b8">›</button>
           </div>
         </div>
       </div>
 
       <!-- 提示：使用待上架 tab 快速上架 -->
-      <div x-show="shelfTab==='sell' || shelfTab==='lease'" class="mt-3 px-4 py-2 text-[11px] text-slate-700 text-center">
-        需要上架新饰品？请切换到「待上架」标签页，从库存中选择饰品快速上架
+      <div x-show="shelfTab==='sell' || shelfTab==='lease'" class="mt-3 px-4 py-2 text-[11px] text-slate-700 text-center" x-text="t('need_list_note')">
       </div>
     </div>
 
@@ -1201,11 +1223,11 @@
 
       <!-- Sub-tabs -->
       <div class="flex gap-1 mb-4">
-        <template x-for="t in [{k:'overview',l:'市场总览'},{k:'detail',l:'饰品分析'},{k:'alerts',l:'预警中心'},{k:'spreads',l:'套利雷达'}]">
-          <button @click="analysisTab=t.k; loadAnalysisSubTab(t.k)"
+        <template x-for="tab in [{k:'overview',l:'analysis_overview'},{k:'detail',l:'analysis_detail'},{k:'alerts',l:'analysis_alerts'},{k:'spreads',l:'analysis_spreads'}]">
+          <button @click="analysisTab=tab.k; loadAnalysisSubTab(tab.k)"
             class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-            :class="analysisTab===t.k ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'"
-            x-text="t.l"></button>
+            :class="analysisTab===tab.k ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'"
+            x-text="t(tab.l)"></button>
         </template>
       </div>
 
@@ -1214,28 +1236,28 @@
         <!-- Stat cards -->
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
           <div class="card p-4 cursor-pointer" @click="analysisTab='alerts'; loadAnalysisSubTab('alerts')">
-            <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-1">未读预警</p>
+            <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-1" x-text="t('unread_alerts')"></p>
             <p class="text-2xl font-bold" :class="(ao.unread_alerts||0)>0?'text-red-400':'text-slate-400'" x-text="ao.unread_alerts||0"></p>
           </div>
           <div class="card p-4">
-            <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-1">平均卖出评分</p>
+            <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-1" x-text="t('avg_sell_score')"></p>
             <p class="text-2xl font-bold" :class="scoreColor(ao.avg_sell_score)" x-text="ao.avg_sell_score!==null?ao.avg_sell_score:'—'"></p>
             <p class="text-[10px] mt-1" :class="scoreColor(ao.avg_sell_score)" x-text="scoreLabel(ao.avg_sell_score)"></p>
           </div>
           <div class="card p-4">
-            <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-1">30D 平均动量</p>
-            <p class="text-2xl font-bold" :class="ao.avg_momentum_30>0?'text-emerald-400':'text-red-400'" x-text="ao.avg_momentum_30!==null?(ao.avg_momentum_30>0?'+':'')+ao.avg_momentum_30+'%':'—'"></p>
+            <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-1" x-text="t('avg_momentum_30')"></p>
+            <p class="text-2xl font-bold" :class="pnlClass(ao.avg_momentum_30)" x-text="ao.avg_momentum_30!==null?(ao.avg_momentum_30>0?'+':'')+ao.avg_momentum_30+'%':'—'"></p>
           </div>
           <div class="card p-4">
-            <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-1">数据状态</p>
-            <p class="text-xs text-slate-400 mt-1" x-text="ao.collector?.status==='running'?'采集中…':ao.collector?.last_run?'上次: '+ao.collector.last_run.slice(5,16):'未启动'"></p>
-            <p class="text-[10px] text-slate-600 mt-0.5" x-text="ao.signal_date?'信号日期: '+ao.signal_date:'无信号数据'"></p>
+            <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-1" x-text="t('data_status')"></p>
+            <p class="text-xs text-slate-400 mt-1" x-text="ao.collector?.status==='running'?t('collecting'):ao.collector?.last_run?t('last_run')+': '+ao.collector.last_run.slice(5,16):t('not_started')"></p>
+            <p class="text-[10px] text-slate-600 mt-0.5" x-text="ao.signal_date?t('signal_date')+': '+ao.signal_date:t('no_signal')"></p>
           </div>
         </div>
 
         <!-- Sell Score Distribution (clickable bars) -->
         <div class="card p-4 mb-5">
-          <p class="text-[11px] text-slate-500 mb-3 font-medium">卖出评分分布（持仓饰品） <span class="text-slate-700">— 点击柱状查看详情</span></p>
+          <p class="text-[11px] text-slate-500 mb-3 font-medium"><span x-text="t('score_dist_title')"></span> <span class="text-slate-700">— <span x-text="t('score_dist_hint')"></span></span></p>
           <div class="flex items-end gap-1.5 h-20">
             <template x-for="(v,i) in (ao.score_distribution||[0,0,0,0,0])">
               <div class="flex-1 flex flex-col items-center gap-1 cursor-pointer"
@@ -1244,7 +1266,7 @@
                 <div class="w-full rounded-t transition-all duration-500 hover:opacity-80"
                   :style="'height:'+Math.max(4, v/Math.max(1,...(ao.score_distribution||[1]))*60)+'px'"
                   :class="['bg-emerald-500/60','bg-slate-500/60','bg-yellow-500/60','bg-orange-500/60','bg-red-500/60'][i]"></div>
-                <span class="text-[9px] text-slate-600" x-text="['持有','中性','考虑卖','强卖','急卖'][i]"></span>
+                <span class="text-[9px] text-slate-600" x-text="[t('score_hold'),t('score_neutral'),t('score_consider'),t('score_strong'),t('score_urgent')][i]"></span>
               </div>
             </template>
           </div>
@@ -1252,17 +1274,17 @@
           <div x-show="scoreBucket.show" x-cloak class="mt-3 border-t pt-3" style="border-color:rgba(51,65,85,0.3)">
             <div class="flex items-center justify-between mb-2">
               <p class="text-[11px] text-slate-400" x-text="scoreBucket.label+' (评分 '+scoreBucket.min+'~'+scoreBucket.max+')'"></p>
-              <button @click="scoreBucket.show=false" class="text-[10px] text-slate-600 hover:text-slate-400">收起</button>
+              <button @click="scoreBucket.show=false" class="text-[10px] text-slate-600 hover:text-slate-400">×</button>
             </div>
             <div class="space-y-1 max-h-48 overflow-y-auto">
               <template x-for="s in scoreBucket.items">
                 <div class="flex items-center justify-between px-2 py-1.5 rounded hover:bg-slate-800/30 cursor-pointer"
                   @click="analysisTab='detail'; analysisSelectedItem=s.market_hash_name; loadItemSignals(s.market_hash_name)">
-                  <span class="text-xs truncate max-w-[250px]" :class="rarityClass(s.market_hash_name)" x-text="s.market_hash_name"></span>
+                  <span class="text-xs truncate max-w-[250px]" :style="rarityStyle(s.market_hash_name)" x-text="s.market_hash_name"></span>
                   <span class="text-xs font-mono ml-2 flex-shrink-0" :class="scoreColor(s.sell_score)" x-text="s.sell_score"></span>
                 </div>
               </template>
-              <div x-show="!scoreBucket.items?.length" class="text-[10px] text-slate-700 text-center py-2">暂无数据</div>
+              <div x-show="!scoreBucket.items?.length" class="text-[10px] text-slate-700 text-center py-2">—</div>
             </div>
           </div>
         </div>
@@ -1272,28 +1294,40 @@
           <!-- Top 10 Sell Signals -->
           <div class="card overflow-hidden">
             <div class="px-4 py-3 border-b" style="border-color:rgba(51,65,85,0.3)">
-              <p class="text-[11px] text-slate-500 font-medium">Top 10 卖出信号</p>
+              <p class="text-[11px] text-slate-500 font-medium" x-text="t('top10_sell')"></p>
             </div>
             <table class="w-full text-xs">
               <thead><tr class="text-[10px] text-slate-600 uppercase" style="background:rgba(15,23,42,0.5)">
-                <th class="py-2 px-3 text-left">饰品</th>
-                <th class="py-2 px-2 text-right">评分</th>
+                <th class="py-2 px-3 text-left" x-text="t('th_item')"></th>
+                <th class="py-2 px-2 text-right">Score</th>
                 <th class="py-2 px-2 text-right">RSI</th>
-                <th class="py-2 px-2 text-right">30D动量</th>
+                <th class="py-2 px-2 text-right">30D</th>
                 <th class="py-2 px-2 text-right">ATH%</th>
               </tr></thead>
               <tbody>
                 <template x-for="s in (ao.top_sell||[])">
                   <tr class="border-t cursor-pointer hover:bg-slate-800/30" style="border-color:rgba(51,65,85,0.2)"
                     @click="analysisTab='detail'; analysisSelectedItem=s.market_hash_name; loadItemSignals(s.market_hash_name)">
-                    <td class="py-2 px-3 font-medium text-slate-300 truncate max-w-[200px]" :title="s.market_hash_name" x-text="s.market_hash_name"></td>
+                    <td class="py-2 px-3">
+                      <div class="flex items-center gap-2">
+                        <div class="w-7 h-7 rounded overflow-hidden flex-shrink-0" style="background:rgba(20,30,48,0.8)">
+                          <img :src="iconUrl(s.icon_url)" class="w-full h-full object-cover" @error="$el.style.opacity='0'" loading="lazy" x-show="s.icon_url" />
+                        </div>
+                        <div class="min-w-0">
+                          <p class="font-medium truncate max-w-[160px]" :style="rarityStyle(s.market_hash_name)" :title="s.market_hash_name"
+                            x-text="nameLang==='cn' ? (s.name||s.market_hash_name) : s.market_hash_name"></p>
+                          <p class="text-[10px] truncate max-w-[160px]" style="color:#475569"
+                            x-text="nameLang==='cn' ? s.market_hash_name : (s.name||'')"></p>
+                        </div>
+                      </div>
+                    </td>
                     <td class="py-2 px-2 text-right font-mono font-bold" :class="scoreColor(s.sell_score)" x-text="s.sell_score"></td>
                     <td class="py-2 px-2 text-right font-mono" :class="s.rsi_14>70?'text-red-400':s.rsi_14<30?'text-emerald-400':'text-slate-400'" x-text="s.rsi_14??'—'"></td>
-                    <td class="py-2 px-2 text-right font-mono" :class="s.momentum_30>0?'text-emerald-400':'text-red-400'" x-text="s.momentum_30!==null?(s.momentum_30>0?'+':'')+s.momentum_30+'%':'—'"></td>
+                    <td class="py-2 px-2 text-right font-mono" :class="pnlClass(s.momentum_30)" x-text="s.momentum_30!==null?(s.momentum_30>0?'+':'')+s.momentum_30+'%':'—'"></td>
                     <td class="py-2 px-2 text-right font-mono" :class="s.ath_pct>90?'text-yellow-300':'text-slate-400'" x-text="s.ath_pct?s.ath_pct+'%':'—'"></td>
                   </tr>
                 </template>
-                <tr x-show="!ao.top_sell?.length"><td colspan="5" class="py-6 text-center text-slate-600">暂无信号数据，请先触发信号计算</td></tr>
+                <tr x-show="!ao.top_sell?.length"><td colspan="5" class="py-6 text-center text-slate-600" x-text="t('no_signal_hint')"></td></tr>
               </tbody>
             </table>
           </div>
@@ -1301,27 +1335,27 @@
           <!-- Category Trends -->
           <div class="card overflow-hidden">
             <div class="px-4 py-3 border-b" style="border-color:rgba(51,65,85,0.3)">
-              <p class="text-[11px] text-slate-500 font-medium">分类趋势</p>
+              <p class="text-[11px] text-slate-500 font-medium" x-text="t('category_trends')"></p>
             </div>
             <table class="w-full text-xs">
               <thead><tr class="text-[10px] text-slate-600 uppercase" style="background:rgba(15,23,42,0.5)">
-                <th class="py-2 px-3 text-left">类别</th>
-                <th class="py-2 px-2 text-right">数量</th>
-                <th class="py-2 px-2 text-right">7D动量</th>
-                <th class="py-2 px-2 text-right">30D动量</th>
-                <th class="py-2 px-2 text-right">平均RSI</th>
+                <th class="py-2 px-3 text-left" x-text="nameLang==='cn'?'类别':'Category'"></th>
+                <th class="py-2 px-2 text-right" x-text="nameLang==='cn'?'数量':'Count'"></th>
+                <th class="py-2 px-2 text-right">7D</th>
+                <th class="py-2 px-2 text-right">30D</th>
+                <th class="py-2 px-2 text-right">RSI</th>
               </tr></thead>
               <tbody>
                 <template x-for="c in (ao.category_trends||[])">
                   <tr class="border-t" style="border-color:rgba(51,65,85,0.2)">
                     <td class="py-2 px-3 font-medium text-slate-300" x-text="catLabel(c.category)"></td>
                     <td class="py-2 px-2 text-right font-mono text-slate-400" x-text="c.count"></td>
-                    <td class="py-2 px-2 text-right font-mono" :class="c.avg_momentum_7>0?'text-emerald-400':'text-red-400'" x-text="c.avg_momentum_7!==null?(c.avg_momentum_7>0?'+':'')+c.avg_momentum_7+'%':'—'"></td>
-                    <td class="py-2 px-2 text-right font-mono" :class="c.avg_momentum_30>0?'text-emerald-400':'text-red-400'" x-text="c.avg_momentum_30!==null?(c.avg_momentum_30>0?'+':'')+c.avg_momentum_30+'%':'—'"></td>
+                    <td class="py-2 px-2 text-right font-mono" :class="pnlClass(c.avg_momentum_7)" x-text="c.avg_momentum_7!==null?(c.avg_momentum_7>0?'+':'')+c.avg_momentum_7+'%':'—'"></td>
+                    <td class="py-2 px-2 text-right font-mono" :class="pnlClass(c.avg_momentum_30)" x-text="c.avg_momentum_30!==null?(c.avg_momentum_30>0?'+':'')+c.avg_momentum_30+'%':'—'"></td>
                     <td class="py-2 px-2 text-right font-mono text-slate-400" x-text="c.avg_rsi??'—'"></td>
                   </tr>
                 </template>
-                <tr x-show="!ao.category_trends?.length"><td colspan="5" class="py-6 text-center text-slate-600">暂无分类数据</td></tr>
+                <tr x-show="!ao.category_trends?.length"><td colspan="5" class="py-6 text-center text-slate-600">—</td></tr>
               </tbody>
             </table>
           </div>
@@ -1331,17 +1365,17 @@
         <div class="flex gap-3 mt-4">
           <button @click="triggerBackfill()" :disabled="backfillRunning"
             class="px-4 py-2 rounded-lg text-xs font-medium bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50">
-            <span x-show="!backfillRunning">回填历史数据</span>
-            <span x-show="backfillRunning" x-cloak x-text="'回填中… '+backfillProgress"></span>
+            <span x-show="!backfillRunning" x-text="t('btn_backfill')"></span>
+            <span x-show="backfillRunning" x-cloak x-text="t('backfilling')+' '+backfillProgress"></span>
           </button>
           <button @click="triggerComputeNow()" :disabled="computingSignals"
             class="px-4 py-2 rounded-lg text-xs font-medium bg-slate-700 hover:bg-slate-600 text-white disabled:opacity-50">
-            <span x-show="!computingSignals">立即计算信号</span>
-            <span x-show="computingSignals" x-cloak>计算中…</span>
+            <span x-show="!computingSignals" x-text="t('btn_compute')"></span>
+            <span x-show="computingSignals" x-cloak x-text="t('computing')"></span>
           </button>
           <button @click="collectNow()" :disabled="ao.collector?.status==='running'"
             class="px-4 py-2 rounded-lg text-xs font-medium bg-slate-700 hover:bg-slate-600 text-white disabled:opacity-50">
-            <span x-text="ao.collector?.status==='running'?'采集中…':'立即采集价格'"></span>
+            <span x-text="ao.collector?.status==='running'?t('collecting'):t('btn_collect')"></span>
           </button>
         </div>
       </div>
@@ -1352,7 +1386,7 @@
         <div class="flex gap-3 mb-4">
           <div class="relative flex-1">
             <input type="text" x-model="analysisSearch" @input.debounce.300ms="searchAnalysisItems()"
-              placeholder="搜索饰品名称…" class="w-full px-4 py-2.5 rounded-xl text-sm text-white placeholder-slate-600"
+              :placeholder="t('search_item_hint')" class="w-full px-4 py-2.5 rounded-xl text-sm text-white placeholder-slate-600"
               style="background:rgba(15,23,42,0.8); border:1px solid rgba(51,65,85,0.3)" />
             <div x-show="analysisSearchResults.length>0" x-cloak
               class="absolute z-50 left-0 right-0 top-full mt-1 rounded-xl overflow-hidden shadow-xl max-h-60 overflow-y-auto"
@@ -1370,13 +1404,22 @@
             <!-- Price Chart -->
             <div class="card p-4 mb-4">
               <div class="flex items-center justify-between mb-3">
-                <p class="text-sm font-medium text-slate-300" x-text="analysisSelectedItem"></p>
+                <div class="flex items-center gap-2">
+                  <div class="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0" style="background:rgba(20,30,48,0.8)" x-show="itemSignals.icon_url">
+                    <img :src="iconUrl(itemSignals.icon_url)" class="w-full h-full object-cover" @error="$el.style.opacity='0'" loading="lazy" />
+                  </div>
+                  <div>
+                    <p class="text-sm font-medium" :style="rarityStyle(analysisSelectedItem)"
+                      x-text="nameLang==='cn' ? (itemSignals.name||analysisSelectedItem) : analysisSelectedItem"></p>
+                    <p class="text-[10px]" style="color:#475569" x-text="nameLang==='cn' ? analysisSelectedItem : (itemSignals.name||'')"></p>
+                  </div>
+                </div>
                 <div class="flex gap-2">
                   <template x-for="d in [30,60,90]">
                     <button @click="chartDays=d; loadItemSignals(analysisSelectedItem)"
                       class="px-2 py-0.5 rounded text-[10px]"
                       :class="chartDays===d?'bg-slate-600 text-white':'text-slate-500 hover:text-slate-300'"
-                      x-text="d+'天'"></button>
+                      x-text="d+(nameLang==='cn'?'天':'D')"></button>
                   </template>
                 </div>
               </div>
@@ -1385,46 +1428,56 @@
               </div>
             </div>
 
-            <!-- Signal Gauges (2x3) -->
-            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+            <!-- Signal Gauges -->
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-4">
               <div class="card p-3 text-center">
                 <p class="text-[10px] text-slate-600 mb-1">RSI(14)
                   <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
-                    <span class="tip-text">相对强弱指标 (14日)。计算近14日涨跌幅比例。&gt;70 超买(可能回调)，&lt;30 超卖(可能反弹)，50 中性。</span></span></p>
+                    <span class="tip-text" x-text="nameLang==='cn'?'相对强弱指标 (14日)。>70 超买(可能回调)，<30 超卖(可能反弹)，50 中性。':'RSI(14). >70 overbought, <30 oversold, 50 neutral.'"></span></span></p>
                 <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.rsi_14||0)>70?'text-red-400':(itemSignals.signal?.rsi_14||0)<30?'text-emerald-400':'text-slate-300'" x-text="itemSignals.signal?.rsi_14??'—'"></p>
-                <p class="text-[9px] mt-0.5" :class="(itemSignals.signal?.rsi_14||0)>70?'text-red-500':'text-slate-600'" x-text="(itemSignals.signal?.rsi_14||0)>70?'超买':(itemSignals.signal?.rsi_14||0)<30?'超卖':'中性'"></p>
+                <p class="text-[9px] mt-0.5" :class="(itemSignals.signal?.rsi_14||0)>70?'text-red-500':'text-slate-600'" x-text="(itemSignals.signal?.rsi_14||0)>70?t('overbought'):(itemSignals.signal?.rsi_14||0)<30?t('oversold'):t('neutral_rsi')"></p>
               </div>
               <div class="card p-3 text-center">
                 <p class="text-[10px] text-slate-600 mb-1">Bollinger %B
                   <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
-                    <span class="tip-text">布林带位置。基于20日均线±2倍标准差。&gt;1 突破上轨(强势/超涨)，&lt;0 跌破下轨(超跌)，0.5 居中。</span></span></p>
+                    <span class="tip-text" x-text="nameLang==='cn'?'布林带位置。基于20日均线±2σ。>1 突破上轨(超涨)，<0 跌破下轨(超跌)，0.5 居中。':'Bollinger %B. Based on 20D MA ±2σ. >1 above upper band, <0 below lower, 0.5 mid.'"></span></span></p>
                 <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.bb_position||0)>1?'text-red-400':(itemSignals.signal?.bb_position||0)<0?'text-emerald-400':'text-slate-300'" x-text="itemSignals.signal?.bb_position??'—'"></p>
-                <p class="text-[9px] mt-0.5 text-slate-600" x-text="(itemSignals.signal?.bb_position||0)>1?'突破上轨':(itemSignals.signal?.bb_position||0)<0?'低于下轨':'带内'"></p>
+                <p class="text-[9px] mt-0.5 text-slate-600" x-text="(itemSignals.signal?.bb_position||0)>1?t('above_upper'):(itemSignals.signal?.bb_position||0)<0?t('below_lower'):t('in_band')"></p>
               </div>
               <div class="card p-3 text-center">
-                <p class="text-[10px] text-slate-600 mb-1">7D 动量
+                <p class="text-[10px] text-slate-600 mb-1"><span x-text="nameLang==='cn'?'7D 动量':'7D Momentum'"></span>
                   <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
-                    <span class="tip-text">7天价格变化率。(今价-7天前价)/7天前价×100%。正值=上涨趋势，负值=下跌趋势。</span></span></p>
-                <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.momentum_7||0)>0?'text-emerald-400':'text-red-400'" x-text="itemSignals.signal?.momentum_7!==null?(itemSignals.signal.momentum_7>0?'+':'')+itemSignals.signal.momentum_7+'%':'—'"></p>
+                    <span class="tip-text" x-text="nameLang==='cn'?'7天价格变化率。(今价-7天前价)/7天前价×100%。正值=上涨趋势，负值=下跌趋势。':'7-day price change rate. Positive=uptrend, Negative=downtrend.'"></span></span></p>
+                <p class="text-xl font-bold font-mono" :class="pnlClass(itemSignals.signal?.momentum_7||0)" x-text="itemSignals.signal?.momentum_7!==null?(itemSignals.signal.momentum_7>0?'+':'')+itemSignals.signal.momentum_7+'%':'—'"></p>
               </div>
               <div class="card p-3 text-center">
-                <p class="text-[10px] text-slate-600 mb-1">30D 动量
+                <p class="text-[10px] text-slate-600 mb-1"><span x-text="nameLang==='cn'?'30D 动量':'30D Momentum'"></span>
                   <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
-                    <span class="tip-text">30天价格变化率。反映中期趋势方向和力度。&gt;10% 强势上涨，&lt;-10% 显著下跌。</span></span></p>
-                <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.momentum_30||0)>0?'text-emerald-400':'text-red-400'" x-text="itemSignals.signal?.momentum_30!==null?(itemSignals.signal.momentum_30>0?'+':'')+itemSignals.signal.momentum_30+'%':'—'"></p>
+                    <span class="tip-text" x-text="nameLang==='cn'?'30天价格变化率。反映中期趋势方向和力度。>10% 强势上涨，<-10% 显著下跌。':'30-day price change rate. >10% strong rally, <-10% significant decline.'"></span></span></p>
+                <p class="text-xl font-bold font-mono" :class="pnlClass(itemSignals.signal?.momentum_30||0)" x-text="itemSignals.signal?.momentum_30!==null?(itemSignals.signal.momentum_30>0?'+':'')+itemSignals.signal.momentum_30+'%':'—'"></p>
               </div>
               <div class="card p-3 text-center">
-                <p class="text-[10px] text-slate-600 mb-1">波动率
+                <p class="text-[10px] text-slate-600 mb-1"><span x-text="nameLang==='cn'?'波动率':'Volatility'"></span>
                   <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
-                    <span class="tip-text">30日年化波动率。基于每日收益率标准差×√365。高波动=价格不稳定/交易机会大，低波动=稳定。</span></span></p>
+                    <span class="tip-text" x-text="nameLang==='cn'?'30日年化波动率。基于每日收益率标准差×√365。高波动=价格不稳定/交易机会大，低波动=稳定。':'30D annualized volatility. High=unstable/trading opportunities, Low=stable.'"></span></span></p>
                 <p class="text-xl font-bold font-mono text-slate-300" x-text="itemSignals.signal?.volatility_30?itemSignals.signal.volatility_30+'%':'—'"></p>
               </div>
               <div class="card p-3 text-center">
-                <p class="text-[10px] text-slate-600 mb-1">ATH 距离
+                <p class="text-[10px] text-slate-600 mb-1"><span x-text="nameLang==='cn'?'ATH 距离':'ATH Distance'"></span>
                   <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
-                    <span class="tip-text">当前价格占历史最高价的百分比。&gt;90% 接近峰值(考虑出售)，&lt;50% 远离高点(可能低估)。</span></span></p>
+                    <span class="tip-text" x-text="nameLang==='cn'?'当前价格占历史最高价的百分比。>90% 接近峰值(考虑出售)，<50% 远离高点(可能低估)。':'Price as % of all-time high. >90% near peak (sell?), <50% far from ATH.'"></span></span></p>
                 <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.ath_pct||0)>90?'text-yellow-300':'text-slate-300'" x-text="itemSignals.signal?.ath_pct?itemSignals.signal.ath_pct+'%':'—'"></p>
                 <p class="text-[9px] mt-0.5 text-slate-600" x-text="itemSignals.signal?.ath_price?'ATH ¥'+itemSignals.signal.ath_price:''"></p>
+              </div>
+              <!-- Rental Yield -->
+              <div class="card p-3 text-center">
+                <p class="text-[10px] text-slate-600 mb-1"><span x-text="t('rental_yield')"></span>
+                  <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
+                    <span class="tip-text" x-text="t('rental_yield_desc')"></span></span></p>
+                <p class="text-xl font-bold font-mono"
+                  :class="rentalYield(itemSignals)>15?'text-emerald-400':rentalYield(itemSignals)>8?'text-yellow-300':rentalYield(itemSignals)>0?'text-orange-400':'text-slate-500'"
+                  x-text="rentalYield(itemSignals)>0?rentalYield(itemSignals)+'%':'—'"></p>
+                <p class="text-[9px] mt-0.5 text-slate-600" x-text="rentalYield(itemSignals)>15?(nameLang==='cn'?'高收益':'High'):rentalYield(itemSignals)>8?(nameLang==='cn'?'中等':'Medium'):rentalYield(itemSignals)>0?(nameLang==='cn'?'偏低':'Low'):''"></p>
               </div>
             </div>
 
@@ -1433,26 +1486,26 @@
               <div class="card p-4">
                 <div class="flex items-center justify-between">
                   <div>
-                    <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-1">综合卖出评分
+                    <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-1"><span x-text="t('sell_score_title')"></span>
                       <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
-                        <span class="tip-text">综合 RSI(25%)、布林带(20%)、动量(15%)、ATH距离(20%)、盈亏(20%) 加权计算。注意：暂未纳入租金年化收益率，高租金收益饰品即使评分高也可考虑继续持有出租。</span></span></p>
+                        <span class="tip-text" x-text="t('sell_score_desc')"></span></span></p>
                     <p class="text-3xl font-bold font-mono" :class="scoreColor(itemSignals.signal?.sell_score)" x-text="itemSignals.signal?.sell_score??'—'"></p>
                     <p class="text-xs mt-1" :class="scoreColor(itemSignals.signal?.sell_score)" x-text="scoreLabel(itemSignals.signal?.sell_score)"></p>
                   </div>
                   <div class="text-right">
-                    <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-1">买入机会评分 <span class="text-[8px] px-1 py-0.5 rounded bg-cyan-900/30 text-cyan-500 normal-case tracking-normal">β测试</span></p>
+                    <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-1"><span x-text="t('buy_opp_title')"></span> <span class="text-[8px] px-1 py-0.5 rounded bg-cyan-900/30 text-cyan-500 normal-case tracking-normal" x-text="t('buy_opp_beta')"></span></p>
                     <p class="text-xl font-bold font-mono text-cyan-400" x-text="itemSignals.signal?.opportunity_score??'—'"></p>
-                    <p class="text-[9px] text-slate-700 mt-0.5">仅基于持仓数据，全市场分析待完善</p>
+                    <p class="text-[9px] text-slate-700 mt-0.5" x-text="t('buy_opp_note')"></p>
                   </div>
                 </div>
               </div>
               <div class="card p-4" x-show="itemSignals.ownership">
-                <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-2">持仓信息</p>
+                <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-2" x-text="t('ownership_title')"></p>
                 <div class="space-y-1.5 text-xs">
-                  <div class="flex justify-between"><span class="text-slate-500">购入价</span><span class="font-mono text-slate-300" x-text="itemSignals.ownership?.purchase_price?'¥'+itemSignals.ownership.purchase_price:'未知'"></span></div>
-                  <div class="flex justify-between"><span class="text-slate-500">当前价</span><span class="font-mono text-slate-300" x-text="itemSignals.ownership?.current_price?'¥'+itemSignals.ownership.current_price:'—'"></span></div>
-                  <div class="flex justify-between"><span class="text-slate-500">盈亏</span>
-                    <span class="font-mono font-bold" :class="(itemSignals.ownership?.pnl||0)>=0?'text-emerald-400':'text-red-400'"
+                  <div class="flex justify-between"><span class="text-slate-500" x-text="t('ownership_buy')"></span><span class="font-mono text-slate-300" x-text="itemSignals.ownership?.purchase_price?'¥'+itemSignals.ownership.purchase_price:t('unknown')"></span></div>
+                  <div class="flex justify-between"><span class="text-slate-500" x-text="t('ownership_current')"></span><span class="font-mono text-slate-300" x-text="itemSignals.ownership?.current_price?'¥'+itemSignals.ownership.current_price:'—'"></span></div>
+                  <div class="flex justify-between"><span class="text-slate-500" x-text="t('ownership_pnl')"></span>
+                    <span class="font-mono font-bold" :class="pnlClass(itemSignals.ownership?.pnl||0)"
                       x-text="itemSignals.ownership?.pnl!==null?((itemSignals.ownership.pnl>=0?'+':'')+'¥'+itemSignals.ownership.pnl+' ('+itemSignals.ownership.pnl_pct+'%)'):'—'"></span>
                   </div>
                 </div>
@@ -1462,14 +1515,14 @@
             <!-- Cross-platform prices -->
             <div class="card overflow-hidden" x-show="itemSignals.platforms?.length">
               <div class="px-4 py-3 border-b" style="border-color:rgba(51,65,85,0.3)">
-                <p class="text-[11px] text-slate-500 font-medium">跨平台价格对比</p>
+                <p class="text-[11px] text-slate-500 font-medium" x-text="t('cross_platform')"></p>
               </div>
               <table class="w-full text-xs">
                 <thead><tr class="text-[10px] text-slate-600 uppercase" style="background:rgba(15,23,42,0.5)">
-                  <th class="py-2 px-3 text-left">平台</th>
-                  <th class="py-2 px-2 text-right">卖价</th>
-                  <th class="py-2 px-2 text-right">求购价</th>
-                  <th class="py-2 px-2 text-right">在售数量</th>
+                  <th class="py-2 px-3 text-left" x-text="t('th_platform')"></th>
+                  <th class="py-2 px-2 text-right" x-text="nameLang==='cn'?'卖价':'Sell'"></th>
+                  <th class="py-2 px-2 text-right" x-text="nameLang==='cn'?'求购价':'Bid'"></th>
+                  <th class="py-2 px-2 text-right" x-text="nameLang==='cn'?'在售':'Listed'"></th>
                 </tr></thead>
                 <tbody>
                   <template x-for="p in itemSignals.platforms">
@@ -1486,22 +1539,32 @@
           </div>
         </template>
         <div x-show="!itemSignals">
-          <p class="text-xs text-slate-600 mb-3">在上方搜索框输入饰品名称查看分析，或点击以下推荐饰品：</p>
+          <p class="text-xs text-slate-600 mb-3" x-text="t('recommend_hint')"></p>
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3" x-show="analysisTopItems.length">
-            <template x-for="t in analysisTopItems">
+            <template x-for="ti in analysisTopItems">
               <div class="card p-3 cursor-pointer hover:ring-1 hover:ring-slate-600 transition-all"
-                @click="analysisSelectedItem=t.market_hash_name; analysisSearch=t.market_hash_name; loadItemSignals(t.market_hash_name)">
-                <p class="text-xs font-medium truncate" :class="rarityClass(t.market_hash_name)" x-text="t.market_hash_name"></p>
-                <div class="flex items-center gap-3 mt-2 text-[10px]">
-                  <span class="font-mono" :class="scoreColor(t.sell_score)">评分 <span x-text="t.sell_score??'—'"></span></span>
-                  <span class="text-slate-500" x-text="t.rsi_14?'RSI '+t.rsi_14:'RSI —'"></span>
-                  <span class="font-mono" :class="(t.momentum_30||0)>0?'text-emerald-400':'text-red-400'"
-                    x-text="t.momentum_30!=null?((t.momentum_30>0?'+':'')+t.momentum_30+'%'):'—'"></span>
+                @click="analysisSelectedItem=ti.market_hash_name; analysisSearch=ti.market_hash_name; loadItemSignals(ti.market_hash_name)">
+                <div class="flex items-center gap-2 mb-2">
+                  <div class="w-8 h-8 rounded overflow-hidden flex-shrink-0" style="background:rgba(20,30,48,0.8)" x-show="ti.icon_url">
+                    <img :src="iconUrl(ti.icon_url)" class="w-full h-full object-cover" @error="$el.style.opacity='0'" loading="lazy" />
+                  </div>
+                  <div class="min-w-0">
+                    <p class="text-xs font-medium truncate" :style="rarityStyle(ti.market_hash_name)"
+                      x-text="nameLang==='cn' ? (ti.name||ti.market_hash_name) : ti.market_hash_name"></p>
+                    <p class="text-[10px] truncate" style="color:#475569"
+                      x-text="nameLang==='cn' ? ti.market_hash_name : (ti.name||'')"></p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3 text-[10px]">
+                  <span class="font-mono" :class="scoreColor(ti.sell_score)">Score <span x-text="ti.sell_score??'—'"></span></span>
+                  <span class="text-slate-500" x-text="ti.rsi_14?'RSI '+ti.rsi_14:'RSI —'"></span>
+                  <span class="font-mono" :class="pnlClass(ti.momentum_30||0)"
+                    x-text="ti.momentum_30!=null?((ti.momentum_30>0?'+':'')+ti.momentum_30+'%'):'—'"></span>
                 </div>
               </div>
             </template>
           </div>
-          <div x-show="!analysisTopItems.length" class="card p-8 text-center text-slate-700 text-xs">暂无推荐数据，请先触发信号计算</div>
+          <div x-show="!analysisTopItems.length" class="card p-8 text-center text-slate-700 text-xs" x-text="t('no_recommend')"></div>
         </div>
       </div>
 
@@ -1510,26 +1573,26 @@
         <div class="flex items-center gap-3 mb-4">
           <select x-model="alertFilter.severity" @change="loadAlerts(1)"
             class="px-3 py-2 rounded-lg text-xs" style="background:rgba(15,23,42,0.8); border:1px solid rgba(51,65,85,0.3); color:#94a3b8">
-            <option value="">全部级别</option>
-            <option value="critical">严重</option>
-            <option value="warning">警告</option>
-            <option value="info">信息</option>
+            <option value="" x-text="t('all_levels')"></option>
+            <option value="critical" x-text="t('level_critical')"></option>
+            <option value="warning" x-text="t('level_warning')"></option>
+            <option value="info" x-text="t('level_info')"></option>
           </select>
           <select x-model="alertFilter.type" @change="loadAlerts(1)"
             class="px-3 py-2 rounded-lg text-xs" style="background:rgba(15,23,42,0.8); border:1px solid rgba(51,65,85,0.3); color:#94a3b8">
-            <option value="">全部类型</option>
-            <option value="profit_50">盈利>50%</option>
-            <option value="profit_100">盈利>100%</option>
-            <option value="near_ath">接近ATH</option>
-            <option value="rsi_overbought">RSI超买</option>
-            <option value="rsi_oversold">RSI超卖</option>
-            <option value="momentum_surge">动量暴涨</option>
-            <option value="spread_arb">套利机会</option>
+            <option value="" x-text="t('all_types_alert')"></option>
+            <option value="profit_50">Profit>50%</option>
+            <option value="profit_100">Profit>100%</option>
+            <option value="near_ath">Near ATH</option>
+            <option value="rsi_overbought">RSI OB</option>
+            <option value="rsi_oversold">RSI OS</option>
+            <option value="momentum_surge">Momentum</option>
+            <option value="spread_arb">Spread</option>
           </select>
           <label class="flex items-center gap-1.5 text-xs text-slate-500">
-            <input type="checkbox" x-model="alertFilter.unreadOnly" @change="loadAlerts(1)" class="rounded" /> 仅未读
+            <input type="checkbox" x-model="alertFilter.unreadOnly" @change="loadAlerts(1)" class="rounded" /> <span x-text="t('unread_only')"></span>
           </label>
-          <button @click="markAllAlertsRead()" class="ml-auto px-3 py-1.5 rounded-lg text-xs bg-slate-700 hover:bg-slate-600 text-slate-300">全部已读</button>
+          <button @click="markAllAlertsRead()" class="ml-auto px-3 py-1.5 rounded-lg text-xs bg-slate-700 hover:bg-slate-600 text-slate-300" x-text="t('btn_mark_all_read')"></button>
         </div>
 
         <div class="space-y-2">
@@ -1543,21 +1606,21 @@
                 <p class="text-[10px] text-slate-700 mt-0.5" x-text="a.created_at?.replace('T',' ').slice(0,16)"></p>
               </div>
               <div class="flex gap-2 flex-shrink-0">
-                <button x-show="!a.is_read" @click="markAlertRead(a)" class="text-[10px] text-slate-500 hover:text-slate-300">已读</button>
+                <button x-show="!a.is_read" @click="markAlertRead(a)" class="text-[10px] text-slate-500 hover:text-slate-300" x-text="t('btn_read')"></button>
                 <button @click="analysisSelectedItem=a.market_hash_name; analysisTab='detail'; loadItemSignals(a.market_hash_name)"
-                  class="text-[10px] text-blue-400 hover:text-blue-300">查看</button>
+                  class="text-[10px] text-blue-400 hover:text-blue-300" x-text="t('btn_view')"></button>
               </div>
             </div>
           </template>
-          <div x-show="!analysisAlerts.items?.length" class="card p-8 text-center text-slate-600 text-sm">暂无预警记录</div>
+          <div x-show="!analysisAlerts.items?.length" class="card p-8 text-center text-slate-600 text-sm" x-text="t('no_alerts')"></div>
         </div>
 
         <!-- Pagination -->
         <div x-show="analysisAlerts.total>20" class="flex items-center justify-between mt-3 text-xs text-slate-600">
-          <span>共 <span class="text-slate-400" x-text="analysisAlerts.total"></span> 条</span>
+          <span><span x-text="t('total_records')"></span> <span class="text-slate-400" x-text="analysisAlerts.total"></span></span>
           <div class="flex gap-2">
-            <button @click="loadAlerts(alertPage-1)" :disabled="alertPage<=1" class="px-3 py-1 rounded bg-slate-800 disabled:opacity-30">上一页</button>
-            <button @click="loadAlerts(alertPage+1)" :disabled="alertPage*20>=analysisAlerts.total" class="px-3 py-1 rounded bg-slate-800 disabled:opacity-30">下一页</button>
+            <button @click="loadAlerts(alertPage-1)" :disabled="alertPage<=1" class="px-3 py-1 rounded bg-slate-800 disabled:opacity-30">‹</button>
+            <button @click="loadAlerts(alertPage+1)" :disabled="alertPage*20>=analysisAlerts.total" class="px-3 py-1 rounded bg-slate-800 disabled:opacity-30">›</button>
           </div>
         </div>
       </div>
@@ -1565,7 +1628,7 @@
       <!-- ── Sub: Spreads ── -->
       <div x-show="analysisTab==='spreads'">
         <div class="flex items-center gap-3 mb-4">
-          <label class="text-xs text-slate-500">最小价差 %</label>
+          <label class="text-xs text-slate-500" x-text="t('min_spread')"></label>
           <input type="number" x-model.number="minSpread" @change="loadSpreads(1)" min="0" step="1"
             class="w-20 px-2 py-1.5 rounded-lg text-xs font-mono" style="background:rgba(15,23,42,0.8); border:1px solid rgba(51,65,85,0.3); color:#e2e8f0" />
         </div>
@@ -1573,12 +1636,12 @@
         <div class="card overflow-hidden">
           <table class="w-full text-xs">
             <thead><tr class="text-[10px] text-slate-600 uppercase" style="background:rgba(15,23,42,0.5)">
-              <th class="py-2 px-3 text-left">饰品</th>
-              <th class="py-2 px-2 text-right">最低价</th>
-              <th class="py-2 px-2 text-right">最高价</th>
-              <th class="py-2 px-2 text-right">价差%</th>
-              <th class="py-2 px-2 text-right">平台数</th>
-              <th class="py-2 px-2 text-left">详情</th>
+              <th class="py-2 px-3 text-left" x-text="t('th_item')"></th>
+              <th class="py-2 px-2 text-right">Min</th>
+              <th class="py-2 px-2 text-right">Max</th>
+              <th class="py-2 px-2 text-right">Spread%</th>
+              <th class="py-2 px-2 text-right">#</th>
+              <th class="py-2 px-2 text-left">Detail</th>
             </tr></thead>
             <tbody>
               <template x-for="s in analysisSpreads.items">
@@ -1597,7 +1660,7 @@
                   </td>
                 </tr>
               </template>
-              <tr x-show="!analysisSpreads.items?.length"><td colspan="6" class="py-6 text-center text-slate-600">暂无套利数据</td></tr>
+              <tr x-show="!analysisSpreads.items?.length"><td colspan="6" class="py-6 text-center text-slate-600" x-text="t('no_arb_data')"></td></tr>
             </tbody>
           </table>
         </div>
@@ -1610,15 +1673,15 @@
       <!-- Mini strip -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         <div class="card px-4 py-3">
-          <p class="text-[11px] text-slate-600 mb-0.5">总成本</p>
+          <p class="text-[11px] text-slate-600 mb-0.5" x-text="t('mini_cost')"></p>
           <p class="text-base font-bold text-white">¥<span x-text="fmt(overview.total_cost)">—</span></p>
         </div>
         <div class="card px-4 py-3">
-          <p class="text-[11px] text-slate-600 mb-0.5">活跃持仓</p>
+          <p class="text-[11px] text-slate-600 mb-0.5" x-text="t('mini_active')"></p>
           <p class="text-base font-bold text-white" x-text="overview.total_active??'—'"></p>
         </div>
         <div class="card px-4 py-3">
-          <p class="text-[11px] text-slate-600 mb-0.5">定价覆盖</p>
+          <p class="text-[11px] text-slate-600 mb-0.5" x-text="t('mini_coverage')"></p>
           <p class="text-base font-bold">
             <span class="text-white" x-text="overview.priced_count??'—'"></span>
             <span class="text-slate-700 text-sm"> / </span>
@@ -1626,7 +1689,7 @@
           </p>
         </div>
         <div class="card px-4 py-3">
-          <p class="text-[11px] text-slate-600 mb-0.5">手动定价</p>
+          <p class="text-[11px] text-slate-600 mb-0.5" x-text="t('mini_manual')"></p>
           <p class="text-base font-bold text-yellow-300" x-text="overview.manual_price_count??'—'"></p>
         </div>
       </div>
@@ -1644,72 +1707,72 @@
             </svg>
             <input type="text" x-model="filters.search"
               @input.debounce.400ms="page=1; loadItems()"
-              placeholder="搜索饰品名称…"
+              :placeholder="t('search_placeholder')"
               class="w-full pl-9 pr-3 py-2 rounded-xl text-sm border" />
           </div>
 
           <!-- Status -->
           <select x-model="filters.status" @change="page=1; loadItems()"
             class="py-2 pl-3 rounded-xl text-sm border" style="min-width: 108px">
-            <option value="">全部状态</option>
-            <option value="rented_out">出租中</option>
-            <option value="in_steam">Steam中</option>
-            <option value="in_storage">收藏</option>
+            <option value="" x-text="t('all_status')"></option>
+            <option value="rented_out" x-text="t('status_rented')"></option>
+            <option value="in_steam" x-text="t('status_steam')"></option>
+            <option value="in_storage" x-text="t('status_storage')"></option>
           </select>
 
           <!-- Category filter -->
           <select x-model="filters.category" @change="page=1; loadItems()"
             class="py-2 pl-3 rounded-xl text-sm border" style="min-width: 100px">
-            <option value="">全部类型</option>
-            <optgroup label="近战">
-              <option value="knife">刀具</option>
-              <option value="glove">手套</option>
+            <option value="" x-text="t('all_types')"></option>
+            <optgroup :label="nameLang==='cn'?'近战':'Melee'">
+              <option value="knife" x-text="t('cat_knife')"></option>
+              <option value="glove" x-text="t('cat_glove')"></option>
             </optgroup>
-            <optgroup label="枪械">
-              <option value="pistol">手枪</option>
-              <option value="rifle">步枪</option>
-              <option value="sniper">狙击枪</option>
-              <option value="smg">冲锋枪</option>
-              <option value="shotgun">霰弹枪</option>
-              <option value="mg">机枪</option>
+            <optgroup :label="nameLang==='cn'?'枪械':'Weapons'">
+              <option value="pistol" x-text="t('cat_pistol')"></option>
+              <option value="rifle" x-text="t('cat_rifle')"></option>
+              <option value="sniper" x-text="t('cat_sniper')"></option>
+              <option value="smg" x-text="t('cat_smg')"></option>
+              <option value="shotgun" x-text="t('cat_shotgun')"></option>
+              <option value="mg" x-text="t('cat_mg')"></option>
             </optgroup>
-            <optgroup label="饰品">
-              <option value="sticker">印花</option>
-              <option value="patch">布章</option>
-              <option value="graffiti">涂鸦</option>
-              <option value="charm">挂件</option>
-              <option value="musickit">音乐盒</option>
-              <option value="agent">特工</option>
+            <optgroup :label="nameLang==='cn'?'饰品':'Cosmetics'">
+              <option value="sticker" x-text="t('cat_sticker')"></option>
+              <option value="patch" x-text="nameLang==='cn'?'布章':'Patch'"></option>
+              <option value="graffiti" x-text="nameLang==='cn'?'涂鸦':'Graffiti'"></option>
+              <option value="charm" x-text="nameLang==='cn'?'挂件':'Charm'"></option>
+              <option value="musickit" x-text="nameLang==='cn'?'音乐盒':'Music Kit'"></option>
+              <option value="agent" x-text="nameLang==='cn'?'特工':'Agent'"></option>
             </optgroup>
-            <optgroup label="容器">
-              <option value="case">箱子/胶囊</option>
-              <option value="key">钥匙/通行证</option>
+            <optgroup :label="nameLang==='cn'?'容器':'Containers'">
+              <option value="case" x-text="t('cat_case')"></option>
+              <option value="key" x-text="nameLang==='cn'?'钥匙/通行证':'Key/Pass'"></option>
             </optgroup>
-            <optgroup label="品质">
+            <optgroup :label="nameLang==='cn'?'品质':'Quality'">
               <option value="stattrak">StatTrak™</option>
-              <option value="souvenir">纪念品</option>
+              <option value="souvenir" x-text="nameLang==='cn'?'纪念品':'Souvenir'"></option>
             </optgroup>
-            <optgroup label="磨损">
-              <option value="fn">崭新出厂 FN</option>
-              <option value="mw">略有磨损 MW</option>
-              <option value="ft">久经沙场 FT</option>
-              <option value="ww">破损不堪 WW</option>
-              <option value="bs">战痕累累 BS</option>
+            <optgroup :label="nameLang==='cn'?'磨损':'Wear'">
+              <option value="fn" x-text="nameLang==='cn'?'崭新出厂 FN':'Factory New'"></option>
+              <option value="mw" x-text="nameLang==='cn'?'略有磨损 MW':'Minimal Wear'"></option>
+              <option value="ft" x-text="nameLang==='cn'?'久经沙场 FT':'Field-Tested'"></option>
+              <option value="ww" x-text="nameLang==='cn'?'破损不堪 WW':'Well-Worn'"></option>
+              <option value="bs" x-text="nameLang==='cn'?'战痕累累 BS':'Battle-Scarred'"></option>
             </optgroup>
           </select>
 
           <!-- Priced filter -->
           <select x-model="filters.pricedFilter" @change="page=1; loadItems()"
             class="py-2 pl-3 rounded-xl text-sm border" style="min-width: 96px">
-            <option value="">全部</option>
-            <option value="priced">已定价</option>
-            <option value="unpriced">未定价</option>
+            <option value="" x-text="t('all_filter')"></option>
+            <option value="priced" x-text="t('priced')"></option>
+            <option value="unpriced" x-text="t('unpriced')"></option>
           </select>
 
           <!-- Show sold toggle -->
           <label class="pill-toggle" :class="showSold ? 'active-slate' : ''"
             @click="showSold=!showSold; page=1; loadItems()">
-            <span>显示已售</span>
+            <span x-text="t('show_sold')"></span>
             <div class="relative toggle-track" :style="showSold ? 'background:#475569' : 'background:#1e293b'">
               <div class="toggle-thumb" :style="showSold ? 'transform:translateX(12px)' : ''"></div>
             </div>
@@ -1718,7 +1781,7 @@
           <!-- Dual price toggle -->
           <label class="pill-toggle" :class="dualPrice ? 'active-blue' : ''"
             @click="dualPrice=!dualPrice">
-            <span>双价对比</span>
+            <span x-text="t('dual_price')"></span>
             <div class="relative toggle-track" :style="dualPrice ? 'background:#1d4ed8' : 'background:#1e293b'">
               <div class="toggle-thumb" :style="dualPrice ? 'transform:translateX(12px)' : ''"></div>
             </div>
@@ -1727,7 +1790,7 @@
           <!-- Cost sort shortcut -->
           <button @click="setSort('effective_price')"
             class="pill-toggle" :class="sortBy==='effective_price' ? 'active-blue' : ''">
-            成本排序 <span x-text="sortBy==='effective_price'?(sortOrder==='desc'?'↓':'↑'):'↕'"></span>
+            <span x-text="t('cost_sort')"></span> <span x-text="sortBy==='effective_price'?(sortOrder==='desc'?'↓':'↑'):'↕'"></span>
           </button>
 
           <!-- Page size -->
@@ -1747,37 +1810,37 @@
             <thead>
               <tr style="border-bottom: 1px solid rgba(51,65,85,0.3);">
                 <th class="py-3 px-4 text-left font-normal text-slate-700 uppercase tracking-wider w-8">#</th>
-                <th class="py-3 px-4 text-left font-normal text-slate-700 uppercase tracking-wider">饰品</th>
+                <th class="py-3 px-4 text-left font-normal text-slate-700 uppercase tracking-wider" x-text="t('th_item')"></th>
                 <th class="py-3 px-3 text-left font-normal text-slate-700 uppercase tracking-wider hover:text-slate-400 cursor-pointer select-none transition-colors" @click="setSort('status')">
-                  状态 <span x-text="sortIcon('status')"></span>
+                  <span x-text="t('th_status')"></span> <span x-text="sortIcon('status')"></span>
                 </th>
                 <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider hover:text-slate-400 cursor-pointer select-none transition-colors" @click="setSort('abrade')">
-                  磨损 <span x-text="sortIcon('abrade')"></span>
+                  <span x-text="t('th_abrade')"></span> <span x-text="sortIcon('abrade')"></span>
                 </th>
                 <template x-if="!dualPrice">
                   <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider hover:text-slate-400 cursor-pointer select-none transition-colors" @click="setSort('effective_price')">
-                    成本价 <span x-text="sortIcon('effective_price')"></span>
+                    <span x-text="t('th_cost')"></span> <span x-text="sortIcon('effective_price')"></span>
                   </th>
                 </template>
                 <template x-if="dualPrice">
-                  <th class="py-3 px-3 text-right font-normal uppercase tracking-wider" style="color:#475569">自动价</th>
+                  <th class="py-3 px-3 text-right font-normal uppercase tracking-wider" style="color:#475569" x-text="t('th_auto_price')"></th>
                 </template>
                 <template x-if="dualPrice">
-                  <th class="py-3 px-3 text-right font-normal uppercase tracking-wider" style="color:rgba(202,138,4,0.7)">手动价</th>
+                  <th class="py-3 px-3 text-right font-normal uppercase tracking-wider" style="color:rgba(202,138,4,0.7)" x-text="t('th_manual_price')"></th>
                 </template>
                 <th class="py-3 px-3 text-right font-normal uppercase tracking-wider hover:text-slate-400 cursor-pointer select-none transition-colors" style="color:#047857" @click="setSort('current_price')">
-                  市价 <span x-text="sortIcon('current_price')"></span>
+                  <span x-text="t('th_market_price')"></span> <span x-text="sortIcon('current_price')"></span>
                 </th>
                 <th class="py-3 px-2 text-right font-normal uppercase tracking-wider hover:text-slate-400 cursor-pointer select-none transition-colors" style="color:#475569" @click="setSort('pnl')">
-                  盈亏 <span x-text="sortIcon('pnl')"></span>
+                  <span x-text="t('th_pnl')"></span> <span x-text="sortIcon('pnl')"></span>
                 </th>
                 <th class="py-3 px-2 text-right font-normal uppercase tracking-wider hover:text-slate-400 cursor-pointer select-none transition-colors" style="color:#475569" @click="setSort('pnl_pct')">
-                  涨跌% <span x-text="sortIcon('pnl_pct')"></span>
+                  <span x-text="t('th_pnl_pct')"></span> <span x-text="sortIcon('pnl_pct')"></span>
                 </th>
                 <th class="py-3 px-3 text-right font-normal text-slate-700 uppercase tracking-wider hover:text-slate-400 cursor-pointer select-none transition-colors" @click="setSort('purchase_date')">
-                  购入日期 <span x-text="sortIcon('purchase_date')"></span>
+                  <span x-text="t('th_date')"></span> <span x-text="sortIcon('purchase_date')"></span>
                 </th>
-                <th class="py-3 px-3 text-left font-normal text-slate-700 uppercase tracking-wider">平台</th>
+                <th class="py-3 px-3 text-left font-normal text-slate-700 uppercase tracking-wider" x-text="t('th_platform')"></th>
                 <th class="py-3 px-4 w-10"></th>
               </tr>
             </thead>
@@ -1788,7 +1851,7 @@
                   <td :colspan="dualPrice ? 12 : 11" class="py-24 text-center" style="color:#334155">
                     <div class="flex flex-col items-center gap-3">
                       <div class="w-6 h-6 rounded-full border-2 border-t-blue-500 animate-spin" style="border-color: rgba(51,65,85,0.4); border-top-color: #3b82f6"></div>
-                      <span class="text-xs">加载中…</span>
+                      <span class="text-xs" x-text="t('loading')"></span>
                     </div>
                   </td>
                 </tr>
@@ -1797,8 +1860,8 @@
               <!-- Empty -->
               <template x-if="!loading && items.length === 0">
                 <tr>
-                  <td :colspan="dualPrice ? 12 : 11" class="py-24 text-center text-xs" style="color:#334155">
-                    没有找到匹配的饰品
+                  <td :colspan="dualPrice ? 12 : 11" class="py-24 text-center text-xs" style="color:#334155"
+                    x-text="t('no_match')">
                   </td>
                 </tr>
               </template>
@@ -1817,7 +1880,7 @@
                       </div>
                       <div class="min-w-0">
                         <p class="font-medium leading-tight truncate" style="max-width:260px"
-                          :class="rarityClass(item.market_hash_name, item.item_type)"
+                          :style="rarityStyle(item.market_hash_name, item.item_type)"
                           x-text="nameLang==='cn' ? (item.name || item.market_hash_name) : item.market_hash_name"></p>
                         <p class="leading-tight truncate mt-0.5" style="max-width:260px; color:#334155"
                           x-text="nameLang==='cn' ? item.market_hash_name : item.name"></p>
@@ -1911,9 +1974,9 @@
         <div class="px-5 py-3 flex items-center justify-between"
           style="border-top: 1px solid rgba(51,65,85,0.2)">
           <p class="text-xs" style="color:#334155">
-            共 <span class="text-slate-400 font-medium" x-text="total"></span> 条 ·
-            第 <span class="text-slate-500" x-text="page"></span> /
-            <span class="text-slate-500" x-text="Math.max(1,Math.ceil(total/pageSize))"></span> 页
+            <span x-text="t('total_records')"></span> <span class="text-slate-400 font-medium" x-text="total"></span> <span x-text="t('records_unit')"></span> ·
+            <span x-text="t('page_prefix')"></span> <span class="text-slate-500" x-text="page"></span> /
+            <span class="text-slate-500" x-text="Math.max(1,Math.ceil(total/pageSize))"></span>
           </p>
           <div class="flex items-center gap-1">
             <button class="pg-btn" @click="gotoPage(page-1)" :disabled="page<=1">‹</button>
@@ -1978,28 +2041,28 @@
           <!-- Manual price -->
           <div class="mt-auto pt-4" style="border-top:1px solid rgba(51,65,85,0.3)">
             <div class="flex items-center justify-between mb-1">
-              <p class="text-sm font-medium text-slate-200">手动购入价</p>
+              <p class="text-sm font-medium text-slate-200" x-text="t('manual_price_title')"></p>
               <span x-show="panel?.purchase_price_manual!=null"
                 class="text-[11px] px-2 py-0.5 rounded-full font-medium"
-                style="background:rgba(202,138,4,0.12); color:#fbbf24">已手动设置</span>
+                style="background:rgba(202,138,4,0.12); color:#fbbf24" x-text="t('manual_price_set')"></span>
             </div>
-            <p class="text-[11px] mb-3" style="color:#334155">优先于自动识别价，不被自动导入覆盖。</p>
+            <p class="text-[11px] mb-3" style="color:#334155" x-text="t('manual_price_desc')"></p>
             <div class="flex gap-2">
-              <input type="number" x-model="manualInput" placeholder="金额（元）" step="0.01" min="0"
+              <input type="number" x-model="manualInput" :placeholder="nameLang==='cn'?'金额（元）':'Amount (¥)'" step="0.01" min="0"
                 @keydown.enter="saveManual()"
                 class="flex-1 px-3 py-2 rounded-xl text-sm border" />
               <button @click="saveManual()" :disabled="saving"
                 class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-900 transition-all disabled:opacity-40"
                 style="background:linear-gradient(135deg,#d97706,#b45309); box-shadow:0 0 12px rgba(217,119,6,0.2)">
-                <span x-show="!saving">保存</span><span x-show="saving">…</span>
+                <span x-show="!saving" x-text="t('btn_save')"></span><span x-show="saving">…</span>
               </button>
             </div>
             <button x-show="panel?.purchase_price_manual!=null" @click="clearManual()"
               class="mt-2 text-[11px] transition-colors"
               style="color:rgba(239,68,68,0.5)"
               @mouseenter="$el.style.color='rgba(239,68,68,0.8)'"
-              @mouseleave="$el.style.color='rgba(239,68,68,0.5)'">
-              × 清除手动价格
+              @mouseleave="$el.style.color='rgba(239,68,68,0.5)'"
+              x-text="'× '+t('btn_clear_manual')">
             </button>
           </div>
         </div>
@@ -2021,7 +2084,7 @@
           <div class="flex items-center gap-2">
             <div class="w-6 h-6 rounded-full flex items-center justify-center text-xs"
               style="background:rgba(34,197,94,0.12); color:#22c55e">✓</div>
-            <h3 class="text-sm font-semibold text-white">导入完成</h3>
+            <h3 class="text-sm font-semibold text-white" x-text="t('import_done')"></h3>
           </div>
           <button @click="importResult=null; loadAll()"
             class="w-7 h-7 rounded-lg flex items-center justify-center text-base leading-none transition-colors"
@@ -2056,7 +2119,7 @@
             style="background:linear-gradient(135deg,#1d4ed8,#2563eb); box-shadow:0 0 20px rgba(37,99,235,0.25)"
             @mouseenter="$el.style.boxShadow='0 0 28px rgba(37,99,235,0.4)'"
             @mouseleave="$el.style.boxShadow='0 0 20px rgba(37,99,235,0.25)'">
-            刷新数据
+            <span x-text="t('btn_refresh_data')"></span>
           </button>
         </div>
       </div>
@@ -2166,6 +2229,263 @@
 
         // 涨跌色模式：'cn'=红涨绿跌（默认） 'us'=绿涨红跌
         colorMode: 'cn',
+
+        // ── i18n 翻译字典 ───────────────────────────────────────────────
+        _i18n: {
+          // Navbar tabs
+          tab_inventory: ['持仓列表', 'Inventory'],
+          tab_overview: ['资产概览', 'Overview'],
+          tab_listing: ['上架管理', 'Listing'],
+          tab_analysis: ['量化分析', 'Analysis'],
+          // Navbar buttons & status
+          btn_sync: ['同步数据', 'Sync Data'],
+          btn_syncing: ['同步中…', 'Syncing…'],
+          btn_refresh_price: ['刷新市价', 'Refresh Prices'],
+          btn_login_youpin: ['登录悠悠', 'Login YouPin'],
+          btn_switch_account: ['切换账号', 'Switch'],
+          syncing_wait: ['同步中，请耐心等待…', 'Syncing, please wait…'],
+          last_sync: ['上次同步', 'Last sync'],
+          market_price: ['市价', 'Price at'],
+          color_cn_tip: ['红涨绿跌（A股），点击切换', 'Red=Up Green=Down (CN), click to switch'],
+          color_us_tip: ['绿涨红跌（美股），点击切换', 'Green=Up Red=Down (US), click to switch'],
+          // Overview
+          total_cost: ['总持仓成本', 'Total Cost'],
+          active_holdings: ['活跃持仓', 'Active Holdings'],
+          pricing_status: ['定价情况', 'Pricing Status'],
+          quick_actions: ['快捷操作', 'Quick Actions'],
+          cost_rented: ['出租', 'Rented'],
+          cost_steam: ['Steam', 'Steam'],
+          price_coverage: ['定价覆盖', 'Coverage'],
+          auto_priced: ['自动定价', 'Auto'],
+          manual_priced: ['手动定价', 'Manual'],
+          unpriced: ['未定价', 'Unpriced'],
+          goto_unpriced: ['未定价饰品', 'Unpriced Items'],
+          goto_rented: ['出租中', 'Rented Out'],
+          goto_all: ['全部持仓', 'All Holdings'],
+          market_value: ['当前市值', 'Market Value'],
+          no_market_price: ['暂无市价', 'No Price Data'],
+          click_refresh: ['点击「刷新市价」获取实时数据', 'Click "Refresh Prices" to get live data'],
+          pnl_amount: ['盈亏金额', 'P&L Amount'],
+          pnl_rate: ['盈亏率', 'P&L Rate'],
+          based_on_estimate: ['基于已有市价估算', 'Based on available market prices'],
+          need_data: ['需要成本价 + 市价数据', 'Need cost + price data'],
+          wait_refresh: ['待市价刷新后计算', 'Pending price refresh'],
+          status_distribution: ['持仓状态分布', 'Status Distribution'],
+          status_rented: ['出租中', 'Rented'],
+          status_steam: ['Steam中', 'In Steam'],
+          status_storage: ['收藏', 'Storage'],
+          status_sold: ['已售', 'Sold'],
+          inv_value: ['库存市值', 'Inventory Value'],
+          rented_value: ['出租市值', 'Rented Value'],
+          covers: ['覆盖', 'Covers'],
+          items_unit: ['件', 'items'],
+          total_items: ['共', 'Total'],
+          rented_value_note: ['出租市值基于市价快照计算，与悠悠官方估值可能略有差异', 'Rented value based on price snapshots, may differ slightly from YouPin official valuation'],
+          // Inventory filters
+          search_placeholder: ['搜索饰品名称…', 'Search item name…'],
+          all_status: ['全部状态', 'All Status'],
+          all_types: ['全部类型', 'All Types'],
+          all_filter: ['全部', 'All'],
+          priced: ['已定价', 'Priced'],
+          show_sold: ['显示已售', 'Show Sold'],
+          dual_price: ['双价对比', 'Dual Price'],
+          cost_sort: ['成本排序', 'Cost Sort'],
+          // Table headers
+          th_item: ['饰品', 'Item'],
+          th_status: ['状态', 'Status'],
+          th_abrade: ['磨损', 'Wear'],
+          th_cost: ['成本价', 'Cost'],
+          th_auto_price: ['自动价', 'Auto'],
+          th_manual_price: ['手动价', 'Manual'],
+          th_market_price: ['市价', 'Market'],
+          th_pnl: ['盈亏', 'P&L'],
+          th_pnl_pct: ['涨跌%', 'Change%'],
+          th_date: ['购入日期', 'Buy Date'],
+          th_platform: ['平台', 'Platform'],
+          th_daily_rent: ['日租金', 'Daily Rent'],
+          th_deposit: ['押金', 'Deposit'],
+          th_expire: ['到期时间', 'Expires'],
+          th_renewal: ['续租', 'Renewal'],
+          th_operation: ['操作', 'Actions'],
+          th_market_ref: ['市场参考价', 'Market Ref'],
+          th_market_ref_rent: ['市场参考租金', 'Market Ref Rent'],
+          th_sell_price: ['出售价', 'Sell Price'],
+          // Pagination
+          total_records: ['共', 'Total'],
+          records_unit: ['条', ''],
+          page_unit: ['页', ''],
+          page_prefix: ['第', 'Page'],
+          // Loading
+          loading: ['加载中…', 'Loading…'],
+          no_match: ['没有找到匹配的饰品', 'No matching items found'],
+          // Side panel
+          panel_status: ['状态', 'Status'],
+          panel_source: ['来源', 'Source'],
+          panel_abrade: ['磨损值', 'Wear Value'],
+          panel_buy_date: ['购入日期', 'Buy Date'],
+          panel_buy_platform: ['购入平台', 'Platform'],
+          panel_auto_price: ['自动识别价', 'Auto Price'],
+          panel_effective: ['生效价格', 'Effective Price'],
+          panel_first_seen: ['首次发现', 'First Seen'],
+          manual_price_title: ['手动购入价', 'Manual Buy Price'],
+          manual_price_set: ['已手动设置', 'Manually Set'],
+          manual_price_desc: ['优先于自动识别价，不被自动导入覆盖。', 'Overrides auto price, not overwritten by import.'],
+          btn_save: ['保存', 'Save'],
+          btn_clear_manual: ['清除手动价格', 'Clear Manual Price'],
+          // Listing tab
+          shelf_sell: ['出售货架', 'Sell Shelf'],
+          shelf_lease: ['出租货架', 'Lease Shelf'],
+          shelf_rented: ['已租出', 'Rented Out'],
+          shelf_sublet: ['转租中/0CD', 'Sublet/0CD'],
+          shelf_unlisted: ['待上架', 'Unlisted'],
+          btn_refresh: ['刷新', 'Refresh'],
+          btn_batch_delist: ['批量下架', 'Batch Delist'],
+          btn_batch_reprice: ['批量智能改价', 'Smart Reprice'],
+          btn_repricing: ['改价中…', 'Repricing…'],
+          btn_reprice: ['改价', 'Reprice'],
+          btn_delist: ['下架', 'Delist'],
+          btn_cancel_sublet: ['取消转租', 'Cancel Sublet'],
+          selected_count: ['已选', 'Selected'],
+          clear_selection: ['清除选择', 'Clear'],
+          shelf_empty: ['货架为空', 'Shelf is empty'],
+          loading_shelf: ['加载货架…', 'Loading shelf…'],
+          loading_data: ['加载中…', 'Loading…'],
+          no_data: ['暂无数据，请点击「刷新」', 'No data, click refresh'],
+          smart_listing_note: ['智能上架功能需先完成「同步数据」→「同步模板ID」以获取市场定价参考', 'Smart listing requires sync data + sync template IDs first'],
+          need_list_note: ['需要上架新饰品？请切换到「待上架」标签页，从库存中选择饰品快速上架', 'To list new items, switch to the "Unlisted" tab'],
+          shelf_empty_sync: ['货架为空，或尚未同步模板ID（用于市场定价）', 'Shelf empty, or template IDs not synced yet'],
+          btn_sync_template: ['同步模板ID（用于市场定价）', 'Sync Template IDs'],
+          syncing_text: ['同步中…', 'Syncing…'],
+          on_sale: ['在售', 'Listed'],
+          subletting: ['转租中', 'Subletting'],
+          // Reprice modal
+          reprice_title: ['改价', 'Reprice'],
+          sell_price_label: ['出售价（元）', 'Sell Price (¥)'],
+          short_rent_label: ['短租日租金（元/天）', 'Daily Rent (¥/day)'],
+          long_rent_label: ['长租日租金（元/天，可选）', 'Long-term Rent (¥/day, optional)'],
+          deposit_label: ['押金（元）', 'Deposit (¥)'],
+          long_rent_hint: ['留空则按短租价×0.95', 'Leave empty for short rent × 0.95'],
+          btn_cancel: ['取消', 'Cancel'],
+          btn_confirm_reprice: ['确认改价', 'Confirm'],
+          saving_text: ['保存中…', 'Saving…'],
+          // Login modal
+          login_title: ['悠悠有品 手机号登录', 'YouPin SMS Login'],
+          login_desc: ['通过手机号+验证码获取 App 端 Token（支持上架/下架/改价等操作）', 'Get App token via phone + SMS code'],
+          phone_label: ['手机号', 'Phone'],
+          code_label: ['验证码', 'Code'],
+          btn_send_code: ['发送验证码', 'Send Code'],
+          sending_code: ['发送中…', 'Sending…'],
+          btn_login: ['登录', 'Login'],
+          logging_in: ['登录中…', 'Logging in…'],
+          manual_token_desc: ['或直接粘贴 Token（从悠悠 App 或浏览器 DevTools 获取）', 'Or paste token directly (from YouPin App or DevTools)'],
+          btn_apply: ['应用', 'Apply'],
+          // Token banner
+          token_expired_msg: ['悠悠有品 Token 已过期，所有同步/上架功能不可用', 'YouPin token expired, sync/listing functions unavailable'],
+          token_expired_hint: ['→ 登录 www.youpin898.com → DevTools → Network → 复制 Authorization header 中的 Bearer Token → 更新 .env 重启服务', '→ Login youpin898.com → DevTools → Copy Bearer Token → Update .env'],
+          // Import result
+          import_done: ['导入完成', 'Import Complete'],
+          btn_refresh_data: ['刷新数据', 'Refresh Data'],
+          // Analysis
+          analysis_overview: ['市场总览', 'Overview'],
+          analysis_detail: ['饰品分析', 'Item Analysis'],
+          analysis_alerts: ['预警中心', 'Alerts'],
+          analysis_spreads: ['套利雷达', 'Arbitrage'],
+          unread_alerts: ['未读预警', 'Unread Alerts'],
+          avg_sell_score: ['平均卖出评分', 'Avg Sell Score'],
+          avg_momentum_30: ['30D 平均动量', '30D Avg Momentum'],
+          data_status: ['数据状态', 'Data Status'],
+          collecting: ['采集中…', 'Collecting…'],
+          last_run: ['上次', 'Last'],
+          not_started: ['未启动', 'Not started'],
+          signal_date: ['信号日期', 'Signal date'],
+          no_signal: ['无信号数据', 'No signal data'],
+          score_dist_title: ['卖出评分分布（持仓饰品）', 'Sell Score Distribution (Holdings)'],
+          score_dist_hint: ['点击柱状查看详情', 'Click bar for details'],
+          score_hold: ['持有', 'Hold'],
+          score_neutral: ['中性', 'Neutral'],
+          score_consider: ['考虑卖', 'Consider'],
+          score_strong: ['强卖', 'Strong Sell'],
+          score_urgent: ['急卖', 'Urgent'],
+          top10_sell: ['Top 10 卖出信号', 'Top 10 Sell Signals'],
+          category_trends: ['分类趋势', 'Category Trends'],
+          btn_backfill: ['回填历史数据', 'Backfill History'],
+          backfilling: ['回填中…', 'Backfilling…'],
+          btn_compute: ['立即计算信号', 'Compute Signals'],
+          computing: ['计算中…', 'Computing…'],
+          btn_collect: ['立即采集价格', 'Collect Prices'],
+          search_item_hint: ['搜索饰品名称…', 'Search item name…'],
+          no_signal_hint: ['暂无信号数据，请先触发信号计算', 'No signal data, trigger computation first'],
+          no_recommend: ['暂无推荐数据，请先触发信号计算', 'No recommendations, compute signals first'],
+          recommend_hint: ['在上方搜索框输入饰品名称查看分析，或点击以下推荐饰品：', 'Search an item above, or click a recommendation:'],
+          // Alerts sub-tab
+          all_levels: ['全部级别', 'All Levels'],
+          level_critical: ['严重', 'Critical'],
+          level_warning: ['警告', 'Warning'],
+          level_info: ['信息', 'Info'],
+          all_types_alert: ['全部类型', 'All Types'],
+          unread_only: ['仅未读', 'Unread Only'],
+          btn_mark_all_read: ['全部已读', 'Mark All Read'],
+          btn_read: ['已读', 'Read'],
+          btn_view: ['查看', 'View'],
+          no_alerts: ['暂无预警记录', 'No alerts'],
+          // Spreads
+          min_spread: ['最小价差 %', 'Min Spread %'],
+          no_arb_data: ['暂无套利数据', 'No arbitrage data'],
+          // Analysis detail
+          sell_score_title: ['综合卖出评分', 'Sell Score'],
+          buy_opp_title: ['买入机会评分', 'Buy Opportunity'],
+          buy_opp_beta: ['β测试', 'β Test'],
+          buy_opp_note: ['仅基于持仓数据，全市场分析待完善', 'Based on holdings only, full market analysis TBD'],
+          ownership_title: ['持仓信息', 'Ownership'],
+          ownership_buy: ['购入价', 'Buy Price'],
+          ownership_current: ['当前价', 'Current'],
+          ownership_pnl: ['盈亏', 'P&L'],
+          cross_platform: ['跨平台价格对比', 'Cross-Platform Prices'],
+          sell_score_desc: ['综合 RSI(25%)、布林带(20%)、动量(15%)、ATH距离(20%)、盈亏(20%) 加权计算。注意：暂未纳入租金年化收益率，高租金收益饰品即使评分高也可考虑继续持有出租。', 'Weighted: RSI(25%), BB(20%), Momentum(15%), ATH(20%), P&L(20%). Note: rental yield not included.'],
+          label_hold: ['继续持有', 'Hold'],
+          label_neutral: ['中性持有', 'Neutral'],
+          label_consider: ['考虑出售', 'Consider Sell'],
+          label_strong: ['强烈出售', 'Strong Sell'],
+          label_urgent: ['立即出售', 'Sell Now'],
+          // Rental yield
+          rental_yield: ['租金年化率', 'Rental Yield'],
+          rental_yield_desc: ['基于短租日租金估算。有效出租天数：普通188天/年，0CD 310天/年。年化率 = 有效天数 × 日租金 / 饰品价值 × 100%', 'Annualized rental yield. Effective days: normal 188/yr, 0CD 310/yr.'],
+          // Mini strip (inventory)
+          mini_cost: ['总成本', 'Total Cost'],
+          mini_active: ['活跃持仓', 'Active'],
+          mini_coverage: ['定价覆盖', 'Coverage'],
+          mini_manual: ['手动定价', 'Manual'],
+          // Category labels
+          cat_knife: ['刀具', 'Knife'],
+          cat_glove: ['手套', 'Glove'],
+          cat_pistol: ['手枪', 'Pistol'],
+          cat_rifle: ['步枪', 'Rifle'],
+          cat_sniper: ['狙击', 'Sniper'],
+          cat_smg: ['冲锋枪', 'SMG'],
+          cat_shotgun: ['霰弹枪', 'Shotgun'],
+          cat_mg: ['机枪', 'MG'],
+          cat_sticker: ['印花', 'Sticker'],
+          cat_case: ['箱子', 'Case'],
+          cat_other: ['其他', 'Other'],
+          // Unknown
+          unknown: ['未知', 'Unknown'],
+          // Score labels
+          overbought: ['超买', 'Overbought'],
+          oversold: ['超卖', 'Oversold'],
+          neutral_rsi: ['中性', 'Neutral'],
+          above_upper: ['突破上轨', 'Above Upper'],
+          below_lower: ['低于下轨', 'Below Lower'],
+          in_band: ['带内', 'In Band'],
+          // Inventory mini-strip
+          page_of: ['/', '/'],
+        },
+
+        // i18n helper: t('key') returns CN or EN string
+        t(key) {
+          const arr = this._i18n[key];
+          if (!arr) return key;
+          return this.nameLang === 'cn' ? arr[0] : arr[1];
+        },
 
         toast: { msg: '', type: 'success' },
 
@@ -2422,14 +2742,14 @@
           const auto = p.purchase_price != null ? '¥' + this.fmt(p.purchase_price) : null;
           const date = p.first_seen_at ? new Date(p.first_seen_at).toLocaleString('zh-CN') : null;
           return [
-            ['状态',       this.statusLbl(p.status),  false, false],
-            ['来源',       p.class_id,                 false, false],
-            ['磨损值',     p.abrade?.toFixed(10),      true,  false],
-            ['购入日期',   p.purchase_date,            false, false],
-            ['购入平台',   p.purchase_platform,        false, false],
-            ['自动识别价', auto,                        false, false],
-            ['生效价格',   eff, false, p.purchase_price_manual != null],
-            ['首次发现',   date,                        true,  false],
+            [this.t('panel_status'),     this.statusLbl(p.status),  false, false],
+            [this.t('panel_source'),     p.class_id,                 false, false],
+            [this.t('panel_abrade'),     p.abrade?.toFixed(10),      true,  false],
+            [this.t('panel_buy_date'),   p.purchase_date,            false, false],
+            [this.t('panel_buy_platform'), p.purchase_platform,      false, false],
+            [this.t('panel_auto_price'), auto,                        false, false],
+            [this.t('panel_effective'),  eff, false, p.purchase_price_manual != null],
+            [this.t('panel_first_seen'), date,                        true,  false],
           ];
         },
 
@@ -2853,7 +3173,7 @@
 
         async openScoreBucket(i) {
           const ranges = [[0,30],[30,50],[50,70],[70,85],[85,100]];
-          const labels = ['持有','中性','考虑卖','强卖','急卖'];
+          const labels = [this.t('score_hold'),this.t('score_neutral'),this.t('score_consider'),this.t('score_strong'),this.t('score_urgent')];
           const [min, max] = ranges[i];
           this.scoreBucket = { show: true, label: labels[i], min, max, items: [] };
           try {
@@ -2934,11 +3254,11 @@
             data: {
               labels,
               datasets: [
-                { label: '收盘价', data: closes, borderColor: '#3b82f6', borderWidth: 2, pointRadius: 0, fill: false, tension: 0.1 },
+                { label: this.nameLang==='cn'?'收盘价':'Close', data: closes, borderColor: '#3b82f6', borderWidth: 2, pointRadius: 0, fill: false, tension: 0.1 },
                 { label: 'MA7', data: ma7, borderColor: '#f59e0b', borderWidth: 1, borderDash: [5,3], pointRadius: 0, fill: false },
                 { label: 'MA30', data: ma30, borderColor: '#8b5cf6', borderWidth: 1, borderDash: [8,4], pointRadius: 0, fill: false },
-                { label: 'BB上轨', data: bbUp, borderColor: 'rgba(100,116,139,0.4)', borderWidth: 1, pointRadius: 0, fill: false },
-                { label: 'BB下轨', data: bbLow, borderColor: 'rgba(100,116,139,0.4)', borderWidth: 1, pointRadius: 0, fill: '-1',
+                { label: 'BB Upper', data: bbUp, borderColor: 'rgba(100,116,139,0.4)', borderWidth: 1, pointRadius: 0, fill: false },
+                { label: 'BB Lower', data: bbLow, borderColor: 'rgba(100,116,139,0.4)', borderWidth: 1, pointRadius: 0, fill: '-1',
                   backgroundColor: 'rgba(100,116,139,0.05)' },
               ]
             },
@@ -3024,15 +3344,37 @@
         },
         scoreLabel(s) {
           if (s == null) return '';
-          if (s >= 85) return '立即出售';
-          if (s >= 70) return '强烈出售';
-          if (s >= 50) return '考虑出售';
-          if (s >= 30) return '中性持有';
-          return '继续持有';
+          if (s >= 85) return this.t('label_urgent');
+          if (s >= 70) return this.t('label_strong');
+          if (s >= 50) return this.t('label_consider');
+          if (s >= 30) return this.t('label_neutral');
+          return this.t('label_hold');
         },
         catLabel(c) {
-          return { knife:'刀具', glove:'手套', pistol:'手枪', rifle:'步枪', sniper:'狙击',
-                   smg:'冲锋枪', shotgun:'霰弹枪', mg:'机枪', sticker:'印花', case:'箱子', other:'其他' }[c] || c;
+          const key = 'cat_' + c;
+          return this.t(key) !== key ? this.t(key) : c;
+        },
+
+        // ── Rental yield calculation ─────────────────────────────────
+        // 短租年化率 = 有效出租天数(188天/年, 0CD 310天) × 日租金 / 饰品价值 × 100%
+        // 这里用 ownership.current_price 作为饰品价值参考，日租金需从货架数据获取
+        // 由于前端无法直接获取日租金，暂用估算：rented_out 的物品按市价×0.01%/天估算
+        // TODO: 后端补充 daily_rent 字段后可精确计算
+        rentalYield(signals) {
+          if (!signals?.ownership) return 0;
+          const price = signals.ownership.current_price;
+          if (!price || price <= 0) return 0;
+          // 尝试从 leaseShelf 查找日租金
+          const allShelf = [...(this.leaseShelf.items||[]), ...(this.subletList.items||[])];
+          const match = allShelf.find(i => (i.commodityHashName||i.marketHashName||'') === signals.market_hash_name);
+          if (match) {
+            const dailyRent = match.leaseUnitPrice || match.LeaseUnitPrice || 0;
+            if (dailyRent > 0) {
+              // 普通短租 188天/年
+              return Math.round(188 * dailyRent / price * 100 * 10) / 10;
+            }
+          }
+          return 0;
         },
 
         // ── Helpers ───────────────────────────────────────────────────
@@ -3047,32 +3389,82 @@
           return `https://community.fastly.steamstatic.com/economy/image/${raw}/62fx62f`;
         },
 
-        // CS2 品质色 — 优先使用 item_type 字段（精确），回退到名字前缀判定
-        // Consumer=White, Industrial=LightBlue, Mil-Spec=Blue, Restricted=Purple,
-        // Classified=Pink, Covert=Red, Extraordinary/Special=Gold, Contraband=Orange
+        // CS2 品质色 — 精确匹配游戏内 rarity 颜色
+        // Consumer=#b0c3d9, Industrial=#5e98d9, Mil-Spec=#4b69ff, Restricted=#8847ff,
+        // Classified=#d32ce6, Covert=#eb4b4b, Contraband=#e4ae39, ★金色=#ffd700
+        _rarityStyles: {
+          contraband:  'color:#e4ae39',    // 禁忌 (Howl等) — 金橙
+          covert:      'color:#eb4b4b',    // 隐秘 — 红
+          classified:  'color:#d32ce6',    // 保密 — 粉紫
+          restricted:  'color:#8847ff',    // 受限 — 紫
+          milspec:     'color:#4b69ff',    // 军规 — 蓝
+          industrial:  'color:#5e98d9',    // 工业 — 天蓝
+          consumer:    'color:#b0c3d9',    // 消费 — 浅灰蓝
+          gold:        'color:#ffd700',    // ★ 金色
+          stattrak:    'color:#cf6a32',    // StatTrak™ 橙
+          souvenir:    'color:#ffD700',    // 纪念品 金
+          highgrade:   'color:#b0c3d9',    // High Grade
+          base:        'color:#b0c3d9',    // 默认
+        },
+
         rarityClass(hashName, itemType) {
           // 从 item_type 精确判断 (如 "Covert Rifle", "Classified Pistol")
           if (itemType) {
             const t = itemType.toLowerCase();
-            if (t.includes('contraband')) return 'text-orange-500';      // Contraband
+            if (t.includes('contraband')) return '';
             if (t.includes('extraordinary') || t.includes('covert')) {
-              if (hashName && hashName.startsWith('★')) return 'text-yellow-400'; // Gold
-              return 'text-red-400';                                    // Covert (Red)
+              return '';
             }
-            if (t.includes('classified')) return 'text-pink-400';       // Classified (Pink)
-            if (t.includes('restricted')) return 'text-purple-400';     // Restricted (Purple)
-            if (t.includes('mil-spec') || t.includes('mil_spec')) return 'text-blue-400'; // Mil-Spec (Blue)
-            if (t.includes('industrial')) return 'text-sky-300';        // Industrial (Light Blue)
-            if (t.includes('consumer') || t.includes('base grade')) return 'text-slate-300'; // Consumer (White)
-            if (t.includes('high grade')) return 'text-purple-300';     // High Grade (Music Kits etc)
+            if (t.includes('classified')) return '';
+            if (t.includes('restricted')) return '';
+            if (t.includes('mil-spec') || t.includes('mil_spec')) return '';
+            if (t.includes('industrial')) return '';
+            if (t.includes('consumer') || t.includes('base grade')) return '';
+            if (t.includes('high grade')) return '';
           }
-          // 回退: 从名字判断
-          if (!hashName) return 'text-slate-200';
-          if (hashName.startsWith('★')) return 'text-yellow-400';
-          if (hashName.includes('M4A4 | Howl')) return 'text-orange-500';
-          if (hashName.startsWith('StatTrak™')) return 'text-orange-400';
-          if (hashName.startsWith('Souvenir')) return 'text-yellow-200';
-          return 'text-slate-200';
+          return '';
+        },
+
+        // Returns inline style for rarity color
+        rarityStyle(hashName, itemType) {
+          const S = this._rarityStyles;
+          // 1. Use item_type if available (precise from Steam API)
+          if (itemType) {
+            const t = itemType.toLowerCase();
+            if (t.includes('contraband')) return S.contraband;
+            if (t.includes('extraordinary') || t.includes('covert')) {
+              if (hashName && hashName.startsWith('★')) return S.gold;
+              return S.covert;
+            }
+            if (t.includes('classified')) return S.classified;
+            if (t.includes('restricted')) return S.restricted;
+            if (t.includes('mil-spec') || t.includes('mil_spec')) return S.milspec;
+            if (t.includes('industrial')) return S.industrial;
+            if (t.includes('consumer') || t.includes('base grade')) return S.consumer;
+            if (t.includes('high grade')) return S.highgrade;
+          }
+          // 2. Fallback: pattern match on name
+          if (!hashName) return S.base;
+          // ★ items (knives/gloves) → Gold
+          if (hashName.startsWith('★')) return S.gold;
+          // Contraband
+          if (hashName.includes('M4A4 | Howl')) return S.contraband;
+          // StatTrak™ — show orange accent
+          if (hashName.startsWith('StatTrak™')) return S.stattrak;
+          // Souvenir
+          if (hashName.startsWith('Souvenir')) return S.souvenir;
+          // Covert weapons (known covert skins by weapon prefix heuristic)
+          const covertSkins = ['AWP | Dragon Lore','AWP | Gungnir','AK-47 | Wild Lotus','AK-47 | Gold Arabesque',
+            'Desert Eagle | Ocean Drive','M4A4 | Temukau','AK-47 | Inheritance','M4A1-S | Welcome to the Jungle'];
+          if (covertSkins.some(s => hashName.includes(s))) return S.covert;
+          // Stickers, Cases, Keys — typically consumer/industrial
+          if (hashName.startsWith('Sticker |') || hashName.startsWith('Patch |')) return S.highgrade;
+          if (hashName.includes(' Case') || hashName.includes('Capsule')) return S.milspec;
+          if (hashName.startsWith('Sealed Graffiti')) return S.industrial;
+          if (hashName.startsWith('Charm |')) return S.restricted;
+          if (hashName.startsWith('Music Kit |') || hashName.startsWith('StatTrak™ Music Kit')) return S.highgrade;
+          // Default: base grade
+          return S.base;
         },
 
         fmt(n) {
@@ -3085,10 +3477,17 @@
         },
         iconUrl(url, size = 62) {
           if (!url) return '';
+          if (url.startsWith('http')) return url;
           return `https://community.fastly.steamstatic.com/economy/image/${url}/${size}fx${size}f`;
         },
         statusLbl(s) {
-          return { in_steam: 'Steam中', rented_out: '出租中', in_storage: '收藏', sold: '已售' }[s] || s || '—';
+          const map = {
+            in_steam: this.t('status_steam'),
+            rented_out: this.t('status_rented'),
+            in_storage: this.t('status_storage'),
+            sold: this.t('status_sold'),
+          };
+          return map[s] || s || '—';
         },
         statusCls(s) {
           return {
@@ -3099,13 +3498,18 @@
           }[s] || 'bg-slate-800 text-slate-600';
         },
         importLbl(k) {
+          if (this.nameLang === 'en') return { stock:'Stock (STEAM)', lease:'Lease (rented)', buy:'Buy Records', sell:'Sell Records' }[k] || k;
           return { stock:'库存 (STEAM_PROTECTED)', lease:'租赁 (rented_out)', buy:'购买记录匹配', sell:'出售记录标记' }[k] || k;
         },
         importFields(data) {
-          const lm = {
+          const lm = this.nameLang === 'cn' ? {
             total_fetched:'拉取条数', upserted:'写入/更新', skipped:'跳过',
             total_records:'拉取条数', updated:'匹配更新', not_found_in_db:'未在库存',
             stats:'租赁统计', valuation:'悠悠估值',
+          } : {
+            total_fetched:'Fetched', upserted:'Upserted', skipped:'Skipped',
+            total_records:'Records', updated:'Matched', not_found_in_db:'Not in DB',
+            stats:'Lease Stats', valuation:'Valuation',
           };
           return Object.entries(data)
             .filter(([k]) => !['items','not_found_names'].includes(k))
