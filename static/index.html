@@ -300,6 +300,10 @@
             class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center font-bold"
             x-text="unreadAlertCount>9?'9+':unreadAlertCount"></span>
         </button>
+        <button @click="activeTab='changelog'"
+          class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
+          :class="activeTab==='changelog' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'"
+          x-text="t('tab_changelog')"></button>
       </nav>
 
       <!-- Right side -->
@@ -1729,6 +1733,104 @@
       </div>
     </div>
 
+    <!-- ════════════ CHANGELOG TAB ════════════ -->
+    <div x-show="activeTab==='changelog'" class="fade-up">
+
+      <!-- Header -->
+      <div class="flex items-center justify-between mb-5">
+        <div>
+          <h2 class="text-lg font-bold text-white" x-text="t('changelog_title')"></h2>
+          <p class="text-xs text-slate-600 mt-0.5" x-text="t('changelog_subtitle')"></p>
+        </div>
+        <div class="text-xs text-slate-600">
+          <span x-text="t('current_version')"></span>
+          <span class="text-blue-400 font-mono font-bold ml-1">v0.3.0</span>
+        </div>
+      </div>
+
+      <!-- Timeline -->
+      <div class="space-y-6">
+        <template x-for="release in changelogData" :key="release.version">
+          <div class="card p-0 overflow-hidden">
+            <!-- Version header -->
+            <div class="px-5 py-4 flex items-center justify-between"
+              style="border-bottom: 1px solid rgba(51,65,85,0.2)"
+              :style="release.major ? 'background: linear-gradient(135deg, rgba(59,130,246,0.08), rgba(139,92,246,0.05))' : ''">
+              <div class="flex items-center gap-3">
+                <span class="px-2.5 py-1 rounded-lg text-xs font-bold font-mono"
+                  :class="release.major ? 'bg-blue-500/15 text-blue-400 ring-1 ring-blue-500/20' : 'bg-slate-700/50 text-slate-400'"
+                  x-text="'v' + release.version"></span>
+                <span class="text-sm font-semibold text-white" x-text="nameLang==='cn' ? release.title_cn : release.title_en"></span>
+              </div>
+              <span class="text-[11px] text-slate-600 font-mono" x-text="release.date"></span>
+            </div>
+            <!-- Changes list -->
+            <div class="px-5 py-4 space-y-4">
+              <!-- Added / 新增 -->
+              <template x-if="release.added?.length">
+                <div>
+                  <p class="text-[10px] uppercase tracking-widest font-semibold text-emerald-500 mb-2" x-text="t('cl_added')"></p>
+                  <ul class="space-y-1.5">
+                    <template x-for="item in release.added">
+                      <li class="flex items-start gap-2 text-xs">
+                        <span class="text-emerald-500 mt-0.5 flex-shrink-0">+</span>
+                        <span class="text-slate-400" x-text="nameLang==='cn' ? item[0] : item[1]"></span>
+                      </li>
+                    </template>
+                  </ul>
+                </div>
+              </template>
+              <!-- Fixed / 修复 -->
+              <template x-if="release.fixed?.length">
+                <div>
+                  <p class="text-[10px] uppercase tracking-widest font-semibold text-amber-500 mb-2" x-text="t('cl_fixed')"></p>
+                  <ul class="space-y-1.5">
+                    <template x-for="item in release.fixed">
+                      <li class="flex items-start gap-2 text-xs">
+                        <span class="text-amber-500 mt-0.5 flex-shrink-0">~</span>
+                        <span class="text-slate-400" x-text="nameLang==='cn' ? item[0] : item[1]"></span>
+                      </li>
+                    </template>
+                  </ul>
+                </div>
+              </template>
+              <!-- Changed / 变更 -->
+              <template x-if="release.changed?.length">
+                <div>
+                  <p class="text-[10px] uppercase tracking-widest font-semibold text-blue-500 mb-2" x-text="t('cl_changed')"></p>
+                  <ul class="space-y-1.5">
+                    <template x-for="item in release.changed">
+                      <li class="flex items-start gap-2 text-xs">
+                        <span class="text-blue-500 mt-0.5 flex-shrink-0">△</span>
+                        <span class="text-slate-400" x-text="nameLang==='cn' ? item[0] : item[1]"></span>
+                      </li>
+                    </template>
+                  </ul>
+                </div>
+              </template>
+              <!-- Commits -->
+              <div x-show="release.commits?.length" style="border-top: 1px solid rgba(51,65,85,0.2); padding-top: 12px;">
+                <details class="group">
+                  <summary class="text-[10px] uppercase tracking-widest text-slate-700 cursor-pointer hover:text-slate-500 transition-colors select-none">
+                    <span x-text="t('cl_commits')"></span> (<span x-text="release.commits?.length"></span>)
+                  </summary>
+                  <ul class="mt-2 space-y-1">
+                    <template x-for="c in release.commits">
+                      <li class="flex items-start gap-2 text-[11px] font-mono">
+                        <span class="text-slate-700 flex-shrink-0" x-text="c.hash"></span>
+                        <span class="text-slate-600" x-text="c.msg"></span>
+                        <span class="text-slate-800 ml-auto flex-shrink-0" x-text="c.date"></span>
+                      </li>
+                    </template>
+                  </ul>
+                </details>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
     <!-- ════════════ INVENTORY TAB ════════════ -->
     <div x-show="activeTab==='inventory'">
 
@@ -2289,6 +2391,105 @@
           previewing: false, listing: false, preview: null,
         },
 
+        // Changelog data (bilingual, derived from git history)
+        changelogData: [
+          {
+            version: '0.3.0', date: '2026-02-25', major: true,
+            title_cn: '24/7 监控、组合快照与趋势可视化',
+            title_en: '24/7 Monitoring, Portfolio Snapshots & Trend Visualization',
+            added: [
+              ['组合价值快照系统：每30分钟自动记录持仓总值、成本、盈亏数据', 'Portfolio snapshot system: auto-records value, cost, P&L every 30 minutes'],
+              ['资产概览页「组合价值走势图」，支持 24h/7d/30d/90d/全部 时间范围', 'Portfolio value trend chart on Overview tab with 24h/7d/30d/90d/all ranges'],
+              ['系统监控卡片：运行状态、运行时间、数据库大小、采集器状态', 'System monitor card: status, uptime, DB size, collector state'],
+              ['监控 API：系统健康检查、组合历史、数据新鲜度', 'Monitoring API: health check, portfolio history, data freshness endpoints'],
+              ['看门狗脚本 monitor.sh：每5分钟健康检查，异常自动重启', 'Watchdog script monitor.sh: health checks every 5min, auto-restart on failure'],
+              ['自动备份脚本 backup.sh：每6小时 SQLite 热备份，保留30份', 'Auto-backup script backup.sh: SQLite hot backup every 6h, 30-file retention'],
+            ],
+            commits: [
+              { hash: '155a359', msg: 'feat: 24/7 monitoring, portfolio snapshots, and trend visualization', date: '02-25' },
+              { hash: '66caa2a', msg: 'docs: add bilingual CHANGELOG with version history', date: '02-25' },
+            ],
+          },
+          {
+            version: '0.2.1', date: '2026-02-24', major: false,
+            title_cn: '稳定性修复与性能优化',
+            title_en: 'Stability Fixes & Performance Optimization',
+            fixed: [
+              ['全局 i18n 修复、浅色模式样式、租金年化率计算、稀有度颜色、图片显示', 'Global i18n fixes, light mode styles, rental yield calc, rarity colors, images'],
+              ['导入/同步改为后台任务，避免 504 超时', 'Convert import/sync to background tasks to avoid 504 timeout'],
+              ['Token 持久化到磁盘，进程重启后自动恢复', 'Persist runtime token to disk to survive process restarts'],
+            ],
+            commits: [
+              { hash: 'db7cfc4', msg: 'fix: 6 bugs — global i18n, light mode, rental yield, rarity colors, images, color sync', date: '02-24' },
+              { hash: '6f14b35', msg: 'fix: convert import/sync to background tasks to avoid 504 timeout', date: '02-24' },
+              { hash: '06ea3fb', msg: 'fix: persist runtime token to disk to survive process restarts', date: '02-24' },
+            ],
+          },
+          {
+            version: '0.2.0', date: '2026-02-22', major: true,
+            title_cn: '量化分析系统与 UI 大升级',
+            title_en: 'Quantitative Analysis System & Major UI Upgrade',
+            added: [
+              ['量化分析后端：RSI(14)、布林带、7/30天动量、年化波动率等技术指标', 'Quant analysis backend: RSI(14), Bollinger Bands, 7/30d momentum, annualized volatility'],
+              ['量化分析前端 Tab：Chart.js 价格走势图、信号排名、预警系统', 'Analysis frontend tab: Chart.js price charts, signal rankings, alert system'],
+              ['APScheduler 定时采集（每30分钟）、日线 OHLC 聚合、自动信号计算', 'APScheduler collection (30min), daily OHLC aggregation, auto signal computation'],
+              ['套利雷达：跨平台价差检测与排名', 'Arbitrage radar: cross-platform spread detection & ranking'],
+              ['浅色/深色主题切换', 'Light/dark theme toggle'],
+              ['中英文全局语言切换', 'Global CN/EN language toggle'],
+              ['涨跌色模式切换（A股红涨绿跌 / 美股绿涨红跌）', 'Color mode toggle (CN red=up / US green=up)'],
+              ['PnL% 排序、CS2 Logo、武器分类筛选、磨损等级筛选', 'PnL% sort, CS2 logo, weapon category & wear grade filters'],
+              ['饰品图片显示、稀有度颜色标识', 'Item images display, rarity color coding'],
+              ['VIP 等级设置、批量智能改价', 'VIP level setting, batch smart repricing'],
+            ],
+            fixed: [
+              ['8项 UI 修复：命名规范、浅色主题、稀有度颜色、PnL 拆分、tooltip、色彩同步', '8 UI fixes: naming, light theme, rarity colors, PnL split, tooltips, color sync'],
+              ['密集回填（45个日数据点）、图表零价填充、排名筛选', 'Dense backfill (45 daily points), chart 0-price fill, rankings filter'],
+              ['稀有度颜色修正、分类/磨损筛选扩展、出租列表图片', 'Rarity color fixes, expanded category/wear filters, images in rented list'],
+              ['取消转租 orderId、改价 long_lease_unit、短信登录回退、下架刷新', 'Cancel-sublet orderId, reprice long_lease_unit, SMS fallback, delist refresh'],
+            ],
+            commits: [
+              { hash: '82ee8d3', msg: 'feat: quant analysis backend — price_history, signals, alerts, APScheduler collector', date: '02-22' },
+              { hash: 'd5a3430', msg: 'feat: 量化分析 frontend tab with Chart.js price charts', date: '02-22' },
+              { hash: '78726ed', msg: 'feat: analysis UI — exclude Steam from spreads, item banners, clickable distribution', date: '02-22' },
+              { hash: '4a7e012', msg: 'feat: PnL% sort, light/dark theme, CS2 logo, hide VIP, global lang toggle', date: '02-22' },
+              { hash: '18ec587', msg: 'feat: VIP level, batch smart reprice, item images, rarity colors, CN/EN toggle', date: '02-21' },
+              { hash: '4954891', msg: 'fix: 8 bugs — naming, light theme, rarity colors, PnL split, tooltips, color toggle', date: '02-22' },
+              { hash: '3eaf020', msg: 'fix: dense backfill (45 daily points), chart 0-price fill, rankings filter', date: '02-22' },
+              { hash: 'ababa30', msg: 'fix: rarity colors, expanded categories/wear filters, images in rented list', date: '02-22' },
+              { hash: '6087081', msg: 'fix: cancel-sublet orderId, reprice long_lease_unit, SMS fallback, delist refresh', date: '02-22' },
+            ],
+          },
+          {
+            version: '0.1.0', date: '2026-02-21', major: true,
+            title_cn: '初始版本 — 库存管理与交易系统',
+            title_en: 'Initial Release — Inventory Management & Trading System',
+            added: [
+              ['Steam 库存同步：通过 Steam Web API 自动同步全量库存', 'Steam inventory sync via Steam Web API with full pagination'],
+              ['储物柜追踪：通过 instance_id 变化检测存取事件', 'Storage unit tracking: detect deposit/withdraw via instance_id changes'],
+              ['悠悠有品集成：租赁导入、库存导入、买入记录精确匹配', 'Youpin integration: lease import, stock import, precision buy-price matching'],
+              ['RSA+AES 加密的悠悠有品市场查询', 'RSA+AES encrypted Youpin market queries'],
+              ['实时市价刷新（SteamDT + 悠悠有品双数据源）', 'Real-time price refresh (SteamDT + Youpin dual source)'],
+              ['上架管理：出售/出租货架、改价、批量操作', 'Listing management: sell/lease shelf, reprice, batch operations'],
+              ['Web Dashboard：持仓列表、资产概览、盈亏计算', 'Web dashboard: inventory list, overview, P&L calculation'],
+              ['手动定价支持：为无自动匹配的饰品设置购入价', 'Manual pricing: set purchase price for items without auto-match'],
+              ['悠悠有品 SMS 登录与 Token 管理', 'Youpin SMS login & token management'],
+              ['分页、搜索、多维度排序', 'Pagination, search, multi-column sorting'],
+            ],
+            commits: [
+              { hash: '453ac86', msg: 'Initial commit', date: '02-21' },
+              { hash: '4403628', msg: 'Phase 1', date: '02-21' },
+              { hash: '7be5dbb', msg: 'feat: implement Youpin (悠悠有品) API integration (Phase 3.5)', date: '02-21' },
+              { hash: '91bf384', msg: 'feat: import Youpin lease positions as primary inventory data source', date: '02-21' },
+              { hash: '00877fd', msg: 'feat: add interactive web dashboard with manual price support', date: '02-21' },
+              { hash: 'a438768', msg: 'feat: add real-time market price refresh and P&L dashboard (Phase 4)', date: '02-21' },
+              { hash: '2fb3452', msg: 'feat: Phase A+B — Youpin market prices, template-id sync, listing management', date: '02-21' },
+              { hash: 'be1e2d0', msg: 'feat: fix P&L calc, add sort by market price/pnl, add rented-out & sublet tabs', date: '02-21' },
+              { hash: '539f498', msg: 'fix: delist format, split rented/sublet states, add unlisted tab, reprice modal', date: '02-21' },
+              { hash: '12666dc', msg: 'fix: Android headers, SMS login, operation payloads, zero-CD shelf, batch ops', date: '02-21' },
+            ],
+          },
+        ],
+
         // Portfolio trend chart
         portfolioRange: '7d',
         portfolioData: [],
@@ -2305,6 +2506,7 @@
           tab_overview: ['资产概览', 'Overview'],
           tab_listing: ['上架管理', 'Listing'],
           tab_analysis: ['量化分析', 'Analysis'],
+          tab_changelog: ['更新日志', 'Changelog'],
           // Navbar buttons & status
           btn_sync: ['同步数据', 'Sync Data'],
           btn_syncing: ['同步中…', 'Syncing…'],
@@ -2348,6 +2550,14 @@
           sys_db_size: ['数据库大小', 'DB Size'],
           sys_collector: ['采集器', 'Collector'],
           btn_refresh: ['刷新', 'Refresh'],
+          // Changelog
+          changelog_title: ['更新日志', 'Changelog'],
+          changelog_subtitle: ['项目版本更新记录', 'Project version history'],
+          current_version: ['当前版本', 'Current Version'],
+          cl_added: ['新增', 'Added'],
+          cl_fixed: ['修复', 'Fixed'],
+          cl_changed: ['变更', 'Changed'],
+          cl_commits: ['提交记录', 'Commits'],
           status_rented: ['出租中', 'Rented'],
           status_steam: ['Steam中', 'In Steam'],
           status_storage: ['收藏', 'Storage'],
