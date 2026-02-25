@@ -747,6 +747,68 @@
           </span>
         </div>
       </div>
+
+      <!-- Portfolio Value Trend Chart -->
+      <div class="card p-5 mt-5">
+        <div class="flex items-center justify-between mb-4">
+          <p class="text-[11px] text-slate-600 uppercase tracking-widest" x-text="t('portfolio_trend')"></p>
+          <div class="flex gap-0.5 p-0.5 rounded-lg" style="background: rgba(20,30,48,0.7); border: 1px solid rgba(51,65,85,0.3)">
+            <template x-for="r in ['24h','7d','30d','90d','all']">
+              <button @click="portfolioRange=r; loadPortfolioHistory()"
+                class="px-2.5 py-1 rounded-md text-[10px] font-medium transition-all"
+                :class="portfolioRange===r ? 'bg-slate-600 text-white' : 'text-slate-500 hover:text-slate-300'"
+                x-text="r"></button>
+            </template>
+          </div>
+        </div>
+        <div class="relative" style="height: 320px;">
+          <canvas id="portfolioChart"></canvas>
+          <div x-show="!portfolioData.length" class="absolute inset-0 flex items-center justify-center">
+            <p class="text-slate-600 text-sm" x-text="t('portfolio_no_data')"></p>
+          </div>
+        </div>
+        <!-- Chart legend & stats -->
+        <div x-show="portfolioData.length" class="flex flex-wrap gap-x-6 gap-y-1 mt-3 text-xs text-slate-600">
+          <span><span class="text-emerald-400">━━</span> <span x-text="t('market_value')"></span></span>
+          <span><span class="text-blue-400">━━</span> <span x-text="t('total_cost')"></span></span>
+          <span><span class="text-amber-400">━━</span> <span x-text="t('pnl_amount')"></span></span>
+          <span class="ml-auto text-[10px] text-slate-700" x-show="portfolioData.length">
+            <span x-text="portfolioData.length"></span> <span x-text="t('data_points')"></span>
+          </span>
+        </div>
+      </div>
+
+      <!-- System Monitoring Status -->
+      <div class="card p-5 mt-5">
+        <div class="flex items-center justify-between mb-4">
+          <p class="text-[11px] text-slate-600 uppercase tracking-widest" x-text="t('system_monitor')"></p>
+          <button @click="loadMonitorStatus()" class="text-[10px] text-slate-600 hover:text-slate-400 transition-colors">
+            ↻ <span x-text="t('btn_refresh')"></span>
+          </button>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div class="p-3 rounded-xl" style="background: rgba(15,23,42,0.5); border: 1px solid rgba(51,65,85,0.2)">
+            <p class="text-[10px] text-slate-600 mb-1" x-text="t('sys_status')"></p>
+            <p class="text-sm font-semibold"
+              :class="monitorStatus.status==='healthy' ? 'text-emerald-400' : 'text-amber-400'"
+              x-text="monitorStatus.status || '—'"></p>
+          </div>
+          <div class="p-3 rounded-xl" style="background: rgba(15,23,42,0.5); border: 1px solid rgba(51,65,85,0.2)">
+            <p class="text-[10px] text-slate-600 mb-1" x-text="t('sys_uptime')"></p>
+            <p class="text-sm font-semibold text-slate-300" x-text="monitorStatus.uptime_human || '—'"></p>
+          </div>
+          <div class="p-3 rounded-xl" style="background: rgba(15,23,42,0.5); border: 1px solid rgba(51,65,85,0.2)">
+            <p class="text-[10px] text-slate-600 mb-1" x-text="t('sys_db_size')"></p>
+            <p class="text-sm font-semibold text-slate-300" x-text="monitorStatus.database?.size_mb ? monitorStatus.database.size_mb + ' MB' : '—'"></p>
+          </div>
+          <div class="p-3 rounded-xl" style="background: rgba(15,23,42,0.5); border: 1px solid rgba(51,65,85,0.2)">
+            <p class="text-[10px] text-slate-600 mb-1" x-text="t('sys_collector')"></p>
+            <p class="text-sm font-semibold"
+              :class="monitorStatus.collector?.status==='running' ? 'text-blue-400' : 'text-slate-400'"
+              x-text="monitorStatus.collector?.status || 'idle'"></p>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- ════════════ LISTING TAB ════════════ -->
@@ -2227,6 +2289,12 @@
           previewing: false, listing: false, preview: null,
         },
 
+        // Portfolio trend chart
+        portfolioRange: '7d',
+        portfolioData: [],
+        _portfolioChart: null,
+        monitorStatus: {},
+
         // 涨跌色模式：'cn'=红涨绿跌（默认） 'us'=绿涨红跌
         colorMode: 'cn',
 
@@ -2271,6 +2339,15 @@
           need_data: ['需要成本价 + 市价数据', 'Need cost + price data'],
           wait_refresh: ['待市价刷新后计算', 'Pending price refresh'],
           status_distribution: ['持仓状态分布', 'Status Distribution'],
+          portfolio_trend: ['组合价值走势', 'Portfolio Value Trend'],
+          portfolio_no_data: ['暂无组合快照数据，系统将每30分钟自动记录', 'No portfolio data yet. Snapshots are recorded every 30 minutes.'],
+          data_points: ['个数据点', 'data points'],
+          system_monitor: ['系统监控', 'System Monitor'],
+          sys_status: ['运行状态', 'Status'],
+          sys_uptime: ['运行时间', 'Uptime'],
+          sys_db_size: ['数据库大小', 'DB Size'],
+          sys_collector: ['采集器', 'Collector'],
+          btn_refresh: ['刷新', 'Refresh'],
           status_rented: ['出租中', 'Rented'],
           status_steam: ['Steam中', 'In Steam'],
           status_storage: ['收藏', 'Storage'],
@@ -2678,13 +2755,136 @@
         },
 
         async loadAll() {
-          await Promise.all([this.loadOverview(), this.loadItems()]);
+          await Promise.all([this.loadOverview(), this.loadItems(), this.loadPortfolioHistory(), this.loadMonitorStatus()]);
         },
 
         async loadOverview() {
           try {
             const r = await fetch('/api/dashboard/overview');
             if (r.ok) this.overview = await r.json();
+          } catch {}
+        },
+
+        // ── Portfolio Trend Chart ──────────────────────────────────────
+        async loadPortfolioHistory() {
+          try {
+            const r = await fetch(`/api/monitoring/portfolio-history?range=${this.portfolioRange}`);
+            if (!r.ok) return;
+            const d = await r.json();
+            this.portfolioData = d.data || [];
+            this.$nextTick(() => this.renderPortfolioChart());
+          } catch {}
+        },
+
+        renderPortfolioChart() {
+          const el = document.getElementById('portfolioChart');
+          if (!el || !this.portfolioData.length) return;
+
+          if (this._portfolioChart) {
+            this._portfolioChart.destroy();
+            this._portfolioChart = null;
+          }
+
+          const data = this.portfolioData;
+          const labels = data.map(d => d.timestamp);
+          const isDark = !document.documentElement.classList.contains('light');
+          const gridColor = isDark ? 'rgba(51,65,85,0.3)' : 'rgba(186,214,235,0.4)';
+          const textColor = isDark ? '#64748b' : '#475569';
+
+          this._portfolioChart = new Chart(el, {
+            type: 'line',
+            data: {
+              labels,
+              datasets: [
+                {
+                  label: this.t('market_value'),
+                  data: data.map(d => d.market_value),
+                  borderColor: '#10b981',
+                  backgroundColor: 'rgba(16,185,129,0.08)',
+                  fill: true,
+                  tension: 0.3,
+                  pointRadius: data.length > 50 ? 0 : 2,
+                  pointHoverRadius: 4,
+                  borderWidth: 2,
+                },
+                {
+                  label: this.t('total_cost'),
+                  data: data.map(d => d.total_cost),
+                  borderColor: '#3b82f6',
+                  backgroundColor: 'rgba(59,130,246,0.05)',
+                  fill: true,
+                  tension: 0.3,
+                  pointRadius: data.length > 50 ? 0 : 2,
+                  pointHoverRadius: 4,
+                  borderWidth: 2,
+                },
+                {
+                  label: this.t('pnl_amount'),
+                  data: data.map(d => d.pnl),
+                  borderColor: '#f59e0b',
+                  backgroundColor: 'transparent',
+                  tension: 0.3,
+                  pointRadius: 0,
+                  pointHoverRadius: 4,
+                  borderWidth: 1.5,
+                  borderDash: [4, 2],
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              interaction: { mode: 'index', intersect: false },
+              plugins: {
+                legend: { display: false },
+                tooltip: {
+                  backgroundColor: isDark ? 'rgba(15,23,42,0.95)' : 'rgba(255,255,255,0.95)',
+                  titleColor: isDark ? '#e2e8f0' : '#1e293b',
+                  bodyColor: isDark ? '#94a3b8' : '#475569',
+                  borderColor: isDark ? 'rgba(51,65,85,0.5)' : 'rgba(186,214,235,0.5)',
+                  borderWidth: 1,
+                  padding: 10,
+                  callbacks: {
+                    title: (ctx) => {
+                      const d = new Date(ctx[0].label);
+                      return d.toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                    },
+                    label: (ctx) => `${ctx.dataset.label}: ¥${ctx.parsed.y?.toLocaleString() ?? '—'}`,
+                  },
+                },
+              },
+              scales: {
+                x: {
+                  type: 'time',
+                  time: {
+                    tooltipFormat: 'yyyy-MM-dd HH:mm',
+                    displayFormats: {
+                      hour: 'HH:mm',
+                      day: 'MM/dd',
+                      week: 'MM/dd',
+                    },
+                  },
+                  grid: { color: gridColor },
+                  ticks: { color: textColor, maxTicksLimit: 8, font: { size: 10 } },
+                },
+                y: {
+                  grid: { color: gridColor },
+                  ticks: {
+                    color: textColor,
+                    font: { size: 10 },
+                    callback: (v) => '¥' + (v >= 10000 ? (v / 10000).toFixed(1) + 'w' : v.toLocaleString()),
+                  },
+                },
+              },
+            },
+          });
+        },
+
+        // ── System Monitor ─────────────────────────────────────────────
+        async loadMonitorStatus() {
+          try {
+            const r = await fetch('/api/monitoring/status');
+            if (r.ok) this.monitorStatus = await r.json();
           } catch {}
         },
 

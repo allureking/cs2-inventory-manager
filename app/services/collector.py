@@ -19,7 +19,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
-from app.models.db_models import InventoryItem, PriceHistory, PriceSnapshot
+from app.models.db_models import InventoryItem, PortfolioSnapshot, PriceHistory, PriceSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -386,6 +386,183 @@ async def backfill_avg_prices() -> None:
         backfill_state["status"] = "error"
         backfill_state["progress"] = str(e)
         logger.exception("backfill failed: %s", e)
+
+
+# ══════════════════════════════════════════════════════════════
+#  Task 4: Portfolio Snapshot (every 30 min, after price collect)
+# ══════════════════════════════════════════════════════════════
+
+async def snapshot_portfolio() -> None:
+    """
+    Record a timestamped snapshot of the entire portfolio's value, cost, and PnL.
+    Called every 30 min (5 min after collect_prices to ensure fresh data).
+    Enables portfolio value trend charts over time.
+    """
+    from sqlalchemy import and_, or_
+
+    now = datetime.now(timezone.utc)
+    snap_minute = now.strftime("%Y%m%d%H%M")
+
+    try:
+        async with AsyncSessionLocal() as db:
+            _ACTIVE = ["in_steam", "rented_out", "in_storage"]
+
+            # ── Count by status ──
+            status_rows = (
+                await db.execute(
+                    select(InventoryItem.status, func.count(InventoryItem.id))
+                    .group_by(InventoryItem.status)
+                )
+            ).all()
+            status_counts = dict(status_rows)
+            total_active = sum(status_counts.get(s, 0) for s in _ACTIVE)
+
+            # ── Total cost (COALESCE manual, auto) ──
+            total_cost = (
+                await db.execute(
+                    select(
+                        func.sum(
+                            func.coalesce(
+                                InventoryItem.purchase_price_manual,
+                                InventoryItem.purchase_price,
+                            )
+                        )
+                    ).where(InventoryItem.status.in_(_ACTIVE))
+                )
+            ).scalar() or 0
+
+            # ── Cost-priced count ──
+            cost_priced = (
+                await db.execute(
+                    select(func.count(InventoryItem.id)).where(
+                        InventoryItem.status.in_(_ACTIVE),
+                        or_(
+                            InventoryItem.purchase_price.isnot(None),
+                            InventoryItem.purchase_price_manual.isnot(None),
+                        ),
+                    )
+                )
+            ).scalar() or 0
+
+            # ── Market value (latest price_snapshot per item × count) ──
+            name_count_rows = (
+                await db.execute(
+                    select(
+                        InventoryItem.market_hash_name,
+                        func.count(InventoryItem.id).label("cnt"),
+                    )
+                    .where(InventoryItem.status.in_(_ACTIVE))
+                    .group_by(InventoryItem.market_hash_name)
+                )
+            ).all()
+
+            all_names = [r[0] for r in name_count_rows]
+            name_to_count = {r[0]: r[1] for r in name_count_rows}
+
+            # Get latest prices
+            if all_names:
+                latest_subq = (
+                    select(
+                        PriceSnapshot.market_hash_name,
+                        func.max(PriceSnapshot.snapshot_minute).label("latest_minute"),
+                    )
+                    .where(PriceSnapshot.market_hash_name.in_(all_names))
+                    .group_by(PriceSnapshot.market_hash_name)
+                    .subquery()
+                )
+                price_rows = (
+                    await db.execute(
+                        select(
+                            PriceSnapshot.market_hash_name,
+                            func.min(PriceSnapshot.sell_price).label("cp"),
+                        )
+                        .join(
+                            latest_subq,
+                            and_(
+                                PriceSnapshot.market_hash_name == latest_subq.c.market_hash_name,
+                                PriceSnapshot.snapshot_minute == latest_subq.c.latest_minute,
+                            ),
+                        )
+                        .where(PriceSnapshot.sell_price.isnot(None), PriceSnapshot.sell_price > 0)
+                        .group_by(PriceSnapshot.market_hash_name)
+                    )
+                ).all()
+                price_map = {r[0]: r[1] for r in price_rows}
+            else:
+                price_map = {}
+
+            market_value = 0.0
+            market_priced = 0
+            for name, cnt in name_to_count.items():
+                mp = price_map.get(name)
+                if mp is not None:
+                    market_value += mp * cnt
+                    market_priced += cnt
+
+            # ── PnL: items with both cost and market price ──
+            item_cost_rows = (
+                await db.execute(
+                    select(
+                        InventoryItem.market_hash_name,
+                        func.coalesce(
+                            InventoryItem.purchase_price_manual,
+                            InventoryItem.purchase_price,
+                        ).label("cost"),
+                    )
+                    .where(
+                        InventoryItem.status.in_(_ACTIVE),
+                        or_(
+                            InventoryItem.purchase_price.isnot(None),
+                            InventoryItem.purchase_price_manual.isnot(None),
+                        ),
+                    )
+                )
+            ).all()
+
+            pnl_market_sum = 0.0
+            pnl_cost_sum = 0.0
+            for row in item_cost_rows:
+                mp = price_map.get(row[0])
+                if mp is not None and row[1] is not None:
+                    pnl_market_sum += mp
+                    pnl_cost_sum += float(row[1])
+
+            if pnl_cost_sum > 0:
+                pnl = round(pnl_market_sum - pnl_cost_sum, 2)
+                pnl_pct = round((pnl_market_sum - pnl_cost_sum) / pnl_cost_sum * 100, 2)
+            else:
+                pnl = None
+                pnl_pct = None
+
+            # ── Write snapshot ──
+            from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+            values = {
+                "snapshot_minute": snap_minute,
+                "total_active": total_active,
+                "in_steam_count": status_counts.get("in_steam", 0),
+                "rented_out_count": status_counts.get("rented_out", 0),
+                "in_storage_count": status_counts.get("in_storage", 0),
+                "total_cost": round(total_cost, 2) if total_cost else 0,
+                "market_value": round(market_value, 2) if market_value else 0,
+                "pnl": pnl,
+                "pnl_pct": pnl_pct,
+                "market_priced_count": market_priced,
+                "cost_priced_count": cost_priced,
+            }
+            ins = sqlite_insert(PortfolioSnapshot).values(values)
+            ins = ins.on_conflict_do_update(
+                index_elements=["snapshot_minute"],
+                set_={k: ins.excluded[k] for k in values if k != "snapshot_minute"},
+            )
+            await db.execute(ins)
+            await db.commit()
+
+            logger.info(
+                "snapshot_portfolio: active=%d, value=%.2f, cost=%.2f, pnl=%s",
+                total_active, market_value, total_cost, pnl,
+            )
+    except Exception as e:
+        logger.exception("snapshot_portfolio failed: %s", e)
 
 
 # ══════════════════════════════════════════════════════════════

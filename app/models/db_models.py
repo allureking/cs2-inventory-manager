@@ -221,6 +221,35 @@ class QuantAlert(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class PortfolioSnapshot(Base):
+    """定时记录的投资组合快照（用于组合价值趋势图）"""
+
+    __tablename__ = "portfolio_snapshot"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # 时间戳（精确到分钟，格式 YYYYMMDDHHmm）
+    snapshot_minute: Mapped[str] = mapped_column(String(16), nullable=False, unique=True, index=True)
+
+    # 持仓数量
+    total_active: Mapped[int] = mapped_column(Integer, default=0)
+    in_steam_count: Mapped[int] = mapped_column(Integer, default=0)
+    rented_out_count: Mapped[int] = mapped_column(Integer, default=0)
+    in_storage_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    # 价值（¥）
+    total_cost: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    market_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    pnl: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    pnl_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # 市价覆盖率
+    market_priced_count: Mapped[int] = mapped_column(Integer, default=0)
+    cost_priced_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class StorageUnit(Base):
     """
     储物柜状态追踪表。

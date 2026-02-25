@@ -27,5 +27,11 @@ __pycache__/
 # Logs
 *.log
 
+# Runtime state
+.runtime_state.json
+
+# Virtual environment (alternate name)
+venv/
+
 # Local dev notes (personal session notes, not for repo)
 DEV_NOTES.md

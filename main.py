@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.core.database import init_db
 from app.api.routes import prices, items, inventory, youpin, listing
-from app.api.routes import dashboard, analysis
+from app.api.routes import dashboard, analysis, monitoring
 
 # ── 定时任务 ────────────────────────────────────────────────────────────────
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -17,6 +17,7 @@ from app.services.collector import (
     aggregate_daily,
     compute_signals,
     cleanup_old_snapshots,
+    snapshot_portfolio,
 )
 
 scheduler = AsyncIOScheduler()
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="CS2 Inventory Manager",
     description="CS2 饰品量化交易监控系统",
-    version="0.2.0",
+    version="0.3.0",
 )
 
 app.add_middleware(
@@ -43,6 +44,7 @@ app.include_router(youpin.router, prefix="/api/youpin", tags=["youpin"])
 app.include_router(listing.router, prefix="/api/listing", tags=["listing"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
 app.include_router(analysis.router, prefix="/api/analysis", tags=["analysis"])
+app.include_router(monitoring.router, prefix="/api/monitoring", tags=["monitoring"])
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -61,12 +63,21 @@ async def startup():
     # Signal computation: 00:10 UTC
     scheduler.add_job(compute_signals, "cron", hour=0, minute=10, id="daily_signals",
                       misfire_grace_time=600)
+    # Portfolio snapshot: every 30 min (offset +5 from price collect for fresh data)
+    scheduler.add_job(snapshot_portfolio, "interval", minutes=30, id="portfolio_snapshot",
+                      misfire_grace_time=300)
     # Cleanup old snapshots: 01:00 UTC
     scheduler.add_job(cleanup_old_snapshots, "cron", hour=1, minute=0, id="cleanup_snapshots",
                       misfire_grace_time=600)
 
     scheduler.start()
-    logger.info("APScheduler started with 4 background jobs")
+    logger.info("APScheduler started with 5 background jobs")
+
+    # Take an immediate portfolio snapshot on startup
+    try:
+        await snapshot_portfolio()
+    except Exception as e:
+        logger.warning("Initial portfolio snapshot failed: %s", e)
 
 
 @app.on_event("shutdown")
@@ -81,7 +92,7 @@ async def serve_ui():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {"status": "ok", "version": "0.3.0"}
 
 
 if __name__ == "__main__":
