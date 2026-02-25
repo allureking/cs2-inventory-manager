@@ -119,7 +119,7 @@ cp .env.example .env
 ```
 
 Required credentials:
-- **SteamDT API Key** — [申请地址](https://open.steamdt.com)
+- **SteamDT API Key** — [申请地址](https://doc.steamdt.com)
 - **Steam Web API Key** — [Steam API Key](https://steamcommunity.com/dev/apikey)
 - **Steam Login Cookie** — `steamLoginSecure` + `sessionid` from browser
 - **Youpin Token** — via SMS login in the web UI
