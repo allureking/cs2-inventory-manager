@@ -118,9 +118,11 @@ async def auth_apply_token(body: dict):
     try:
         info = await youpin_svc.check_token_status()
         youpin_svc._runtime_nickname = info.get("nickname")
+        youpin_svc._save_runtime_state()
         return {"ok": True, "nickname": info.get("nickname"), "token_source": "manual"}
     except Exception as e:
         youpin_svc._runtime_token = None
+        youpin_svc._save_runtime_state()
         raise HTTPException(status_code=401, detail=f"Token 无效: {e}")
 
 

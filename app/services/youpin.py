@@ -36,6 +36,7 @@ import string
 import time
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import List, Optional
 
 import httpx
@@ -83,6 +84,34 @@ _device_token: str = ""
 # ── 运行时 token（SMS 登录后覆盖 .env 中的值）────────────────────────────
 _runtime_token: Optional[str] = None
 _runtime_nickname: Optional[str] = None
+
+_RUNTIME_STATE_FILE = Path(".runtime_state.json")
+
+
+def _load_runtime_state() -> None:
+    """从磁盘加载持久化的运行时 token（进程重启后恢复）"""
+    global _runtime_token, _runtime_nickname
+    try:
+        if _RUNTIME_STATE_FILE.exists():
+            data = json.loads(_RUNTIME_STATE_FILE.read_text())
+            _runtime_token = data.get("token") or None
+            _runtime_nickname = data.get("nickname") or None
+    except Exception:
+        pass
+
+
+def _save_runtime_state() -> None:
+    """将运行时 token 持久化到磁盘"""
+    try:
+        _RUNTIME_STATE_FILE.write_text(json.dumps({
+            "token": _runtime_token,
+            "nickname": _runtime_nickname,
+        }))
+    except Exception:
+        pass
+
+
+_load_runtime_state()
 
 
 def _ensure_device_id() -> None:
@@ -288,6 +317,7 @@ async def sms_login(phone: str, code: str, session_id: str) -> dict:
     # 验证新 token 并获取昵称
     info = await check_token_status()
     _runtime_nickname = info.get("nickname")
+    _save_runtime_state()
     return {
         "ok": True,
         "token": token,
