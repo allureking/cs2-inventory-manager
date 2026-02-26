@@ -25,8 +25,9 @@ CS2 饰品量化交易监控系统 — 集库存管理、实时市价追踪、�
 - 组合价值走势图（支持 24h / 7d / 30d / 90d 时间范围）
 
 **量化信号**
-- 技术指标：RSI(14)、布林带（%B / Width）、7/30 天动量、年化波动率
-- 综合评分：卖出评分 + 机会评分（0-100）
+- 「CS2 大商决策模型」卖出评分：收益达标度(30%)、年化收益衰减(20%)、持仓集中度(20%)、异常波动(25%)、市场冲击(5%)
+- 买入机会评分：超卖、布林下轨、短期回调、跨平台价差、深亏增持
+- 技术指标：RSI(14)、布林带、动量、波动率、年化收益率、持仓占比、市场份额、波动 Z 值
 - 预警系统、套利雷达（跨平台价差检测）
 - 日线 OHLC 聚合 + 历史数据回填
 
@@ -148,8 +149,9 @@ A quantitative trading & monitoring system for CS2 skins — inventory managemen
 - Portfolio value trend chart (24h / 7d / 30d / 90d time ranges)
 
 **Quantitative Signals**
-- Technical indicators: RSI(14), Bollinger Bands (%B / Width), 7/30d momentum, annualized volatility
-- Composite scores: sell score + opportunity score (0-100)
+- "CS2 Dealer Decision Model" sell score: Target P&L (30%), Annual Return Decay (20%), Concentration (20%), Volatility Anomaly (25%), Market Impact (5%)
+- Buy opportunity score: oversold, lower BB, dip, cross-platform spread, loss averaging
+- Technical indicators: RSI(14), Bollinger Bands, momentum, volatility, annualized return, concentration %, market share %, volatility z-score
 - Alert system, arbitrage radar (cross-platform spread detection)
 - Daily OHLC aggregation + historical data backfill
 

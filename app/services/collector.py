@@ -444,20 +444,23 @@ async def snapshot_portfolio() -> None:
                 )
             ).scalar() or 0
 
-            # ── Market value (latest price_snapshot per item × count) ──
-            name_count_rows = (
+            # ── Market value (latest price_snapshot per item × count, by status) ──
+            name_status_rows = (
                 await db.execute(
                     select(
                         InventoryItem.market_hash_name,
+                        InventoryItem.status,
                         func.count(InventoryItem.id).label("cnt"),
                     )
                     .where(InventoryItem.status.in_(_ACTIVE))
-                    .group_by(InventoryItem.market_hash_name)
+                    .group_by(InventoryItem.market_hash_name, InventoryItem.status)
                 )
             ).all()
 
-            all_names = [r[0] for r in name_count_rows]
-            name_to_count = {r[0]: r[1] for r in name_count_rows}
+            all_names = list({r[0] for r in name_status_rows})
+            name_to_count = {}
+            for r in name_status_rows:
+                name_to_count[r[0]] = name_to_count.get(r[0], 0) + r[2]
 
             # Get latest prices
             if all_names:
@@ -492,12 +495,19 @@ async def snapshot_portfolio() -> None:
                 price_map = {}
 
             market_value = 0.0
+            in_steam_value = 0.0
+            rented_out_value = 0.0
             market_priced = 0
-            for name, cnt in name_to_count.items():
+            for name, status, cnt in name_status_rows:
                 mp = price_map.get(name)
                 if mp is not None:
-                    market_value += mp * cnt
+                    val = mp * cnt
+                    market_value += val
                     market_priced += cnt
+                    if status == "in_steam":
+                        in_steam_value += val
+                    elif status == "rented_out":
+                        rented_out_value += val
 
             # ── PnL: items with both cost and market price ──
             item_cost_rows = (
@@ -544,6 +554,8 @@ async def snapshot_portfolio() -> None:
                 "in_storage_count": status_counts.get("in_storage", 0),
                 "total_cost": round(total_cost, 2) if total_cost else 0,
                 "market_value": round(market_value, 2) if market_value else 0,
+                "in_steam_value": round(in_steam_value, 2),
+                "rented_out_value": round(rented_out_value, 2),
                 "pnl": pnl,
                 "pnl_pct": pnl_pct,
                 "market_priced_count": market_priced,

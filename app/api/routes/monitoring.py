@@ -164,6 +164,8 @@ async def portfolio_history(
             "in_storage_count": r.in_storage_count,
             "total_cost": r.total_cost,
             "market_value": r.market_value,
+            "in_steam_value": r.in_steam_value,
+            "rented_out_value": r.rented_out_value,
             "pnl": r.pnl,
             "pnl_pct": r.pnl_pct,
             "market_priced_count": r.market_priced_count,

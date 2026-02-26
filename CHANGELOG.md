@@ -1,5 +1,21 @@
 # Changelog / 更新日志
 
+## [0.4.0] - 2026-02-26
+
+### 新增 / Added
+- **卖出评分重构为「CS2 大商决策模型」**：五维度加权 — 收益达标度(30%)、年化收益衰减(20%)、持仓集中度(20%)、异常波动(25%)、市场冲击(5%) / **Sell score rewritten as "CS2 Dealer Decision Model"**: 5-dimension weighted scoring — Target P&L(30%), Annual Return Decay(20%), Concentration(20%), Volatility Anomaly(25%), Market Impact(5%)
+- 买入机会评分新增「深亏增持」维度(20%)：远低于目标收益时触发增持信号 / Buy opportunity score adds "loss averaging" dimension (20%): triggers buy signal when deep in loss
+- 新增 5 个量化指标仪表盘：年化收益率、持有件数、持仓占比、市场份额、波动 Z 值 / 5 new signal gauges: annualized return, holding count, concentration %, market share %, volatility z-score
+- 持仓信息卡新增「持有件数」和「目标收益率」显示 / Ownership card now shows holding count and target P&L
+- 数据库新增 `target_pnl_pct`（单品目标收益率）和 5 个量化信号维度字段 / DB adds `target_pnl_pct` (per-item target return) and 5 signal dimension columns
+- 组合快照新增按状态拆分市值（Steam 库存 / 出租中） / Portfolio snapshots now split market value by status (in_steam / rented_out)
+
+### 变更 / Changed
+- 卖出评分基线从 50 调整为 45（无信号 = 不急卖） / Sell score baseline adjusted from 50 to 45 (no signal = don't rush to sell)
+- 原 RSI/布林带/动量/ATH 指标降级为「异常波动」维度的子因子 / Original RSI/BB/Momentum/ATH demoted to sub-factors under "Volatility Anomaly" dimension
+- 年化收益衰减维度仅在盈利状态下生效，避免亏损时误判 / Annual return decay only activates when profitable, avoiding false signals during losses
+- 排名表和信号 API 新增年化收益、持仓集中度等排序维度 / Rankings and signals API support sorting by new dimensions
+
 ## [0.3.0] - 2026-02-25
 
 ### 新增 / Added

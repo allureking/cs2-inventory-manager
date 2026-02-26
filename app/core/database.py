@@ -40,6 +40,8 @@ async def init_db() -> None:
             "ALTER TABLE inventory_item ADD COLUMN abrade REAL",
             "ALTER TABLE inventory_item ADD COLUMN purchase_price_manual REAL",
             "ALTER TABLE inventory_item ADD COLUMN youpin_template_id INTEGER",
+            "ALTER TABLE portfolio_snapshot ADD COLUMN in_steam_value FLOAT",
+            "ALTER TABLE portfolio_snapshot ADD COLUMN rented_out_value FLOAT",
         ]
         for sql in _new_columns:
             try:

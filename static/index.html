@@ -7,6 +7,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hammerjs@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
   <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <style>
     /* ── Base ────────────────────────────────────────────────────────── */
@@ -344,7 +346,7 @@
           </button>
           <span x-show="overview.price_updated_at && !refreshing" x-cloak
             class="text-[10px] text-slate-700 hidden lg:block">
-            <span x-text="t('market_price')"></span> <span class="text-slate-600" x-text="overview.price_updated_at"></span>
+            <span x-text="t('market_price')"></span> <span class="text-slate-600" x-text="fmtUtcStr(overview.price_updated_at)"></span>
           </span>
         </div>
 
@@ -540,7 +542,7 @@
         <span x-show="overview.price_updated_at">
           <span class="inline-block w-1.5 h-1.5 rounded-full mr-1" :class="monitorStatus.data_freshness?.is_fresh ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'"></span>
           <span x-text="t('ts_price')"></span>
-          <span class="text-slate-500 font-mono" x-text="overview.price_updated_at"></span>
+          <span class="text-slate-500 font-mono" x-text="fmtUtcStr(overview.price_updated_at)"></span>
         </span>
         <span x-show="monitorStatus.data_freshness?.latest_portfolio_snapshot">
           <span class="text-slate-800">|</span>
@@ -552,6 +554,7 @@
           <span x-text="t('ts_signal')"></span>
           <span class="text-slate-500 font-mono" x-text="fmtDate(monitorStatus.data_freshness?.latest_signal_date)"></span>
         </span>
+        <span class="text-slate-500/60 ml-auto">PT</span>
       </div>
 
       <!-- Stat cards -->
@@ -794,11 +797,28 @@
             <p class="text-slate-600 text-sm" x-text="t('portfolio_no_data')"></p>
           </div>
         </div>
-        <!-- Chart legend & stats -->
-        <div x-show="portfolioData.length" class="flex flex-wrap gap-x-6 gap-y-1 mt-3 text-xs text-slate-600">
-          <span><span class="text-emerald-400">━━</span> <span x-text="t('market_value')"></span></span>
-          <span><span class="text-blue-400">━━</span> <span x-text="t('total_cost')"></span></span>
-          <span><span class="text-amber-400">━━</span> <span x-text="t('pnl_amount')"></span></span>
+        <!-- Chart legend checkboxes -->
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-xs text-slate-500">
+          <label class="flex items-center gap-1 cursor-pointer select-none hover:text-slate-300 transition-colors">
+            <input type="checkbox" x-model="portfolioLines.market_value" @change="togglePortfolioLine()" class="accent-emerald-500 w-3 h-3">
+            <span class="text-emerald-400">━</span> <span x-text="t('market_value')"></span>
+          </label>
+          <label class="flex items-center gap-1 cursor-pointer select-none hover:text-slate-300 transition-colors">
+            <input type="checkbox" x-model="portfolioLines.in_steam_value" @change="togglePortfolioLine()" class="accent-cyan-500 w-3 h-3">
+            <span class="text-cyan-400">━</span> <span x-text="t('in_steam_value')"></span>
+          </label>
+          <label class="flex items-center gap-1 cursor-pointer select-none hover:text-slate-300 transition-colors">
+            <input type="checkbox" x-model="portfolioLines.rented_out_value" @change="togglePortfolioLine()" class="accent-pink-500 w-3 h-3">
+            <span class="text-pink-400">━</span> <span x-text="t('rented_out_value')"></span>
+          </label>
+          <label class="flex items-center gap-1 cursor-pointer select-none hover:text-slate-300 transition-colors">
+            <input type="checkbox" x-model="portfolioLines.total_cost" @change="togglePortfolioLine()" class="accent-blue-500 w-3 h-3">
+            <span class="text-blue-400">━</span> <span x-text="t('total_cost')"></span>
+          </label>
+          <label class="flex items-center gap-1 cursor-pointer select-none hover:text-slate-300 transition-colors">
+            <input type="checkbox" x-model="portfolioLines.pnl" @change="togglePortfolioLine()" class="accent-amber-500 w-3 h-3">
+            <span class="text-amber-400">╌</span> <span x-text="t('pnl_amount')"></span>
+          </label>
           <span class="ml-auto text-[10px] text-slate-700" x-show="portfolioData.length">
             <span x-text="portfolioData.length"></span> <span x-text="t('data_points')"></span>
           </span>
@@ -1326,8 +1346,9 @@
         <span x-show="overview.price_updated_at">
           <span class="text-slate-800">|</span>
           <span x-text="t('ts_price')"></span>
-          <span class="text-slate-500 font-mono" x-text="overview.price_updated_at"></span>
+          <span class="text-slate-500 font-mono" x-text="fmtUtcStr(overview.price_updated_at)"></span>
         </span>
+        <span class="text-slate-500/60 ml-auto">PT</span>
       </div>
 
       <!-- Sub-tabs -->
@@ -1523,12 +1544,12 @@
                     <p class="text-[10px]" style="color:#475569" x-text="nameLang==='cn' ? analysisSelectedItem : (itemSignals.name||'')"></p>
                   </div>
                 </div>
-                <div class="flex gap-2">
-                  <template x-for="d in [30,60,90]">
-                    <button @click="chartDays=d; loadItemSignals(analysisSelectedItem)"
+                <div class="flex gap-1">
+                  <template x-for="d in [30,60,90,0]">
+                    <button @click="chartDays=d; renderPriceChart()"
                       class="px-2 py-0.5 rounded text-[10px]"
                       :class="chartDays===d?'bg-slate-600 text-white':'text-slate-500 hover:text-slate-300'"
-                      x-text="d+(nameLang==='cn'?'天':'D')"></button>
+                      x-text="d===0?(nameLang==='cn'?'全部':'All'):(d+(nameLang==='cn'?'天':'D'))"></button>
                   </template>
                 </div>
               </div>
@@ -1590,6 +1611,45 @@
               </div>
             </div>
 
+            <!-- New Dimension Gauges (CS2 Dealer Model) -->
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+              <div class="card p-3 text-center">
+                <p class="text-[10px] text-slate-600 mb-1"><span x-text="t('sig_ann_return')"></span>
+                  <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
+                    <span class="tip-text" x-text="nameLang==='cn'?'基于买入价和持有天数计算的年化收益率。低于15%基准线表示增长放缓。':'Annualized return based on cost and holding period. Below 15% benchmark = slowing growth.'"></span></span></p>
+                <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.annualized_return||0)>30?'text-emerald-400':(itemSignals.signal?.annualized_return||0)>15?'text-yellow-300':(itemSignals.signal?.annualized_return||0)>0?'text-orange-400':'text-red-400'"
+                  x-text="itemSignals.signal?.annualized_return!=null?(itemSignals.signal.annualized_return>0?'+':'')+itemSignals.signal.annualized_return+'%':'—'"></p>
+              </div>
+              <div class="card p-3 text-center">
+                <p class="text-[10px] text-slate-600 mb-1"><span x-text="t('sig_holding_count')"></span>
+                  <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
+                    <span class="tip-text" x-text="nameLang==='cn'?'当前持有该饰品的件数。>20件建议关注集中度风险。':'Number of units held. >20 units warrants concentration review.'"></span></span></p>
+                <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.holding_count||0)>50?'text-red-400':(itemSignals.signal?.holding_count||0)>20?'text-orange-400':'text-slate-300'"
+                  x-text="itemSignals.signal?.holding_count??'—'"></p>
+              </div>
+              <div class="card p-3 text-center">
+                <p class="text-[10px] text-slate-600 mb-1"><span x-text="t('sig_concentration')"></span>
+                  <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
+                    <span class="tip-text" x-text="nameLang==='cn'?'该饰品市值占总持仓的百分比。>15%仓位过重需减仓，<5%正常。':'Portfolio weight %. >15% overweight, <5% normal.'"></span></span></p>
+                <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.concentration_pct||0)>15?'text-red-400':(itemSignals.signal?.concentration_pct||0)>5?'text-orange-400':'text-slate-300'"
+                  x-text="itemSignals.signal?.concentration_pct!=null?itemSignals.signal.concentration_pct+'%':'—'"></p>
+              </div>
+              <div class="card p-3 text-center">
+                <p class="text-[10px] text-slate-600 mb-1"><span x-text="t('sig_market_share')"></span>
+                  <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
+                    <span class="tip-text" x-text="nameLang==='cn'?'持有件数占市场在售总量的比例。>30%卖出可能造成砸盘，>10%需谨慎出货。':'Holding vs market supply. >30% selling may crash price, >10% trade carefully.'"></span></span></p>
+                <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.market_share_pct||0)>30?'text-red-400':(itemSignals.signal?.market_share_pct||0)>10?'text-orange-400':'text-slate-300'"
+                  x-text="itemSignals.signal?.market_share_pct!=null?itemSignals.signal.market_share_pct+'%':'—'"></p>
+              </div>
+              <div class="card p-3 text-center">
+                <p class="text-[10px] text-slate-600 mb-1"><span x-text="t('sig_vol_zscore')"></span>
+                  <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
+                    <span class="tip-text" x-text="nameLang==='cn'?'该饰品波动率相对同类饰品的偏离程度(Z值)。>2为显著异常波动，<-1.5为异常平静。':'Volatility z-score vs peers. >2 = significant anomaly, <-1.5 = unusually calm.'"></span></span></p>
+                <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.volatility_zscore||0)>2?'text-red-400':(itemSignals.signal?.volatility_zscore||0)>1?'text-orange-400':(itemSignals.signal?.volatility_zscore||0)<-1.5?'text-cyan-400':'text-slate-300'"
+                  x-text="itemSignals.signal?.volatility_zscore!=null?itemSignals.signal.volatility_zscore:'—'"></p>
+              </div>
+            </div>
+
             <!-- Sell Score + Ownership -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
               <div class="card p-4">
@@ -1602,7 +1662,7 @@
                     <p class="text-xs mt-1" :class="scoreColor(itemSignals.signal?.sell_score)" x-text="scoreLabel(itemSignals.signal?.sell_score)"></p>
                   </div>
                   <div class="text-right">
-                    <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-1"><span x-text="t('buy_opp_title')"></span> <span class="text-[8px] px-1 py-0.5 rounded bg-cyan-900/30 text-cyan-500 normal-case tracking-normal" x-text="t('buy_opp_beta')"></span></p>
+                    <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-1"><span x-text="t('buy_opp_title')"></span></p>
                     <p class="text-xl font-bold font-mono text-cyan-400" x-text="itemSignals.signal?.opportunity_score??'—'"></p>
                     <p class="text-[9px] text-slate-700 mt-0.5" x-text="t('buy_opp_note')"></p>
                   </div>
@@ -1617,6 +1677,8 @@
                     <span class="font-mono font-bold" :class="pnlClass(itemSignals.ownership?.pnl||0)"
                       x-text="itemSignals.ownership?.pnl!==null?((itemSignals.ownership.pnl>=0?'+':'')+'¥'+itemSignals.ownership.pnl+' ('+itemSignals.ownership.pnl_pct+'%)'):'—'"></span>
                   </div>
+                  <div class="flex justify-between"><span class="text-slate-500" x-text="nameLang==='cn'?'持有件数':'Held'"></span><span class="font-mono text-slate-300" x-text="itemSignals.ownership?.count??'—'"></span></div>
+                  <div class="flex justify-between" x-show="itemSignals.ownership?.target_pnl_pct"><span class="text-slate-500" x-text="nameLang==='cn'?'目标收益':'Target'"></span><span class="font-mono text-slate-300" x-text="itemSignals.ownership?.target_pnl_pct?itemSignals.ownership.target_pnl_pct+'%':'—'"></span></div>
                 </div>
               </div>
             </div>
@@ -1787,7 +1849,7 @@
         </div>
         <div class="text-xs text-slate-600">
           <span x-text="t('current_version')"></span>
-          <span class="text-blue-400 font-mono font-bold ml-1">v0.3.0</span>
+          <span class="text-blue-400 font-mono font-bold ml-1">v0.4.0</span>
         </div>
       </div>
 
@@ -1882,13 +1944,14 @@
         <span x-show="overview.price_updated_at">
           <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse mr-1"></span>
           <span x-text="t('ts_price')"></span>
-          <span class="text-slate-500 font-mono" x-text="overview.price_updated_at"></span>
+          <span class="text-slate-500 font-mono" x-text="fmtUtcStr(overview.price_updated_at)"></span>
         </span>
         <span x-show="lastImportAt">
           <span class="text-slate-800">|</span>
           <span x-text="t('ts_sync')"></span>
           <span class="text-slate-500 font-mono" x-text="lastImportAt"></span>
         </span>
+        <span class="text-slate-500/60 ml-auto">PT</span>
       </div>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         <div class="card px-4 py-3">
@@ -2398,7 +2461,7 @@
         alertFilter: { severity: '', type: '', unreadOnly: false },
         alertPage: 1,
         minSpread: 5,
-        chartDays: 90,
+        chartDays: 0,
         scoreBucket: { show: false, label: '', min: 0, max: 0, items: [] },
         backfillRunning: false,
         backfillProgress: '',
@@ -2448,6 +2511,28 @@
 
         // Changelog data (bilingual, derived from git history)
         changelogData: [
+          {
+            version: '0.4.0', date: '2026-02-26', major: true,
+            title_cn: 'CS2 大商决策模型 — 卖出评分全面重构',
+            title_en: 'CS2 Dealer Decision Model — Sell Score Overhaul',
+            added: [
+              ['卖出评分重构为五维度「大商决策模型」：收益达标度(30%)、年化收益衰减(20%)、持仓集中度(20%)、异常波动(25%)、市场冲击(5%)', 'Sell score rewritten as 5-dimension "Dealer Decision Model": Target P&L(30%), Annual Return Decay(20%), Concentration(20%), Volatility Anomaly(25%), Market Impact(5%)'],
+              ['买入机会评分新增「深亏增持」维度(20%)，远低于目标收益时触发增持信号', 'Buy opportunity score adds "loss averaging" dimension (20%): triggers buy signal when deep in loss'],
+              ['5 个新量化指标仪表盘：年化收益率、持有件数、持仓占比、市场份额、波动 Z 值', '5 new signal gauges: annualized return, holding count, concentration %, market share %, volatility z-score'],
+              ['持仓信息卡新增「持有件数」和「目标收益率」', 'Ownership card now shows holding count and target P&L'],
+              ['数据库新增 target_pnl_pct 及 5 个信号维度字段', 'DB adds target_pnl_pct and 5 signal dimension columns'],
+              ['组合快照按状态拆分市值（Steam 库存 / 出租中）', 'Portfolio snapshots split market value by status (in_steam / rented_out)'],
+            ],
+            changed: [
+              ['卖出评分基线从 50 调整为 45（无信号 = 不急卖）', 'Sell score baseline adjusted from 50 to 45 (no signal = don\'t rush to sell)'],
+              ['原 RSI/布林带/动量/ATH 降级为「异常波动」子因子', 'RSI/BB/Momentum/ATH demoted to sub-factors under Volatility Anomaly dimension'],
+              ['年化收益衰减仅在盈利时生效，避免亏损误判', 'Annual return decay only activates when profitable'],
+              ['排名表和信号 API 支持按新维度排序', 'Rankings and signals API support sorting by new dimensions'],
+            ],
+            commits: [
+              { hash: 'eb10220', msg: 'feat: CS2 dealer decision model — complete sell score overhaul', date: '02-26' },
+            ],
+          },
           {
             version: '0.3.0', date: '2026-02-25', major: true,
             title_cn: '24/7 监控、组合快照与趋势可视化',
@@ -2546,9 +2631,10 @@
         ],
 
         // Portfolio trend chart
-        portfolioRange: '7d',
+        portfolioRange: 'all',
         portfolioData: [],
         _portfolioChart: null,
+        portfolioLines: { market_value: true, in_steam_value: true, rented_out_value: true, total_cost: true, pnl: true },
         monitorStatus: {},
 
         // 涨跌色模式：'cn'=红涨绿跌（默认） 'us'=绿涨红跌
@@ -2588,6 +2674,8 @@
           goto_rented: ['出租中', 'Rented Out'],
           goto_all: ['全部持仓', 'All Holdings'],
           market_value: ['当前市值', 'Market Value'],
+          in_steam_value: ['库存市值', 'In-Steam Value'],
+          rented_out_value: ['出租市值', 'Rented Value'],
           no_market_price: ['暂无市价', 'No Price Data'],
           click_refresh: ['点击「刷新市价」获取实时数据', 'Click "Refresh Prices" to get live data'],
           pnl_amount: ['盈亏金额', 'P&L Amount'],
@@ -2785,13 +2873,18 @@
           sell_score_title: ['综合卖出评分', 'Sell Score'],
           buy_opp_title: ['买入机会评分', 'Buy Opportunity'],
           buy_opp_beta: ['β测试', 'β Test'],
-          buy_opp_note: ['仅基于持仓数据，全市场分析待完善', 'Based on holdings only, full market analysis TBD'],
+          buy_opp_note: ['综合超卖(25%)、下轨(20%)、回调(15%)、价差(20%)、深亏增持(20%)', 'Oversold(25%), BB Low(20%), Dip(15%), Spread(20%), Loss Avg-down(20%)'],
           ownership_title: ['持仓信息', 'Ownership'],
           ownership_buy: ['购入价', 'Buy Price'],
           ownership_current: ['当前价', 'Current'],
           ownership_pnl: ['盈亏', 'P&L'],
           cross_platform: ['跨平台价格对比', 'Cross-Platform Prices'],
-          sell_score_desc: ['综合 RSI(25%)、布林带(20%)、动量(15%)、ATH距离(20%)、盈亏(20%) 加权计算。注意：暂未纳入租金年化收益率，高租金收益饰品即使评分高也可考虑继续持有出租。', 'Weighted: RSI(25%), BB(20%), Momentum(15%), ATH(20%), P&L(20%). Note: rental yield not included.'],
+          sell_score_desc: ['CS2大商决策模型：收益达标度(30%)、年化收益衰减(20%)、持仓集中度(20%)、异常波动(25%)、市场冲击(5%) 加权计算。注意：暂未纳入租金年化收益率。', 'Dealer model: Target P&L(30%), Annual Return Decay(20%), Concentration(20%), Volatility Anomaly(25%), Market Impact(5%). Note: rental yield not included.'],
+          sig_ann_return: ['年化收益', 'Ann. Return'],
+          sig_holding_count: ['持有件数', 'Holding'],
+          sig_concentration: ['持仓占比', 'Concentration'],
+          sig_market_share: ['市场份额', 'Mkt Share'],
+          sig_vol_zscore: ['波动Z值', 'Vol Z-Score'],
           label_hold: ['继续持有', 'Hold'],
           label_neutral: ['中性持有', 'Neutral'],
           label_consider: ['考虑出售', 'Consider Sell'],
@@ -3051,7 +3144,7 @@
 
         renderPortfolioChart() {
           const el = document.getElementById('portfolioChart');
-          if (!el || !this.portfolioData.length) return;
+          if (!el) return;
 
           if (this._portfolioChart) {
             this._portfolioChart.destroy();
@@ -3059,10 +3152,20 @@
           }
 
           const data = this.portfolioData;
-          const labels = data.map(d => d.timestamp);
+          // Convert UTC timestamps to Pacific time strings for Chart.js
+          const labels = data.map(d => new Date(d.timestamp).toLocaleString('sv-SE', { timeZone: 'America/Los_Angeles' }));
           const isDark = !document.documentElement.classList.contains('light');
           const gridColor = isDark ? 'rgba(51,65,85,0.3)' : 'rgba(186,214,235,0.4)';
           const textColor = isDark ? '#64748b' : '#475569';
+
+          // Calculate x-axis min/max based on selected range
+          let xMin, xMax;
+          if (this.portfolioRange !== 'all') {
+            const ptNow = new Date(new Date().toLocaleString('sv-SE', { timeZone: 'America/Los_Angeles' }));
+            xMax = ptNow;
+            const ms = { '24h': 86400e3, '7d': 7*86400e3, '30d': 30*86400e3, '90d': 90*86400e3 };
+            xMin = new Date(ptNow.getTime() - (ms[this.portfolioRange] || 7*86400e3));
+          }
 
           this._portfolioChart = new Chart(el, {
             type: 'line',
@@ -3079,6 +3182,31 @@
                   pointRadius: data.length > 50 ? 0 : 2,
                   pointHoverRadius: 4,
                   borderWidth: 2,
+                  hidden: !this.portfolioLines.market_value,
+                },
+                {
+                  label: this.t('in_steam_value'),
+                  data: data.map(d => d.in_steam_value),
+                  borderColor: '#06b6d4',
+                  backgroundColor: 'rgba(6,182,212,0.06)',
+                  fill: true,
+                  tension: 0.3,
+                  pointRadius: data.length > 50 ? 0 : 2,
+                  pointHoverRadius: 4,
+                  borderWidth: 1.5,
+                  hidden: !this.portfolioLines.in_steam_value,
+                },
+                {
+                  label: this.t('rented_out_value'),
+                  data: data.map(d => d.rented_out_value),
+                  borderColor: '#ec4899',
+                  backgroundColor: 'rgba(236,72,153,0.06)',
+                  fill: true,
+                  tension: 0.3,
+                  pointRadius: data.length > 50 ? 0 : 2,
+                  pointHoverRadius: 4,
+                  borderWidth: 1.5,
+                  hidden: !this.portfolioLines.rented_out_value,
                 },
                 {
                   label: this.t('total_cost'),
@@ -3090,6 +3218,7 @@
                   pointRadius: data.length > 50 ? 0 : 2,
                   pointHoverRadius: 4,
                   borderWidth: 2,
+                  hidden: !this.portfolioLines.total_cost,
                 },
                 {
                   label: this.t('pnl_amount'),
@@ -3101,6 +3230,7 @@
                   pointHoverRadius: 4,
                   borderWidth: 1.5,
                   borderDash: [4, 2],
+                  hidden: !this.portfolioLines.pnl,
                 },
               ],
             },
@@ -3120,15 +3250,21 @@
                   callbacks: {
                     title: (ctx) => {
                       const d = new Date(ctx[0].label);
-                      return d.toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                      return d.toLocaleString('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) + ' PT';
                     },
                     label: (ctx) => `${ctx.dataset.label}: ¥${ctx.parsed.y?.toLocaleString() ?? '—'}`,
                   },
+                },
+                zoom: {
+                  pan: { enabled: true, mode: 'x' },
+                  zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
                 },
               },
               scales: {
                 x: {
                   type: 'time',
+                  min: xMin,
+                  max: xMax,
                   time: {
                     tooltipFormat: 'yyyy-MM-dd HH:mm',
                     displayFormats: {
@@ -3150,6 +3286,17 @@
                 },
               },
             },
+          });
+        },
+
+        togglePortfolioLine() {
+          this.$nextTick(() => {
+            if (!this._portfolioChart) return;
+            const keys = ['market_value', 'in_steam_value', 'rented_out_value', 'total_cost', 'pnl'];
+            keys.forEach((k, i) => {
+              this._portfolioChart.data.datasets[i].hidden = !this.portfolioLines[k];
+            });
+            this._portfolioChart.update();
           });
         },
 
@@ -3213,7 +3360,7 @@
           const p = this.panel;
           const eff = p.effective_price != null ? '¥' + this.fmt(p.effective_price) : null;
           const auto = p.purchase_price != null ? '¥' + this.fmt(p.purchase_price) : null;
-          const date = p.first_seen_at ? new Date(p.first_seen_at).toLocaleString('zh-CN') : null;
+          const date = p.first_seen_at ? new Date(p.first_seen_at).toLocaleString('zh-CN', { timeZone: 'America/Los_Angeles' }) : null;
           return [
             [this.t('panel_status'),     this.statusLbl(p.status),  false, false],
             [this.t('panel_source'),     p.class_id,                 false, false],
@@ -3637,7 +3784,7 @@
                     this.importProgress = 100;
                     setTimeout(() => { this.importProgress = -1; }, 700);
                     this.importResult = st.results;
-                    this.lastImportAt = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+                    this.lastImportAt = new Date().toLocaleTimeString('zh-CN', { timeZone: 'America/Los_Angeles', hour: '2-digit', minute: '2-digit' });
                     resolve();
                   } else if (st.status === 'error') {
                     clearInterval(this._importPoll);
@@ -3769,6 +3916,18 @@
           const bbUp = data.map(d => d.bb_upper);
           const bbLow = data.map(d => d.bb_lower);
 
+          // Calculate x-axis min/max based on chartDays (0 = all)
+          let xMin, xMax;
+          if (this.chartDays > 0) {
+            const ptNow = new Date(new Date().toLocaleString('sv-SE', { timeZone: 'America/Los_Angeles' }));
+            xMax = ptNow;
+            xMin = new Date(ptNow.getTime() - this.chartDays * 86400e3);
+          }
+
+          const isDark = !document.documentElement.classList.contains('light');
+          const gridColor = isDark ? 'rgba(51,65,85,0.2)' : 'rgba(186,214,235,0.3)';
+          const textColor = isDark ? '#475569' : '#64748b';
+
           this._priceChart = new Chart(el.getContext('2d'), {
             type: 'line',
             data: {
@@ -3789,10 +3948,21 @@
               plugins: {
                 legend: { labels: { color: '#94a3b8', boxWidth: 12, font: { size: 10 } } },
                 tooltip: { titleFont: { size: 11 }, bodyFont: { size: 11 } },
+                zoom: {
+                  pan: { enabled: true, mode: 'x' },
+                  zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
+                },
               },
               scales: {
-                x: { ticks: { color: '#475569', maxTicksLimit: 10, font: { size: 9 } }, grid: { color: 'rgba(51,65,85,0.2)' } },
-                y: { ticks: { color: '#475569', font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.2)' } },
+                x: {
+                  type: 'time',
+                  min: xMin,
+                  max: xMax,
+                  time: { displayFormats: { day: 'MM/dd', week: 'MM/dd' } },
+                  ticks: { color: textColor, maxTicksLimit: 10, font: { size: 9 } },
+                  grid: { color: gridColor },
+                },
+                y: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor } },
               }
             }
           });
@@ -3987,15 +4157,28 @@
           return S.base;
         },
 
-        // Format "YYYYMMDDHHmm" → "MM-DD HH:mm"
+        // Convert JS Date → "MM-DD HH:mm" or "MM-DD" in US Pacific time
+        _toPT(d, time = true) {
+          const s = d.toLocaleString('sv-SE', { timeZone: 'America/Los_Angeles' });
+          return time ? s.slice(5, 16) : s.slice(5, 10);
+        },
+        // Format "YYYYMMDDHHmm" (UTC) → "MM-DD HH:mm" (PT)
         fmtMinute(s) {
           if (!s || s.length < 12) return '—';
-          return s.slice(4,6) + '-' + s.slice(6,8) + ' ' + s.slice(8,10) + ':' + s.slice(10,12);
+          const d = new Date(Date.UTC(+s.slice(0,4), +s.slice(4,6)-1, +s.slice(6,8), +s.slice(8,10), +s.slice(10,12)));
+          return this._toPT(d);
         },
-        // Format "YYYYMMDD" → "MM-DD"
+        // Format "YYYYMMDD" (UTC) → "MM-DD" (PT)
         fmtDate(s) {
           if (!s || s.length < 8) return '—';
-          return s.slice(4,6) + '-' + s.slice(6,8);
+          const d = new Date(Date.UTC(+s.slice(0,4), +s.slice(4,6)-1, +s.slice(6,8), 12, 0));
+          return this._toPT(d, false);
+        },
+        // Format "YYYY-MM-DD HH:mm" (UTC) → "MM-DD HH:mm" (PT)
+        fmtUtcStr(s) {
+          if (!s) return '—';
+          const d = new Date(s.replace(' ', 'T') + (s.includes('Z') || s.includes('+') ? '' : 'Z'));
+          return isNaN(d) ? s : this._toPT(d);
         },
         fmt(n) {
           if (n == null) return '—';

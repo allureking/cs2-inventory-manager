@@ -328,32 +328,41 @@ async def get_item_signals(
         for r in platform_r.fetchall()
     ]
 
-    # Ownership info
+    # Ownership info (aggregate across all units of same item)
     inv_r = await db.execute(
-        select(InventoryItem)
+        select(
+            func.coalesce(
+                InventoryItem.purchase_price_manual,
+                InventoryItem.purchase_price,
+            ).label("eff_price"),
+            InventoryItem.status,
+            InventoryItem.target_pnl_pct,
+        )
         .where(
             InventoryItem.market_hash_name == market_hash_name,
             InventoryItem.status.in_(["in_steam", "rented_out"]),
         )
-        .limit(1)
     )
-    inv = inv_r.scalar_one_or_none()
+    inv_rows = inv_r.all()
     ownership = None
-    if inv:
-        eff = inv.purchase_price_manual or inv.purchase_price
+    if inv_rows:
+        # Use first available purchase price
+        eff = next((float(r[0]) for r in inv_rows if r[0] and float(r[0]) > 0), None)
         current = closes[-1] if closes else None
         pnl = None
         pnl_pct = None
         if eff and eff > 0 and current:
             pnl = current - eff
             pnl_pct = pnl / eff * 100
+        target = next((float(r[2]) for r in inv_rows if r[2] is not None), None)
         ownership = {
             "purchase_price": eff,
             "current_price": current,
             "pnl": round(pnl, 2) if pnl is not None else None,
             "pnl_pct": round(pnl_pct, 1) if pnl_pct is not None else None,
-            "status": inv.status,
-            "count": 1,  # could aggregate
+            "status": inv_rows[0][1],
+            "count": len(inv_rows),
+            "target_pnl_pct": target,
         }
 
     signal_data = None
@@ -371,6 +380,11 @@ async def get_item_signals(
             "ath_price": round(sig.ath_price, 2) if sig.ath_price else None,
             "ath_pct": round(sig.ath_pct, 1) if sig.ath_pct else None,
             "spread_pct": round(sig.spread_pct, 1) if sig.spread_pct else None,
+            "annualized_return": round(sig.annualized_return, 1) if sig.annualized_return else None,
+            "holding_count": sig.holding_count,
+            "concentration_pct": round(sig.concentration_pct, 1) if sig.concentration_pct else None,
+            "market_share_pct": round(sig.market_share_pct, 1) if sig.market_share_pct else None,
+            "volatility_zscore": round(sig.volatility_zscore, 2) if sig.volatility_zscore else None,
             "sell_score": round(sig.sell_score, 1) if sig.sell_score else None,
             "opportunity_score": round(sig.opportunity_score, 1) if sig.opportunity_score else None,
         }
@@ -517,6 +531,8 @@ async def signal_rankings(
     allowed_sorts = {
         "sell_score", "opportunity_score", "rsi_14", "momentum_7",
         "momentum_30", "volatility_30", "spread_pct", "ath_pct",
+        "annualized_return", "holding_count", "concentration_pct",
+        "market_share_pct", "volatility_zscore",
     }
     if sort_by not in allowed_sorts:
         sort_by = "sell_score"
@@ -561,6 +577,11 @@ async def signal_rankings(
                 "volatility_30": round(s.volatility_30, 1) if s.volatility_30 else None,
                 "ath_pct": round(s.ath_pct, 1) if s.ath_pct else None,
                 "spread_pct": round(s.spread_pct, 1) if s.spread_pct else None,
+                "annualized_return": round(s.annualized_return, 1) if s.annualized_return else None,
+                "holding_count": s.holding_count,
+                "concentration_pct": round(s.concentration_pct, 1) if s.concentration_pct else None,
+                "market_share_pct": round(s.market_share_pct, 1) if s.market_share_pct else None,
+                "volatility_zscore": round(s.volatility_zscore, 2) if s.volatility_zscore else None,
             }
             for s in rows
         ],

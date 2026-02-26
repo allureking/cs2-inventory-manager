@@ -145,40 +145,104 @@ def calc_volatility(closes: list[float], period: int = 30) -> Optional[float]:
 # ══════════════════════════════════════════════════════════════
 
 def compute_sell_score(
-    rsi: Optional[float],
-    bb_pos: Optional[float],
-    momentum_30: Optional[float],
-    ath_pct: Optional[float],
     pnl_pct: Optional[float] = None,
+    target_pnl_pct: float = 30.0,
+    annualized_return: Optional[float] = None,
+    days_held: int = 0,
+    concentration_pct: Optional[float] = None,
+    holding_count: int = 1,
+    volatility_zscore: Optional[float] = None,
+    rsi: Optional[float] = None,
+    bb_pos: Optional[float] = None,
+    momentum_30: Optional[float] = None,
+    market_share_pct: Optional[float] = None,
 ) -> float:
     """
-    Weighted composite sell score (0-100).
-    Higher = stronger sell signal.
+    CS2 大商决策模型 — 综合卖出评分 (0-100).
+
+    五维度加权:
+      1. 收益达标度  30%  — 当前收益 vs 目标收益，达标拉满；深亏则降分
+      2. 年化收益衰减 20%  — 持有越久但年化越低 → 卖出信号
+      3. 持仓集中度  20%  — 单品件数/市值占比过高 → 减仓
+      4. 异常波动    25%  — 波动率 z-score + RSI/BB/动量 子因子
+      5. 市场冲击     5%  — 持仓占市场在售比例 → 卖出可行性
     """
-    score = 50.0  # neutral baseline
+    score = 45.0  # slightly below neutral — no signal = 不急卖
 
-    # RSI contribution (weight 25%)
+    # ── 维度1: 收益达标度 (30%) ── range: -22 ~ +30
+    if pnl_pct is not None and target_pnl_pct > 0:
+        ratio = pnl_pct / target_pnl_pct
+        if ratio >= 1.5:
+            # 超额完成 150%+，强烈卖出
+            score += 30
+        elif ratio >= 1.0:
+            # 达标~150%，递增
+            score += 20 + (ratio - 1.0) * 20  # 20~30
+        elif ratio >= 0:
+            # 盈利但未达标，微弱卖出信号
+            score += ratio * 12  # 0~12
+        else:
+            # 亏损：显著降低卖出分数（深亏 = 绝不该卖）
+            score += max(-22, pnl_pct * 0.5)  # -25%亏损 → -12.5分
+
+    # ── 维度2: 年化收益衰减 (20%) ── range: -5 ~ +20
+    #    仅在盈利状态下生效：物品在涨但增速放缓 → 考虑卖出
+    #    亏损时此维度不参与（亏损已在维度1体现）
+    if annualized_return is not None and days_held > 30 and (pnl_pct is None or pnl_pct >= 0):
+        benchmark = 15.0  # 年化收益率基准（CS2 饰品合理预期）
+        if annualized_return < benchmark:
+            # 低于基准 → 按差距给分
+            score += (benchmark - annualized_return) / benchmark * 15  # 0~15
+        elif annualized_return > benchmark * 3:
+            # 年化收益极高（>45%），说明还在快速增长，降低卖出分
+            score -= 5
+
+    # ── 维度3: 持仓集中度 (20%) ── range: 0 ~ +20
+    if concentration_pct is not None:
+        if concentration_pct > 15:
+            score += min(20, 10 + (concentration_pct - 15) * 0.5)
+        elif concentration_pct > 5:
+            score += (concentration_pct - 5) * 1.0  # 0~10
+        # 持有件数过多额外加分（大批量持仓需要减仓）
+        if holding_count > 50:
+            score += min(5, (holding_count - 50) * 0.05)
+        elif holding_count > 20:
+            score += min(3, (holding_count - 20) * 0.1)
+
+    # ── 维度4: 异常波动 (25%) ── range: -12 ~ +25
+    wave = 0.0
+    # 4a. 波动率 z-score vs 同类（权重最大的子因子）
+    if volatility_zscore is not None:
+        if volatility_zscore > 2.0:
+            wave += min(volatility_zscore * 4, 15)  # 异常高波动
+        elif volatility_zscore > 1.0:
+            wave += (volatility_zscore - 1.0) * 8   # 偏高
+        elif volatility_zscore < -1.5:
+            wave -= min(-volatility_zscore * 2, 6)   # 异常低波动（不急卖）
+    # 4b. RSI 超买/超卖
     if rsi is not None:
-        if rsi > 70:
-            score += (rsi - 70) * 0.83  # max +25 at RSI=100
-        elif rsi < 30:
-            score -= (30 - rsi) * 0.83
-
-    # Bollinger %B contribution (weight 20%)
+        if rsi > 75:
+            wave += min((rsi - 75) * 0.4, 5)
+        elif rsi < 25:
+            wave -= min((25 - rsi) * 0.24, 6)
+    # 4c. 布林带位置
     if bb_pos is not None:
-        score += (bb_pos - 0.5) * 40  # range: -20 to +20
-
-    # Momentum contribution (weight 15%)
+        if bb_pos > 0.9:
+            wave += min((bb_pos - 0.9) * 30, 3)     # 接近上轨
+        elif bb_pos < 0.1:
+            wave -= min((0.1 - bb_pos) * 15, 3)     # 接近下轨
+    # 4d. 30日动量
     if momentum_30 is not None:
-        score += max(min(momentum_30 * 0.3, 15), -15)
+        if momentum_30 > 15:
+            wave += min((momentum_30 - 15) * 0.15, 2)
+    score += max(-12, min(25, wave))
 
-    # ATH proximity (weight 20%)
-    if ath_pct is not None and ath_pct > 80:
-        score += (ath_pct - 80) * 1.0  # max +20 at 100%
-
-    # Profit contribution (weight 20%)
-    if pnl_pct is not None and pnl_pct > 50:
-        score += min((pnl_pct - 50) * 0.4, 20)
+    # ── 维度5: 市场冲击 (5%) ── range: 0 ~ +5
+    if market_share_pct is not None:
+        if market_share_pct > 30:
+            score += 5  # 占市场 30%+，卖出会严重砸盘
+        elif market_share_pct > 10:
+            score += (market_share_pct - 10) * 0.25  # 0~5
 
     return max(0.0, min(100.0, score))
 
@@ -188,28 +252,49 @@ def compute_opportunity_score(
     bb_pos: Optional[float],
     momentum_7: Optional[float],
     spread_pct: Optional[float],
+    pnl_pct: Optional[float] = None,
+    target_pnl_pct: float = 30.0,
 ) -> float:
     """
     Buy-opportunity score (0-100).
     Higher = stronger buy signal.
+
+    维度:
+      1. RSI 超卖        25%  — RSI < 30 加分
+      2. 布林带下轨      20%  — 价格低于下轨
+      3. 短期回调        15%  — 7 日负动量（逢跌买入）
+      4. 跨平台价差      20%  — 套利空间
+      5. 收益低谷/深亏   20%  — 远低于目标收益 → 增持摊低成本
     """
     score = 50.0
 
-    # Oversold RSI (weight 30%)
+    # 1. Oversold RSI (25%)
     if rsi is not None and rsi < 30:
-        score += (30 - rsi) * 1.0  # max +30 at RSI=0
+        score += min((30 - rsi) * 0.83, 25)  # max +25
 
-    # Below lower Bollinger (weight 25%)
+    # 2. Below lower Bollinger (20%)
     if bb_pos is not None and bb_pos < 0:
-        score += min(-bb_pos * 25, 25)
+        score += min(-bb_pos * 20, 20)
 
-    # Negative momentum = dip (weight 20%)
+    # 3. Negative momentum = dip (15%)
     if momentum_7 is not None and momentum_7 < -5:
-        score += min((-momentum_7 - 5) * 1.0, 20)
+        score += min((-momentum_7 - 5) * 0.75, 15)
 
-    # Cross-platform spread (weight 25%)
+    # 4. Cross-platform spread (20%)
     if spread_pct is not None and spread_pct > 5:
-        score += min((spread_pct - 5) * 1.5, 25)
+        score += min((spread_pct - 5) * 1.2, 20)
+
+    # 5. PnL trough — 深亏 = 增持信号 (20%)
+    if pnl_pct is not None and target_pnl_pct > 0:
+        if pnl_pct < -20:
+            # 亏损超 20%，强买入信号
+            score += min((-pnl_pct - 20) * 0.5, 20)
+        elif pnl_pct < -5:
+            # 轻度亏损
+            score += (-pnl_pct - 5) * 0.67  # 0~10
+        elif pnl_pct > target_pnl_pct:
+            # 已达标，降低买入信号
+            score -= min((pnl_pct - target_pnl_pct) * 0.3, 15)
 
     return max(0.0, min(100.0, score))
 
@@ -237,7 +322,9 @@ async def compute_all_signals(target_date: Optional[str] = None) -> int:
             logger.info("compute_all_signals: no price_history data yet")
             return 0
 
-        # Also get purchase prices for PnL-based scoring
+        # ── Gather portfolio-wide context ──
+
+        # 1. Purchase prices + target PnL + earliest purchase date per item
         inv_result = await db.execute(
             select(
                 InventoryItem.market_hash_name,
@@ -245,25 +332,182 @@ async def compute_all_signals(target_date: Optional[str] = None) -> int:
                     InventoryItem.purchase_price_manual,
                     InventoryItem.purchase_price,
                 ).label("eff_price"),
+                InventoryItem.target_pnl_pct,
+                func.min(InventoryItem.purchase_date).label("earliest_date"),
+                func.min(InventoryItem.first_seen_at).label("earliest_seen"),
             )
             .where(InventoryItem.status.in_(["in_steam", "rented_out"]))
+            .group_by(InventoryItem.market_hash_name)
         )
         purchase_map: dict[str, float] = {}
+        target_map: dict[str, float] = {}
+        days_held_map: dict[str, int] = {}
+        now = datetime.now(timezone.utc)
         for row in inv_result.all():
-            if row[1] is not None and row[1] > 0:
-                purchase_map[row[0]] = float(row[1])
+            name = row[0]
+            if row[1] is not None and float(row[1]) > 0:
+                purchase_map[name] = float(row[1])
+            if row[2] is not None:
+                target_map[name] = float(row[2])
+            # Calculate days held from purchase_date or first_seen_at
+            d_str = row[3]  # purchase_date (str like "2025-01-15")
+            first_seen = row[4]  # first_seen_at (datetime)
+            if d_str:
+                try:
+                    dt = datetime.strptime(str(d_str)[:10], "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                    days_held_map[name] = max(1, (now - dt).days)
+                except ValueError:
+                    pass
+            if name not in days_held_map and first_seen:
+                if hasattr(first_seen, 'days'):
+                    days_held_map[name] = max(1, first_seen.days)
+                else:
+                    try:
+                        if first_seen.tzinfo is None:
+                            first_seen = first_seen.replace(tzinfo=timezone.utc)
+                        days_held_map[name] = max(1, (now - first_seen).days)
+                    except (AttributeError, TypeError):
+                        pass
 
-        # Get latest cross-platform snapshots for spread calculation
+        # 2. Holding counts per item (件数)
+        count_result = await db.execute(
+            select(
+                InventoryItem.market_hash_name,
+                func.count().label("cnt"),
+            )
+            .where(InventoryItem.status.in_(["in_steam", "rented_out"]))
+            .group_by(InventoryItem.market_hash_name)
+        )
+        holding_count_map: dict[str, int] = {
+            row[0]: int(row[1]) for row in count_result.all()
+        }
+
+        # 3. Market sell counts per item (市场在售量 — 各平台合计)
+        market_count_map = await _calc_market_count_map(db)
+
+        # 4. Cross-platform spread
         spread_map = await _calc_spread_map(db)
 
+        # 5. Portfolio total value (for concentration calc)
+        latest_prices = await _get_latest_prices(db)
+        total_portfolio_value = 0.0
+        item_market_value: dict[str, float] = {}
+        for name, cnt in holding_count_map.items():
+            price = latest_prices.get(name, 0)
+            val = price * cnt
+            item_market_value[name] = val
+            total_portfolio_value += val
+
+        # 6. Peer volatility map (item_type → list of vol30)
+        #    Pre-compute so we can calculate z-scores
+        vol_map: dict[str, float] = {}  # market_hash_name → volatility_30
+
         count = 0
+        # First pass: compute indicators and collect volatility
+        item_indicator_cache: dict[str, dict] = {}
         for name in all_names:
             try:
-                sig = await _compute_item_signals(db, name, target_date, purchase_map, spread_map)
-                if sig:
-                    count += 1
+                indicators = await _compute_item_indicators(db, name, purchase_map, spread_map, days_held_map)
+                if indicators:
+                    item_indicator_cache[name] = indicators
+                    if indicators.get("volatility_30") is not None:
+                        vol_map[name] = indicators["volatility_30"]
             except Exception as e:
-                logger.warning("signal error for %s: %s", name, e)
+                logger.warning("indicator error for %s: %s", name, e)
+
+        # Build peer volatility groups by category
+        from app.api.routes.analysis import _classify_item
+        peer_vol_groups: dict[str, list[float]] = {}
+        for name, vol in vol_map.items():
+            cat = _classify_item(name)
+            peer_vol_groups.setdefault(cat, []).append(vol)
+
+        # Second pass: compute scores with z-scores and write
+        for name, indicators in item_indicator_cache.items():
+            try:
+                vol_z = None
+                vol = indicators.get("volatility_30")
+                if vol is not None:
+                    cat = _classify_item(name)
+                    peers = peer_vol_groups.get(cat, [])
+                    if len(peers) >= 3:
+                        mean = sum(peers) / len(peers)
+                        std = math.sqrt(sum((v - mean) ** 2 for v in peers) / len(peers))
+                        if std > 0:
+                            vol_z = (vol - mean) / std
+
+                pnl_pct = indicators.get("pnl_pct")
+                target = target_map.get(name, 30.0)  # 默认 30%
+                days_held = days_held_map.get(name, 0)
+                h_count = holding_count_map.get(name, 0)
+                conc = (item_market_value.get(name, 0) / total_portfolio_value * 100
+                        if total_portfolio_value > 0 else None)
+                mkt_cnt = market_count_map.get(name, 0)
+                mkt_share = (h_count / mkt_cnt * 100) if mkt_cnt > 0 and h_count > 0 else None
+
+                ann_ret = None
+                buy_price = purchase_map.get(name)
+                if buy_price and buy_price > 0 and days_held > 0:
+                    current = indicators["current_price"]
+                    if current > 0:
+                        total_return = current / buy_price
+                        if total_return > 0:
+                            ann_ret = (total_return ** (365 / days_held) - 1) * 100
+
+                sell = compute_sell_score(
+                    pnl_pct=pnl_pct,
+                    target_pnl_pct=target,
+                    annualized_return=ann_ret,
+                    days_held=days_held,
+                    concentration_pct=conc,
+                    holding_count=h_count,
+                    volatility_zscore=vol_z,
+                    rsi=indicators.get("rsi"),
+                    bb_pos=indicators.get("bb_pos"),
+                    momentum_30=indicators.get("momentum_30"),
+                    market_share_pct=mkt_share,
+                )
+                opp = compute_opportunity_score(
+                    rsi=indicators.get("rsi"),
+                    bb_pos=indicators.get("bb_pos"),
+                    momentum_7=indicators.get("momentum_7"),
+                    spread_pct=indicators.get("spread"),
+                    pnl_pct=pnl_pct,
+                    target_pnl_pct=target,
+                )
+
+                values = {
+                    "market_hash_name": name,
+                    "signal_date": target_date,
+                    "rsi_14": indicators.get("rsi"),
+                    "bb_position": indicators.get("bb_pos"),
+                    "bb_width": indicators.get("bb_width"),
+                    "momentum_7": indicators.get("momentum_7"),
+                    "momentum_30": indicators.get("momentum_30"),
+                    "volatility_30": indicators.get("volatility_30"),
+                    "ma_7": indicators.get("ma_7"),
+                    "ma_30": indicators.get("ma_30"),
+                    "ath_price": indicators.get("ath_price"),
+                    "ath_pct": indicators.get("ath_pct"),
+                    "spread_pct": indicators.get("spread"),
+                    "annualized_return": ann_ret,
+                    "holding_count": h_count if h_count > 0 else None,
+                    "concentration_pct": round(conc, 2) if conc is not None else None,
+                    "market_share_pct": round(mkt_share, 2) if mkt_share is not None else None,
+                    "volatility_zscore": round(vol_z, 2) if vol_z is not None else None,
+                    "sell_score": sell,
+                    "opportunity_score": opp,
+                }
+
+                stmt = sqlite_insert(QuantSignal).values(values)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["market_hash_name", "signal_date"],
+                    set_={k: getattr(stmt.excluded, k) for k in values if k not in ("market_hash_name", "signal_date")},
+                )
+                await db.execute(stmt)
+                count += 1
+            except Exception as e:
+                logger.warning("signal score error for %s: %s", name, e)
 
         await db.commit()
         logger.info("compute_all_signals: wrote %d signals for %s", count, target_date)
@@ -275,15 +519,14 @@ async def compute_all_signals(target_date: Optional[str] = None) -> int:
         return count
 
 
-async def _compute_item_signals(
+async def _compute_item_indicators(
     db: AsyncSession,
     market_hash_name: str,
-    signal_date: str,
     purchase_map: dict[str, float],
     spread_map: dict[str, float],
+    days_held_map: dict[str, int],
 ) -> Optional[dict]:
-    """Compute all indicators for a single item and upsert to quant_signal."""
-    # Fetch price history (platform=ALL, ordered by date ascending)
+    """Compute raw technical indicators for a single item (no scoring)."""
     result = await db.execute(
         select(PriceHistory.close_price, PriceHistory.record_date)
         .where(
@@ -301,8 +544,6 @@ async def _compute_item_signals(
         return None
 
     current_price = closes[-1]
-
-    # Compute indicators
     rsi = calc_rsi(closes)
     bb = calc_bollinger(closes)
     mom7 = calc_momentum(closes, 7)
@@ -314,20 +555,15 @@ async def _compute_item_signals(
     ath_pct = (current_price / ath_price * 100) if ath_price > 0 else None
     spread = spread_map.get(market_hash_name)
 
-    # PnL for sell score
     pnl_pct = None
     buy_price = purchase_map.get(market_hash_name)
     if buy_price and buy_price > 0:
         pnl_pct = (current_price - buy_price) / buy_price * 100
 
-    sell = compute_sell_score(rsi, bb["pct_b"] if bb else None, mom30, ath_pct, pnl_pct)
-    opp = compute_opportunity_score(rsi, bb["pct_b"] if bb else None, mom7, spread)
-
-    values = {
-        "market_hash_name": market_hash_name,
-        "signal_date": signal_date,
-        "rsi_14": rsi,
-        "bb_position": bb["pct_b"] if bb else None,
+    return {
+        "current_price": current_price,
+        "rsi": rsi,
+        "bb_pos": bb["pct_b"] if bb else None,
         "bb_width": bb["bandwidth"] if bb else None,
         "momentum_7": mom7,
         "momentum_30": mom30,
@@ -336,18 +572,31 @@ async def _compute_item_signals(
         "ma_30": ma30,
         "ath_price": ath_price,
         "ath_pct": ath_pct,
-        "spread_pct": spread,
-        "sell_score": sell,
-        "opportunity_score": opp,
+        "spread": spread,
+        "pnl_pct": pnl_pct,
     }
 
-    stmt = sqlite_insert(QuantSignal).values(values)
-    stmt = stmt.on_conflict_do_update(
-        index_elements=["market_hash_name", "signal_date"],
-        set_={k: getattr(stmt.excluded, k) for k in values if k not in ("market_hash_name", "signal_date")},
-    )
-    await db.execute(stmt)
-    return values
+
+async def _calc_market_count_map(db: AsyncSession) -> dict[str, int]:
+    """
+    Get total market sell_count per item (sum across platforms).
+    Used for market impact / market share calculation.
+    """
+    stmt = text("""
+        SELECT ps.market_hash_name, SUM(ps.sell_count) AS total_sell
+        FROM price_snapshot ps
+        INNER JOIN (
+            SELECT market_hash_name, platform, MAX(snapshot_minute) AS latest
+            FROM price_snapshot
+            GROUP BY market_hash_name, platform
+        ) lt ON ps.market_hash_name = lt.market_hash_name
+            AND ps.platform = lt.platform
+            AND ps.snapshot_minute = lt.latest
+        WHERE ps.sell_count IS NOT NULL AND ps.sell_count > 0
+        GROUP BY ps.market_hash_name
+    """)
+    result = await db.execute(stmt)
+    return {row[0]: int(row[1]) for row in result.fetchall()}
 
 
 async def _calc_spread_map(db: AsyncSession) -> dict[str, float]:

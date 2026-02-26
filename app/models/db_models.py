@@ -145,6 +145,9 @@ class InventoryItem(Base):
     purchase_date: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     purchase_platform: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
 
+    # 目标收益率 %（达标即卖，为 None 时使用全局默认值）
+    target_pnl_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
 
 class PriceHistory(Base):
     """每日价格 OHLC 记录（量化分析时序基础）"""
@@ -197,6 +200,13 @@ class QuantSignal(Base):
     # 跨平台价差
     spread_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
+    # 新增维度指标
+    annualized_return: Mapped[Optional[float]] = mapped_column(Float, nullable=True)   # 年化收益率 %
+    holding_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)       # 持有件数
+    concentration_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)   # 持仓市值占比 %
+    market_share_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)    # 持仓/市场在售 %
+    volatility_zscore: Mapped[Optional[float]] = mapped_column(Float, nullable=True)   # 波动率 z-score（vs 同类）
+
     # 综合评分 0-100
     sell_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     opportunity_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
@@ -240,6 +250,8 @@ class PortfolioSnapshot(Base):
     # 价值（¥）
     total_cost: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     market_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    in_steam_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    rented_out_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     pnl: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     pnl_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
