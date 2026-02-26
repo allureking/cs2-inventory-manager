@@ -1507,6 +1507,10 @@
             class="px-4 py-2 rounded-lg text-xs font-medium bg-slate-700 hover:bg-slate-600 text-white disabled:opacity-50">
             <span x-text="ao.collector?.status==='running'?t('collecting'):t('btn_collect')"></span>
           </button>
+          <button @click="triggerCsqaqSync()"
+            class="px-4 py-2 rounded-lg text-xs font-medium bg-teal-700 hover:bg-teal-600 text-white">
+            <span x-text="nameLang==='cn'?'CSQAQ 同步':'CSQAQ Sync'"></span>
+          </button>
         </div>
       </div>
 
@@ -1647,6 +1651,31 @@
                     <span class="tip-text" x-text="nameLang==='cn'?'该饰品波动率相对同类饰品的偏离程度(Z值)。>2为显著异常波动，<-1.5为异常平静。':'Volatility z-score vs peers. >2 = significant anomaly, <-1.5 = unusually calm.'"></span></span></p>
                 <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.volatility_zscore||0)>2?'text-red-400':(itemSignals.signal?.volatility_zscore||0)>1?'text-orange-400':(itemSignals.signal?.volatility_zscore||0)<-1.5?'text-cyan-400':'text-slate-300'"
                   x-text="itemSignals.signal?.volatility_zscore!=null?itemSignals.signal.volatility_zscore:'—'"></p>
+              </div>
+            </div>
+
+            <!-- CSQAQ Market Data Gauges -->
+            <div class="grid grid-cols-3 gap-3 mb-4" x-show="itemSignals.signal?.daily_rent||itemSignals.signal?.steam_turnover||itemSignals.signal?.global_supply">
+              <div class="card p-3 text-center">
+                <p class="text-[10px] text-slate-600 mb-1"><span x-text="nameLang==='cn'?'日租金':'Daily Rent'"></span>
+                  <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
+                    <span class="tip-text" x-text="nameLang==='cn'?'悠悠有品市场日租金均价（CSQAQ 数据）。':'Average daily rental price on UUYP market (CSQAQ data).'"></span></span></p>
+                <p class="text-xl font-bold font-mono text-emerald-400"
+                  x-text="itemSignals.signal?.daily_rent?'¥'+itemSignals.signal.daily_rent:'—'"></p>
+              </div>
+              <div class="card p-3 text-center">
+                <p class="text-[10px] text-slate-600 mb-1"><span x-text="nameLang==='cn'?'Steam 成交量':'Steam Turnover'"></span>
+                  <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
+                    <span class="tip-text" x-text="nameLang==='cn'?'Steam 市场近期成交量。高成交 = 流动性好，低成交 = 难出手。':'Steam market recent turnover. High = good liquidity.'"></span></span></p>
+                <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.steam_turnover||0)>1000?'text-emerald-400':(itemSignals.signal?.steam_turnover||0)>200?'text-yellow-300':'text-orange-400'"
+                  x-text="itemSignals.signal?.steam_turnover!=null?itemSignals.signal.steam_turnover.toLocaleString():'—'"></p>
+              </div>
+              <div class="card p-3 text-center">
+                <p class="text-[10px] text-slate-600 mb-1"><span x-text="nameLang==='cn'?'全球存世量':'Global Supply'"></span>
+                  <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
+                    <span class="tip-text" x-text="nameLang==='cn'?'全球饰品存世总量（CSQAQ 统计）。稀有度影响长期价值。':'Total global supply of this skin (CSQAQ stats). Rarity affects long-term value.'"></span></span></p>
+                <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.global_supply||0)<5000?'text-purple-400':(itemSignals.signal?.global_supply||0)<50000?'text-yellow-300':'text-slate-300'"
+                  x-text="itemSignals.signal?.global_supply!=null?itemSignals.signal.global_supply.toLocaleString():'—'"></p>
               </div>
             </div>
 
@@ -1849,7 +1878,7 @@
         </div>
         <div class="text-xs text-slate-600">
           <span x-text="t('current_version')"></span>
-          <span class="text-blue-400 font-mono font-bold ml-1">v0.4.0</span>
+          <span class="text-blue-400 font-mono font-bold ml-1">v0.5.0</span>
         </div>
       </div>
 
@@ -2511,6 +2540,26 @@
 
         // Changelog data (bilingual, derived from git history)
         changelogData: [
+          {
+            version: '0.5.0', date: '2026-02-26', major: true,
+            title_cn: 'CSQAQ 数据集成 — 租金/成交量/存世量全覆盖',
+            title_en: 'CSQAQ Data Integration — Full Rental, Turnover & Supply Coverage',
+            added: [
+              ['CSQAQ API 集成：自动映射 202 个饰品，每日拉取市场租金、Steam 成交量、全球存世量', 'CSQAQ API integration: auto-maps 202 items, daily sync of market rental, Steam turnover, global supply'],
+              ['信号面板新增「日租金」「Steam 成交量」「全球存世量」数据卡片', 'Signal panel adds daily rent, Steam turnover, global supply data cards'],
+              ['租金年化率使用 CSQAQ 市场数据，202 个饰品全部可显示', 'Rental yield now uses CSQAQ market data, all 202 items covered'],
+              ['排名表支持按租金年化、成交量、存世量排序', 'Rankings support sorting by rental yield, turnover, supply'],
+              ['CSQAQ 同步按钮 + 后台进度轮询', 'CSQAQ Sync button with background progress polling'],
+              ['定时任务：每日 00:02 UTC 自动 CSQAQ 数据同步', 'Scheduled daily CSQAQ sync at 00:02 UTC'],
+            ],
+            changed: [
+              ['卖出评分新增租金年化修正：高租金饰品降低卖出信号', 'Sell score adds rental correction: high-rent items get lower sell signal'],
+              ['买入机会评分新增租金收益维度(10%)', 'Opportunity score adds rental yield dimension (10%)'],
+              ['icon_url 覆盖率 63.8%→94.5%，item_type 覆盖率 0.8%→88.4%', 'icon_url coverage 63.8%→94.5%, item_type 0.8%→88.4%'],
+              ['SQLite 启用 WAL 模式，解决后台同步并发锁定问题', 'SQLite WAL mode fixes concurrent lock issues during background sync'],
+            ],
+            commits: [],
+          },
           {
             version: '0.4.0', date: '2026-02-26', major: true,
             title_cn: 'CS2 大商决策模型 — 卖出评分全面重构',
@@ -4012,10 +4061,34 @@
 
         async collectNow() {
           try {
-            // Trigger price collection manually via a direct call
             this.showToast('价格采集已触发，后台运行中（约8分钟）', 'success');
-            // The scheduler's collect_prices will handle it; alternatively we could add a manual endpoint
           } catch {}
+        },
+
+        async triggerCsqaqSync() {
+          try {
+            const r = await fetch('/api/analysis/csqaq-sync?mode=sync', { method: 'POST' });
+            const d = await r.json();
+            if (d.started) {
+              this.showToast(d.message || 'CSQAQ 同步已启动', 'success');
+              // Poll status
+              const poll = setInterval(async () => {
+                try {
+                  const sr = await fetch('/api/analysis/csqaq-status');
+                  const st = await sr.json();
+                  if (st.status === 'idle' && (st.synced > 0 || st.mapped > 0)) {
+                    clearInterval(poll);
+                    this.showToast(`CSQAQ 同步完成: ${st.mapped||0} 映射, ${st.synced||0} 同步`, 'success');
+                    this.loadAnalysis();
+                  }
+                } catch {}
+              }, 5000);
+              // Auto-stop polling after 15 min
+              setTimeout(() => clearInterval(poll), 900000);
+            } else {
+              this.showToast(d.message || 'CSQAQ 同步繁忙', 'warning');
+            }
+          } catch (e) { this.showToast('CSQAQ 同步失败: ' + e.message, 'error'); }
         },
 
         toggleTheme() {
@@ -4046,21 +4119,21 @@
         },
 
         // ── Rental yield calculation ─────────────────────────────────
-        // 短租年化率 = 有效出租天数(188天/年, 0CD 310天) × 日租金 / 饰品价值 × 100%
-        // 这里用 ownership.current_price 作为饰品价值参考，日租金需从货架数据获取
-        // 由于前端无法直接获取日租金，暂用估算：rented_out 的物品按市价×0.01%/天估算
-        // TODO: 后端补充 daily_rent 字段后可精确计算
+        // 优先使用 CSQAQ 市场租金年化数据，fallback 到货架数据估算
         rentalYield(signals) {
+          // 1. 优先使用 CSQAQ 信号数据（市场租金年化）
+          if (signals?.signal?.rental_annual > 0) {
+            return signals.signal.rental_annual;
+          }
           if (!signals?.ownership) return 0;
           const price = signals.ownership.current_price;
           if (!price || price <= 0) return 0;
-          // 尝试从 leaseShelf 查找日租金
+          // 2. Fallback: 从货架数据估算
           const allShelf = [...(this.leaseShelf.items||[]), ...(this.subletList.items||[])];
           const match = allShelf.find(i => (i.commodityHashName||i.marketHashName||'') === signals.market_hash_name);
           if (match) {
             const dailyRent = match.leaseUnitPrice || match.LeaseUnitPrice || 0;
             if (dailyRent > 0) {
-              // 普通短租 188天/年
               return Math.round(188 * dailyRent / price * 100 * 10) / 10;
             }
           }

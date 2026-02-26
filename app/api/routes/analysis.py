@@ -13,6 +13,8 @@ GET  /api/analysis/categories         — 分类趋势
 POST /api/analysis/backfill           — 触发历史回填
 POST /api/analysis/compute-now        — 手动触发信号计算
 GET  /api/analysis/collector/status   — 采集器状态
+POST /api/analysis/csqaq-sync         — CSQAQ 数据同步（手动）
+GET  /api/analysis/csqaq-status       — CSQAQ 同步状态
 """
 
 from __future__ import annotations
@@ -387,6 +389,10 @@ async def get_item_signals(
             "volatility_zscore": round(sig.volatility_zscore, 2) if sig.volatility_zscore else None,
             "sell_score": round(sig.sell_score, 1) if sig.sell_score else None,
             "opportunity_score": round(sig.opportunity_score, 1) if sig.opportunity_score else None,
+            "daily_rent": round(sig.daily_rent, 2) if sig.daily_rent else None,
+            "rental_annual": round(sig.rental_annual, 1) if sig.rental_annual else None,
+            "steam_turnover": sig.steam_turnover,
+            "global_supply": sig.global_supply,
         }
 
     # Fetch name + icon_url for display
@@ -533,6 +539,7 @@ async def signal_rankings(
         "momentum_30", "volatility_30", "spread_pct", "ath_pct",
         "annualized_return", "holding_count", "concentration_pct",
         "market_share_pct", "volatility_zscore",
+        "rental_annual", "steam_turnover", "global_supply",
     }
     if sort_by not in allowed_sorts:
         sort_by = "sell_score"
@@ -582,6 +589,10 @@ async def signal_rankings(
                 "concentration_pct": round(s.concentration_pct, 1) if s.concentration_pct else None,
                 "market_share_pct": round(s.market_share_pct, 1) if s.market_share_pct else None,
                 "volatility_zscore": round(s.volatility_zscore, 2) if s.volatility_zscore else None,
+                "daily_rent": round(s.daily_rent, 2) if s.daily_rent else None,
+                "rental_annual": round(s.rental_annual, 1) if s.rental_annual else None,
+                "steam_turnover": s.steam_turnover,
+                "global_supply": s.global_supply,
             }
             for s in rows
         ],
@@ -893,3 +904,31 @@ async def search_items(
         .limit(limit)
     )
     return {"items": [{"market_hash_name": r[0], "name": r[1], "icon_url": r[2]} for r in result.all()]}
+
+
+# ── CSQAQ Sync ─────────────────────────────────────────────────────────
+
+@router.post("/csqaq-sync")
+async def trigger_csqaq_sync(mode: str = Query("sync")):
+    """手动触发 CSQAQ 数据同步。mode=mapping 仅建立 ID 映射，mode=sync 全量同步。"""
+    from app.services.csqaq import build_id_mapping, sync_all_items, csqaq_sync_state
+
+    if csqaq_sync_state["status"] != "idle":
+        return {"started": False, "message": "CSQAQ 同步已在运行中", "state": csqaq_sync_state}
+
+    if mode == "mapping":
+        asyncio.create_task(build_id_mapping())
+        return {"started": True, "message": "CSQAQ ID 映射已启动"}
+    else:
+        async def _full_sync():
+            await build_id_mapping()
+            await sync_all_items()
+        asyncio.create_task(_full_sync())
+        return {"started": True, "message": "CSQAQ 全量同步已启动（映射 + 数据拉取）"}
+
+
+@router.get("/csqaq-status")
+async def get_csqaq_status():
+    """CSQAQ 同步状态（前端轮询用）"""
+    from app.services.csqaq import csqaq_sync_state
+    return csqaq_sync_state

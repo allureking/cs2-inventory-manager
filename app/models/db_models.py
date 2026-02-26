@@ -36,6 +36,8 @@ class Item(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)  # 中文名
     # 各平台 item_id，逗号分隔存 JSON 字符串（简单场景够用，复杂可拆表）
     platform_ids_json: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # CSQAQ 饰品 ID（用于调用 CSQAQ 数据 API）
+    csqaq_good_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
@@ -206,6 +208,12 @@ class QuantSignal(Base):
     concentration_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)   # 持仓市值占比 %
     market_share_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)    # 持仓/市场在售 %
     volatility_zscore: Mapped[Optional[float]] = mapped_column(Float, nullable=True)   # 波动率 z-score（vs 同类）
+
+    # CSQAQ 数据（每日同步）
+    daily_rent: Mapped[Optional[float]] = mapped_column(Float, nullable=True)      # 悠悠有品短租日租金
+    rental_annual: Mapped[Optional[float]] = mapped_column(Float, nullable=True)   # 短租年化收益率 %
+    steam_turnover: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Steam 日均成交量
+    global_supply: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)   # 全球存世量
 
     # 综合评分 0-100
     sell_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

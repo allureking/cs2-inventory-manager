@@ -19,6 +19,7 @@ from app.services.collector import (
     cleanup_old_snapshots,
     snapshot_portfolio,
 )
+from app.services.csqaq import csqaq_daily_sync
 
 scheduler = AsyncIOScheduler()
 logger = logging.getLogger(__name__)
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="CS2 Inventory Manager",
     description="CS2 饰品量化交易监控系统",
-    version="0.4.0",
+    version="0.5.0",
 )
 
 app.add_middleware(
@@ -69,9 +70,12 @@ async def startup():
     # Cleanup old snapshots: 01:00 UTC
     scheduler.add_job(cleanup_old_snapshots, "cron", hour=1, minute=0, id="cleanup_snapshots",
                       misfire_grace_time=600)
+    # CSQAQ data sync: 00:02 UTC (before aggregate + signals)
+    scheduler.add_job(csqaq_daily_sync, "cron", hour=0, minute=2, id="csqaq_sync",
+                      misfire_grace_time=600)
 
     scheduler.start()
-    logger.info("APScheduler started with 5 background jobs")
+    logger.info("APScheduler started with 6 background jobs")
 
     # Take an immediate portfolio snapshot on startup
     try:
@@ -92,7 +96,7 @@ async def serve_ui():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "0.4.0"}
+    return {"status": "ok", "version": "0.5.0"}
 
 
 if __name__ == "__main__":

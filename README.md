@@ -25,9 +25,10 @@ CS2 饰品量化交易监控系统 — 集库存管理、实时市价追踪、�
 - 组合价值走势图（支持 24h / 7d / 30d / 90d 时间范围）
 
 **量化信号**
-- 「CS2 大商决策模型」卖出评分：收益达标度(30%)、年化收益衰减(20%)、持仓集中度(20%)、异常波动(25%)、市场冲击(5%)
-- 买入机会评分：超卖、布林下轨、短期回调、跨平台价差、深亏增持
+- 「CS2 大商决策模型」卖出评分：收益达标度(30%)、年化收益衰减(20%)、持仓集中度(20%)、异常波动(25%)、市场冲击(5%)、租金年化修正
+- 买入机会评分：超卖、布林下轨、短期回调、跨平台价差、深亏增持、租金收益(10%)
 - 技术指标：RSI(14)、布林带、动量、波动率、年化收益率、持仓占比、市场份额、波动 Z 值
+- CSQAQ 数据集成：市场日租金、租金年化率、Steam 成交量、全球存世量
 - 预警系统、套利雷达（跨平台价差检测）
 - 日线 OHLC 聚合 + 历史数据回填
 
@@ -71,7 +72,7 @@ cs2-inventory-manager/
 │   └── monitor.sh                 # 看门狗脚本
 └── app/
     ├── core/                      # 配置 + 数据库引擎
-    ├── models/db_models.py        # 8 张表 ORM 模型
+    ├── models/db_models.py        # 9 张表 ORM 模型
     ├── schemas/                   # API 响应模型
     ├── services/                  # 业务逻辑（采集/同步/量化/加密）
     └── api/routes/                # 7 个路由模块
@@ -93,6 +94,7 @@ uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 - **Steam Web API Key** — [Steam API Key](https://steamcommunity.com/dev/apikey)
 - **Steam 登录 Cookie** — 浏览器 F12 获取 `steamLoginSecure` + `sessionid`
 - **悠悠有品 Token** — 在系统 Web 界面中通过短信登录获取
+- **CSQAQ API Key** — [CSQAQ 数据平台](https://docs.csqaq.com)
 
 ## 定时任务
 
@@ -102,6 +104,7 @@ uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 | `snapshot_portfolio` | 每 30 分钟 | 记录组合价值快照 |
 | `aggregate_daily` | 每日 00:05 UTC | 日线 OHLC 聚合 |
 | `compute_signals` | 每日 00:10 UTC | 量化信号计算 |
+| `csqaq_sync` | 每日 00:02 UTC | CSQAQ 数据同步（租金/成交/存世量） |
 | `cleanup_snapshots` | 每日 01:00 UTC | 清理过期快照 |
 | `backup.sh` | 每 6 小时 | SQLite 热备份 |
 | `monitor.sh` | 每 5 分钟 | 健康检查 + 自动重启 |
@@ -149,9 +152,10 @@ A quantitative trading & monitoring system for CS2 skins — inventory managemen
 - Portfolio value trend chart (24h / 7d / 30d / 90d time ranges)
 
 **Quantitative Signals**
-- "CS2 Dealer Decision Model" sell score: Target P&L (30%), Annual Return Decay (20%), Concentration (20%), Volatility Anomaly (25%), Market Impact (5%)
-- Buy opportunity score: oversold, lower BB, dip, cross-platform spread, loss averaging
+- "CS2 Dealer Decision Model" sell score: Target P&L (30%), Annual Return Decay (20%), Concentration (20%), Volatility Anomaly (25%), Market Impact (5%), rental yield correction
+- Buy opportunity score: oversold, lower BB, dip, cross-platform spread, loss averaging, rental yield (10%)
 - Technical indicators: RSI(14), Bollinger Bands, momentum, volatility, annualized return, concentration %, market share %, volatility z-score
+- CSQAQ data integration: market daily rent, rental annual yield, Steam turnover, global supply
 - Alert system, arbitrage radar (cross-platform spread detection)
 - Daily OHLC aggregation + historical data backfill
 

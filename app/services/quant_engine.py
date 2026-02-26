@@ -156,6 +156,7 @@ def compute_sell_score(
     bb_pos: Optional[float] = None,
     momentum_30: Optional[float] = None,
     market_share_pct: Optional[float] = None,
+    rental_annual: Optional[float] = None,
 ) -> float:
     """
     CS2 大商决策模型 — 综合卖出评分 (0-100).
@@ -244,6 +245,11 @@ def compute_sell_score(
         elif market_share_pct > 10:
             score += (market_share_pct - 10) * 0.25  # 0~5
 
+    # ── 租金年化修正 ── 高租金收益的饰品不急卖
+    if rental_annual is not None and rental_annual > 15:
+        # 年化租金 >15%，值得继续持有出租
+        score -= min(8, (rental_annual - 15) * 0.2)
+
     return max(0.0, min(100.0, score))
 
 
@@ -254,6 +260,7 @@ def compute_opportunity_score(
     spread_pct: Optional[float],
     pnl_pct: Optional[float] = None,
     target_pnl_pct: float = 30.0,
+    rental_annual: Optional[float] = None,
 ) -> float:
     """
     Buy-opportunity score (0-100).
@@ -263,8 +270,9 @@ def compute_opportunity_score(
       1. RSI 超卖        25%  — RSI < 30 加分
       2. 布林带下轨      20%  — 价格低于下轨
       3. 短期回调        15%  — 7 日负动量（逢跌买入）
-      4. 跨平台价差      20%  — 套利空间
-      5. 收益低谷/深亏   20%  — 远低于目标收益 → 增持摊低成本
+      4. 跨平台价差      15%  — 套利空间
+      5. 收益低谷/深亏   15%  — 远低于目标收益 → 增持摊低成本
+      6. 租金年化收益    10%  — 高租金 → 增持更有价值
     """
     score = 50.0
 
@@ -280,21 +288,25 @@ def compute_opportunity_score(
     if momentum_7 is not None and momentum_7 < -5:
         score += min((-momentum_7 - 5) * 0.75, 15)
 
-    # 4. Cross-platform spread (20%)
+    # 4. Cross-platform spread (15%)
     if spread_pct is not None and spread_pct > 5:
-        score += min((spread_pct - 5) * 1.2, 20)
+        score += min((spread_pct - 5) * 1.0, 15)
 
-    # 5. PnL trough — 深亏 = 增持信号 (20%)
+    # 5. PnL trough — 深亏 = 增持信号 (15%)
     if pnl_pct is not None and target_pnl_pct > 0:
         if pnl_pct < -20:
             # 亏损超 20%，强买入信号
-            score += min((-pnl_pct - 20) * 0.5, 20)
+            score += min((-pnl_pct - 20) * 0.5, 15)
         elif pnl_pct < -5:
             # 轻度亏损
-            score += (-pnl_pct - 5) * 0.67  # 0~10
+            score += (-pnl_pct - 5) * 0.5  # 0~7.5
         elif pnl_pct > target_pnl_pct:
             # 已达标，降低买入信号
             score -= min((pnl_pct - target_pnl_pct) * 0.3, 15)
+
+    # 6. Rental yield — 高租金年化 = 增持更有价值 (10%)
+    if rental_annual is not None and rental_annual > 10:
+        score += min((rental_annual - 10) * 0.25, 10)
 
     return max(0.0, min(100.0, score))
 
@@ -398,7 +410,19 @@ async def compute_all_signals(target_date: Optional[str] = None) -> int:
             item_market_value[name] = val
             total_portfolio_value += val
 
-        # 6. Peer volatility map (item_type → list of vol30)
+        # 6. CSQAQ rental data (for rental-aware scoring)
+        rental_map: dict[str, float] = {}  # market_hash_name → rental_annual
+        rental_result = await db.execute(
+            select(QuantSignal.market_hash_name, QuantSignal.rental_annual)
+            .where(
+                QuantSignal.signal_date == target_date,
+                QuantSignal.rental_annual.isnot(None),
+            )
+        )
+        for row in rental_result.all():
+            rental_map[row[0]] = float(row[1])
+
+        # 7. Peer volatility map (item_type → list of vol30)
         #    Pre-compute so we can calculate z-scores
         vol_map: dict[str, float] = {}  # market_hash_name → volatility_30
 
@@ -454,6 +478,8 @@ async def compute_all_signals(target_date: Optional[str] = None) -> int:
                         if total_return > 0:
                             ann_ret = (total_return ** (365 / days_held) - 1) * 100
 
+                rent_ann = rental_map.get(name)
+
                 sell = compute_sell_score(
                     pnl_pct=pnl_pct,
                     target_pnl_pct=target,
@@ -466,6 +492,7 @@ async def compute_all_signals(target_date: Optional[str] = None) -> int:
                     bb_pos=indicators.get("bb_pos"),
                     momentum_30=indicators.get("momentum_30"),
                     market_share_pct=mkt_share,
+                    rental_annual=rent_ann,
                 )
                 opp = compute_opportunity_score(
                     rsi=indicators.get("rsi"),
@@ -474,6 +501,7 @@ async def compute_all_signals(target_date: Optional[str] = None) -> int:
                     spread_pct=indicators.get("spread"),
                     pnl_pct=pnl_pct,
                     target_pnl_pct=target,
+                    rental_annual=rent_ann,
                 )
 
                 values = {

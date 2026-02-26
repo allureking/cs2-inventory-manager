@@ -1,5 +1,22 @@
 # Changelog / 更新日志
 
+## [0.5.0] - 2026-02-26
+
+### 新增 / Added
+- **CSQAQ 数据 API 集成**：自动映射 202 个饰品的 CSQAQ good_id，每日拉取市场租金、Steam 成交量、全球存世量 / **CSQAQ Data API integration**: auto-maps 202 items via Chinese name search, daily sync of market rental, Steam turnover, global supply
+- 信号面板新增「日租金」「Steam 成交量」「全球存世量」三组数据卡片 / Signal detail panel adds 3 new data cards: daily rent, Steam turnover, global supply
+- 租金年化率现在使用 CSQAQ 市场数据（全部 202 个饰品可显示），不再依赖用户自有货架 / Rental yield now uses CSQAQ market data (all 202 items), no longer depends on user's own shelf
+- 排名表支持按 `rental_annual`、`steam_turnover`、`global_supply` 排序 / Rankings support sorting by rental yield, turnover, supply
+- 新增 `POST /api/analysis/csqaq-sync` 手动触发同步 + `GET /api/analysis/csqaq-status` 状态轮询端点 / New CSQAQ sync trigger and status polling API endpoints
+- 前端新增「CSQAQ 同步」按钮，支持后台轮询进度 / Frontend adds "CSQAQ Sync" button with background progress polling
+- 定时任务：每日 00:02 UTC 自动执行 CSQAQ 数据同步 / Scheduled job: daily CSQAQ sync at 00:02 UTC
+
+### 变更 / Changed
+- 卖出评分新增「租金年化修正」：年化租金 >15% 降低卖出分（高租金饰品值得继续持有出租） / Sell score adds rental correction: rental yield >15% reduces sell signal (high-rent items worth holding)
+- 买入机会评分新增「租金收益」维度(10%)：高租金增加增持价值 / Opportunity score adds rental yield dimension (10%): high rent boosts buy signal
+- icon_url 覆盖率从 63.8% 提升至 94.5%，item_type 覆盖率从 0.8% 提升至 88.4% / icon_url coverage from 63.8% to 94.5%, item_type from 0.8% to 88.4%
+- SQLite 启用 WAL 模式 + 30s 超时，解决后台同步与前端请求并发锁定问题 / SQLite WAL mode + 30s timeout to fix concurrent lock issues during background sync
+
 ## [0.4.0] - 2026-02-26
 
 ### 新增 / Added

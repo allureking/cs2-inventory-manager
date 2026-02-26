@@ -7,7 +7,7 @@ from app.core.config import settings
 engine = create_async_engine(
     settings.database_url,
     echo=False,
-    connect_args={"check_same_thread": False},
+    connect_args={"check_same_thread": False, "timeout": 30},
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -31,6 +31,8 @@ async def init_db() -> None:
     from app.models import db_models  # noqa: F401 — 触发模型注册
 
     async with engine.begin() as conn:
+        # Enable WAL mode for better concurrent read/write
+        await conn.execute(text("PRAGMA journal_mode=WAL"))
         await conn.run_sync(Base.metadata.create_all)
 
         # 对已存在的表补加新列（SQLite 不支持修改约束，只能 ADD COLUMN）

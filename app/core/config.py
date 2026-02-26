@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     # SteamDT API
     steamdt_base_url: str = "https://open.steamdt.com"
 
+    # CSQAQ 数据 API
+    csqaq_api_key: str = ""
+    csqaq_base_url: str = "https://api.csqaq.com/api/v1"
+
     # 悠悠有品
     youpin_token: str = ""
     youpin_device_id: str = ""
