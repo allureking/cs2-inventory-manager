@@ -44,6 +44,10 @@ async def init_db() -> None:
             "ALTER TABLE inventory_item ADD COLUMN youpin_template_id INTEGER",
             "ALTER TABLE portfolio_snapshot ADD COLUMN in_steam_value FLOAT",
             "ALTER TABLE portfolio_snapshot ADD COLUMN rented_out_value FLOAT",
+            # v0.5.1: 盈亏率、含租预期收益率、CSQAQ ATH
+            "ALTER TABLE quant_signal ADD COLUMN pnl_rate FLOAT",
+            "ALTER TABLE quant_signal ADD COLUMN projected_annual_return FLOAT",
+            "ALTER TABLE quant_signal ADD COLUMN csqaq_ath_price FLOAT",
         ]
         for sql in _new_columns:
             try:

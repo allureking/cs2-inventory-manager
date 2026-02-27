@@ -1,5 +1,17 @@
 # Changelog / 更新日志
 
+## [0.5.1] - 2026-02-26
+
+### 修复 / Fixed
+- **ATH 数据不准确**：新增 CSQAQ API ATH 字段探测，优先使用 API 长期历史数据（覆盖3年+），本地 45 天数据仅作兜底 / **Inaccurate ATH**: Added CSQAQ API ATH field detection, prefer API long-term historical data (3yr+ coverage), local 45-day data as fallback only
+- **资产概览市值不刷新**：导入同步完成后自动调用 `loadAll()` 刷新所有数据 / **Market value not refreshing**: Auto-call `loadAll()` after import sync completes
+- **组合走势图曲线显隐按钮无效**：使用 Chart.js 标准 `setDatasetVisibility()` API 替代直接设置 `dataset.hidden` / **Chart toggle buttons broken**: Use Chart.js standard `setDatasetVisibility()` API instead of directly setting `dataset.hidden`
+
+### 变更 / Changed
+- **年化收益拆分为盈亏率 + 含租预期收益率**：原 CAGR 年化收益替换为「盈亏率」(市价-成本)/成本 和「含租预期收益率」假设价格不变收一年租金后的总回报率 / **Split annual return into P&L Rate + Projected Return**: Replaced CAGR annualized return with "P&L Rate" (market-cost)/cost and "Projected Return" assuming flat price + 1 year rental income
+- **新增悠悠大会员开关**：前端 localStorage 持久化，开启后租金年化按 310 天计算，关闭按 188 天 / **Added Youpin VIP membership toggle**: localStorage persistent, 310 days when enabled vs 188 days default
+- 数据库自动补齐 3 个新字段：`pnl_rate`、`projected_annual_return`、`csqaq_ath_price` / DB auto-migration adds 3 new columns
+
 ## [0.5.0] - 2026-02-26
 
 ### 新增 / Added

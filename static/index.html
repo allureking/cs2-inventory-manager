@@ -375,7 +375,11 @@
             : 'background:linear-gradient(135deg, #10b981 50%, #ef4444 50%)'">
         </button>
 
-        <!-- 会员等级: 默认V3, 已移到内部配置 -->
+        <!-- 悠悠大会员开关 -->
+        <label class="flex items-center gap-1 cursor-pointer select-none flex-shrink-0" :title="nameLang==='cn'?'开启后租金年化按310天计算，关闭按188天':'Toggle 310d (member) vs 188d rental calculation'">
+          <input type="checkbox" x-model="youpinMembership" class="accent-amber-500 w-3 h-3">
+          <span class="text-[11px] whitespace-nowrap" :class="youpinMembership?'text-amber-400':'text-slate-500'" x-text="nameLang==='cn'?'大会员':'VIP'"></span>
+        </label>
 
         <!-- Import button -->
         <button @click="triggerImport()" :disabled="importing"
@@ -1616,13 +1620,21 @@
             </div>
 
             <!-- New Dimension Gauges (CS2 Dealer Model) -->
-            <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
               <div class="card p-3 text-center">
-                <p class="text-[10px] text-slate-600 mb-1"><span x-text="t('sig_ann_return')"></span>
+                <p class="text-[10px] text-slate-600 mb-1"><span x-text="nameLang==='cn'?'盈亏率':'P&L Rate'"></span>
                   <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
-                    <span class="tip-text" x-text="nameLang==='cn'?'基于买入价和持有天数计算的年化收益率。低于15%基准线表示增长放缓。':'Annualized return based on cost and holding period. Below 15% benchmark = slowing growth.'"></span></span></p>
-                <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.annualized_return||0)>30?'text-emerald-400':(itemSignals.signal?.annualized_return||0)>15?'text-yellow-300':(itemSignals.signal?.annualized_return||0)>0?'text-orange-400':'text-red-400'"
-                  x-text="itemSignals.signal?.annualized_return!=null?(itemSignals.signal.annualized_return>0?'+':'')+itemSignals.signal.annualized_return+'%':'—'"></p>
+                    <span class="tip-text" x-text="nameLang==='cn'?'当前市价相对购入价的盈亏百分比 = (市价-成本)/成本。':'Unrealized P&L % = (market price - cost) / cost.'"></span></span></p>
+                <p class="text-xl font-bold font-mono" :class="(itemSignals.signal?.pnl_rate||0)>30?'text-emerald-400':(itemSignals.signal?.pnl_rate||0)>0?'text-yellow-300':(itemSignals.signal?.pnl_rate||0)>-10?'text-orange-400':'text-red-400'"
+                  x-text="itemSignals.signal?.pnl_rate!=null?(itemSignals.signal.pnl_rate>0?'+':'')+itemSignals.signal.pnl_rate+'%':'—'"></p>
+              </div>
+              <div class="card p-3 text-center">
+                <p class="text-[10px] text-slate-600 mb-1"><span x-text="nameLang==='cn'?'含租预期收益':'Proj. Return'"></span>
+                  <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
+                    <span class="tip-text" x-text="nameLang==='cn'?'假设饰品价格不变，收一年租金后的总回报率 = (市价+年租金-成本)/成本。受大会员天数影响。':'Projected return assuming flat price + 1 year rental income. Affected by VIP membership days.'"></span></span></p>
+                <p class="text-xl font-bold font-mono" :class="projectedReturn(itemSignals)>30?'text-emerald-400':projectedReturn(itemSignals)>10?'text-yellow-300':projectedReturn(itemSignals)>0?'text-orange-400':'text-red-400'"
+                  x-text="projectedReturn(itemSignals)!=null?(projectedReturn(itemSignals)>0?'+':'')+projectedReturn(itemSignals)+'%':'—'"></p>
+                <p class="text-[9px] mt-0.5 text-slate-600" x-text="youpinMembership?(nameLang==='cn'?'310天/年':'310d/yr'):(nameLang==='cn'?'188天/年':'188d/yr')"></p>
               </div>
               <div class="card p-3 text-center">
                 <p class="text-[10px] text-slate-600 mb-1"><span x-text="t('sig_holding_count')"></span>
@@ -1878,7 +1890,7 @@
         </div>
         <div class="text-xs text-slate-600">
           <span x-text="t('current_version')"></span>
-          <span class="text-blue-400 font-mono font-bold ml-1">v0.5.0</span>
+          <span class="text-blue-400 font-mono font-bold ml-1">v0.5.1</span>
         </div>
       </div>
 
@@ -2475,6 +2487,8 @@
 
         // 出租大会员等级 (由 header select 控制)
         memberLevel: parseInt(localStorage.getItem('memberLevel') || '3'),
+        // 悠悠大会员开关：开启后租金年化按310天计算，默认188天
+        youpinMembership: localStorage.getItem('youpinMembership') === 'true',
 
         // ── 量化分析 tab ──
         analysisTab: 'overview',
@@ -2540,6 +2554,22 @@
 
         // Changelog data (bilingual, derived from git history)
         changelogData: [
+          {
+            version: '0.5.1', date: '2026-02-26', major: false,
+            title_cn: 'Bug 修复 — ATH 数据源 / 年化收益拆分 / 大会员开关 / 图表修复',
+            title_en: 'Bug Fixes — ATH Data Source / Return Split / VIP Toggle / Chart Fix',
+            fixed: [
+              ['ATH 数据不准确：新增 CSQAQ API 长期历史数据支持，本地 45 天数据仅作兜底', 'Inaccurate ATH: Added CSQAQ API long-term historical data, local 45-day data as fallback'],
+              ['资产概览市值导入后不刷新：同步完成后自动刷新', 'Market value not refreshing after import: auto-refresh on completion'],
+              ['组合走势图曲线显隐按钮无效：改用 Chart.js 标准 API', 'Chart toggle buttons broken: use Chart.js standard setDatasetVisibility API'],
+            ],
+            changed: [
+              ['年化收益拆分为「盈亏率」+ 「含租预期收益率」，更直观', 'Annual return split into P&L Rate + Projected Return with rental income'],
+              ['新增悠悠大会员开关：310 天 vs 188 天有效出租', 'Added Youpin VIP toggle: 310d vs 188d effective rental days'],
+              ['数据库新增 pnl_rate、projected_annual_return、csqaq_ath_price 字段', 'DB adds pnl_rate, projected_annual_return, csqaq_ath_price columns'],
+            ],
+            commits: [],
+          },
           {
             version: '0.5.0', date: '2026-02-26', major: true,
             title_cn: 'CSQAQ 数据集成 — 租金/成交量/存世量全覆盖',
@@ -3013,6 +3043,7 @@
           // 持久化用户偏好到 localStorage
           this.$watch('nameLang', v => localStorage.setItem('nameLang', v));
           this.$watch('memberLevel', v => localStorage.setItem('memberLevel', v));
+          this.$watch('youpinMembership', v => localStorage.setItem('youpinMembership', v));
           // Apply saved theme
           if (this.theme === 'light') document.documentElement.classList.add('light');
           // 初始获取未读预警数（用于 tab badge）
@@ -3341,14 +3372,12 @@
         },
 
         togglePortfolioLine() {
-          this.$nextTick(() => {
-            if (!this._portfolioChart) return;
-            const keys = ['market_value', 'in_steam_value', 'rented_out_value', 'total_cost', 'pnl'];
-            keys.forEach((k, i) => {
-              this._portfolioChart.data.datasets[i].hidden = !this.portfolioLines[k];
-            });
-            this._portfolioChart.update();
+          if (!this._portfolioChart) return;
+          const keys = ['market_value', 'in_steam_value', 'rented_out_value', 'total_cost', 'pnl'];
+          keys.forEach((k, i) => {
+            this._portfolioChart.setDatasetVisibility(i, this.portfolioLines[k]);
           });
+          this._portfolioChart.update();
         },
 
         // ── System Monitor ─────────────────────────────────────────────
@@ -3836,6 +3865,7 @@
                     setTimeout(() => { this.importProgress = -1; }, 700);
                     this.importResult = st.results;
                     this.lastImportAt = new Date().toLocaleTimeString('zh-CN', { timeZone: 'America/Los_Angeles', hour: '2-digit', minute: '2-digit' });
+                    await this.loadAll();
                     resolve();
                   } else if (st.status === 'error') {
                     clearInterval(this._importPoll);
@@ -4136,10 +4166,29 @@
           if (match) {
             const dailyRent = match.leaseUnitPrice || match.LeaseUnitPrice || 0;
             if (dailyRent > 0) {
-              return Math.round(188 * dailyRent / price * 100 * 10) / 10;
+              const effectiveDays = this.youpinMembership ? 310 : 188;
+              return Math.round(effectiveDays * dailyRent / price * 100 * 10) / 10;
             }
           }
           return 0;
+        },
+
+        // ── 含租预期年收益率 ──────────────────────────────────────────
+        // 假设饰品价格不变，收一年租金后的总回报率
+        projectedReturn(signals) {
+          const s = signals?.signal;
+          const o = signals?.ownership;
+          if (!s || !o?.purchase_price || o.purchase_price <= 0) return null;
+          const currentPrice = o.current_price || 0;
+          if (currentPrice <= 0) return null;
+          const dailyRent = s.daily_rent || 0;
+          if (dailyRent <= 0) {
+            // 无租金数据时退化为纯盈亏率
+            return s.pnl_rate != null ? s.pnl_rate : null;
+          }
+          const effectiveDays = this.youpinMembership ? 310 : 188;
+          const annualRent = dailyRent * effectiveDays;
+          return Math.round((currentPrice + annualRent - o.purchase_price) / o.purchase_price * 1000) / 10;
         },
 
         // ── Helpers ───────────────────────────────────────────────────

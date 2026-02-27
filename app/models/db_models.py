@@ -203,7 +203,9 @@ class QuantSignal(Base):
     spread_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # 新增维度指标
-    annualized_return: Mapped[Optional[float]] = mapped_column(Float, nullable=True)   # 年化收益率 %
+    annualized_return: Mapped[Optional[float]] = mapped_column(Float, nullable=True)   # 年化收益率 % (内部卖出评分用)
+    pnl_rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)            # 盈亏率 % = (市价-成本)/成本
+    projected_annual_return: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # 含租预期年收益率 %
     holding_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)       # 持有件数
     concentration_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)   # 持仓市值占比 %
     market_share_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)    # 持仓/市场在售 %
@@ -212,6 +214,7 @@ class QuantSignal(Base):
     # CSQAQ 数据（每日同步）
     daily_rent: Mapped[Optional[float]] = mapped_column(Float, nullable=True)      # 悠悠有品短租日租金
     rental_annual: Mapped[Optional[float]] = mapped_column(Float, nullable=True)   # 短租年化收益率 %
+    csqaq_ath_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True) # CSQAQ 历史最高价
     steam_turnover: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Steam 日均成交量
     global_supply: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)   # 全球存世量
 

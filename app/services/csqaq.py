@@ -258,12 +258,39 @@ async def sync_all_items() -> int:
                     turnover = info.get("turnover_number")
                     supply = info.get("statistic")
 
+                    # ── Extract ATH from CSQAQ response ──
+                    # Try common field names for historical max price
+                    csqaq_ath = None
+                    for ath_key in ("max_price", "highest_price", "history_max_price",
+                                    "ath_price", "max_sell_price", "sell_price_max"):
+                        val = info.get(ath_key)
+                        if val and float(val) > 0:
+                            csqaq_ath = float(val)
+                            break
+                    # Fallback: compute max from historical price snapshots in response
+                    if csqaq_ath is None:
+                        hist_prices = []
+                        for suffix in ("1", "7", "15", "30", "90", "180", "365"):
+                            for prefix in ("sell_price_", "buff_sell_price_", "steam_sell_price_"):
+                                hp = info.get(f"{prefix}{suffix}")
+                                if hp and float(hp) > 0:
+                                    hist_prices.append(float(hp))
+                        if hist_prices:
+                            csqaq_ath = max(hist_prices)
+
+                    # Log response keys once per sync for field discovery
+                    if synced == 0:
+                        logger.info("csqaq goods_info sample keys for %s: %s",
+                                    market_hash_name[:30], sorted(info.keys()))
+
                     # Upsert into quant_signal (merge with existing signal data)
                     update_fields = {}
                     if lease_price > 0:
                         update_fields["daily_rent"] = float(lease_price)
                     if lease_annual > 0:
                         update_fields["rental_annual"] = float(lease_annual)
+                    if csqaq_ath is not None:
+                        update_fields["csqaq_ath_price"] = csqaq_ath
                     if turnover is not None:
                         update_fields["steam_turnover"] = int(turnover)
                     if supply is not None:

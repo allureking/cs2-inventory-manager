@@ -20,7 +20,7 @@ import math
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import and_, delete, func, select, text
+from sqlalchemy import and_, delete, func, or_, select, text
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -412,17 +412,36 @@ async def compute_all_signals(target_date: Optional[str] = None) -> int:
 
         # 6. CSQAQ rental data (for rental-aware scoring)
         rental_map: dict[str, float] = {}  # market_hash_name → rental_annual
+        daily_rent_map: dict[str, float] = {}  # market_hash_name → daily_rent
         rental_result = await db.execute(
-            select(QuantSignal.market_hash_name, QuantSignal.rental_annual)
+            select(QuantSignal.market_hash_name, QuantSignal.rental_annual, QuantSignal.daily_rent)
             .where(
                 QuantSignal.signal_date == target_date,
-                QuantSignal.rental_annual.isnot(None),
+                or_(
+                    QuantSignal.rental_annual.isnot(None),
+                    QuantSignal.daily_rent.isnot(None),
+                ),
             )
         )
         for row in rental_result.all():
-            rental_map[row[0]] = float(row[1])
+            if row[1] is not None:
+                rental_map[row[0]] = float(row[1])
+            if row[2] is not None:
+                daily_rent_map[row[0]] = float(row[2])
 
-        # 7. Peer volatility map (item_type → list of vol30)
+        # 7. CSQAQ ATH prices (from daily sync)
+        csqaq_ath_map: dict[str, float] = {}
+        ath_result = await db.execute(
+            select(QuantSignal.market_hash_name, QuantSignal.csqaq_ath_price)
+            .where(
+                QuantSignal.signal_date == target_date,
+                QuantSignal.csqaq_ath_price.isnot(None),
+            )
+        )
+        for row in ath_result.all():
+            csqaq_ath_map[row[0]] = float(row[1])
+
+        # 8. Peer volatility map (item_type → list of vol30)
         #    Pre-compute so we can calculate z-scores
         vol_map: dict[str, float] = {}  # market_hash_name → volatility_30
 
@@ -470,13 +489,24 @@ async def compute_all_signals(target_date: Optional[str] = None) -> int:
                 mkt_share = (h_count / mkt_cnt * 100) if mkt_cnt > 0 and h_count > 0 else None
 
                 ann_ret = None
+                pnl_rate = None
+                proj_ret = None
                 buy_price = purchase_map.get(name)
-                if buy_price and buy_price > 0 and days_held > 0:
+                if buy_price and buy_price > 0:
                     current = indicators["current_price"]
                     if current > 0:
-                        total_return = current / buy_price
-                        if total_return > 0:
-                            ann_ret = (total_return ** (365 / days_held) - 1) * 100
+                        # 盈亏率 = (市价 - 成本) / 成本
+                        pnl_rate = (current - buy_price) / buy_price * 100
+                        # 含租预期年收益率 (默认188天，前端可按大会员状态覆盖)
+                        dr = daily_rent_map.get(name, 0)
+                        if dr > 0:
+                            annual_rent = dr * 188
+                            proj_ret = (current + annual_rent - buy_price) / buy_price * 100
+                        # 保留 CAGR 供卖出评分模型内部使用
+                        if days_held > 0:
+                            total_return = current / buy_price
+                            if total_return > 0:
+                                ann_ret = (total_return ** (365 / days_held) - 1) * 100
 
                 rent_ann = rental_map.get(name)
 
@@ -504,6 +534,12 @@ async def compute_all_signals(target_date: Optional[str] = None) -> int:
                     rental_annual=rent_ann,
                 )
 
+                # Override ATH with CSQAQ data if available (longer history)
+                local_ath = indicators.get("ath_price") or 0
+                api_ath = csqaq_ath_map.get(name)
+                final_ath = api_ath if (api_ath and api_ath > local_ath) else local_ath
+                final_ath_pct = (indicators["current_price"] / final_ath * 100) if final_ath > 0 else None
+
                 values = {
                     "market_hash_name": name,
                     "signal_date": target_date,
@@ -515,10 +551,12 @@ async def compute_all_signals(target_date: Optional[str] = None) -> int:
                     "volatility_30": indicators.get("volatility_30"),
                     "ma_7": indicators.get("ma_7"),
                     "ma_30": indicators.get("ma_30"),
-                    "ath_price": indicators.get("ath_price"),
-                    "ath_pct": indicators.get("ath_pct"),
+                    "ath_price": round(final_ath, 2) if final_ath > 0 else None,
+                    "ath_pct": round(final_ath_pct, 1) if final_ath_pct is not None else None,
                     "spread_pct": indicators.get("spread"),
                     "annualized_return": ann_ret,
+                    "pnl_rate": round(pnl_rate, 2) if pnl_rate is not None else None,
+                    "projected_annual_return": round(proj_ret, 2) if proj_ret is not None else None,
                     "holding_count": h_count if h_count > 0 else None,
                     "concentration_pct": round(conc, 2) if conc is not None else None,
                     "market_share_pct": round(mkt_share, 2) if mkt_share is not None else None,
