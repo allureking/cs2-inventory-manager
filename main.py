@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.core.database import init_db
 from app.api.routes import prices, items, inventory, youpin, listing
-from app.api.routes import dashboard, analysis, monitoring
+from app.api.routes import dashboard, analysis, monitoring, tracker
 
 # ── 定时任务 ────────────────────────────────────────────────────────────────
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -20,6 +20,7 @@ from app.services.collector import (
     snapshot_portfolio,
 )
 from app.services.csqaq import csqaq_daily_sync
+from app.services.tracker import snapshot_daily
 
 scheduler = AsyncIOScheduler()
 logger = logging.getLogger(__name__)
@@ -50,6 +51,7 @@ app.include_router(listing.router, prefix="/api/listing", tags=["listing"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
 app.include_router(analysis.router, prefix="/api/analysis", tags=["analysis"])
 app.include_router(monitoring.router, prefix="/api/monitoring", tags=["monitoring"])
+app.include_router(tracker.router, prefix="/api/tracker", tags=["tracker"])
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -77,9 +79,12 @@ async def startup():
     # CSQAQ data sync: 00:02 UTC (before aggregate + signals)
     scheduler.add_job(csqaq_daily_sync, "cron", hour=0, minute=2, id="csqaq_sync",
                       misfire_grace_time=600)
+    # Daily tracker snapshot: 00:01 UTC
+    scheduler.add_job(snapshot_daily, "cron", hour=0, minute=1, id="daily_tracker",
+                      misfire_grace_time=600)
 
     scheduler.start()
-    logger.info("APScheduler started with 6 background jobs")
+    logger.info("APScheduler started with 7 background jobs")
 
     # Take an immediate portfolio snapshot on startup
     try:

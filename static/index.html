@@ -302,6 +302,10 @@
             class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center font-bold"
             x-text="unreadAlertCount>9?'9+':unreadAlertCount"></span>
         </button>
+        <button @click="activeTab='tracker'"
+          class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
+          :class="activeTab==='tracker' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'"
+          x-text="t('tab_tracker')"></button>
         <button @click="activeTab='changelog'"
           class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
           :class="activeTab==='changelog' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'"
@@ -1892,6 +1896,142 @@
       </div>
     </div>
 
+    <!-- ════════════ TRACKER TAB ════════════ -->
+    <div x-show="activeTab==='tracker'" class="fade-up">
+      <div class="space-y-6">
+
+        <!-- Header + Actions -->
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 class="text-lg font-bold text-white" x-text="t('tracker_title')"></h2>
+            <p class="text-xs text-slate-600 mt-0.5" x-text="t('tracker_subtitle')"></p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button @click="trackerSnapshot()" :disabled="trackerSnapshotting"
+              class="px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-40">
+              <span x-text="trackerSnapshotting ? t('tracker_snapshotting') : t('tracker_snapshot')"></span>
+            </button>
+            <label class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-700 hover:bg-slate-600 text-slate-300 cursor-pointer">
+              <span x-text="t('tracker_import')"></span>
+              <input type="file" accept=".xlsx" class="hidden" @change="trackerImportExcel($event)">
+            </label>
+            <a :href="'/api/tracker/export'" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-700 hover:bg-slate-600 text-slate-300" x-text="t('tracker_export')"></a>
+          </div>
+        </div>
+
+        <!-- Summary Cards (latest day) -->
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3" x-show="trackerData.length > 0">
+          <template x-for="card in [
+            {label: t('tracker_col_income'), value: trackerData[0]?.daily_income, prefix: '¥', fmt: 'number'},
+            {label: t('tracker_col_combined'), value: trackerData[0]?.combined_annual, suffix: '%', fmt: 'pct'},
+            {label: t('tracker_col_rented'), value: trackerData[0]?.rented_count, fmt: 'int'},
+            {label: t('tracker_col_inv_value'), value: trackerData[0]?.inventory_value, prefix: '¥', fmt: 'number'},
+            {label: t('tracker_col_change'), value: trackerData[0]?.price_change, suffix: '%', fmt: 'pct'},
+          ]" :key="card.label">
+            <div class="bg-slate-800/60 rounded-xl p-3 border border-slate-700/50">
+              <div class="text-[11px] text-slate-500 mb-1" x-text="card.label"></div>
+              <div class="text-base font-mono font-bold"
+                :class="card.fmt==='pct' && card.value > 0 ? 'text-emerald-400' : card.fmt==='pct' && card.value < 0 ? 'text-red-400' : 'text-white'"
+                x-text="card.value != null ? ((card.prefix||'') + (card.fmt==='pct' ? (card.value*100).toFixed(2) : card.fmt==='int' ? Math.round(card.value).toLocaleString() : Number(card.value).toLocaleString('en-US', {maximumFractionDigits:2})) + (card.suffix||'')) : '—'">
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Chart -->
+        <div class="bg-slate-800/60 rounded-xl p-4 border border-slate-700/50">
+          <div class="flex items-center gap-2 mb-3">
+            <template x-for="ct in [
+              {key:'combined_annual', cn:'综合年化', en:'Combined Annual'},
+              {key:'daily_income', cn:'日租金', en:'Daily Income'},
+              {key:'inventory_value', cn:'库存价值', en:'Inventory Value'},
+              {key:'price_change', cn:'涨跌', en:'Change'},
+            ]">
+              <button @click="trackerChartType=ct.key; renderTrackerChart()"
+                class="px-2 py-1 rounded text-xs transition-all"
+                :class="trackerChartType===ct.key ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-slate-300'"
+                x-text="nameLang==='cn' ? ct.cn : ct.en"></button>
+            </template>
+          </div>
+          <canvas id="trackerChart" height="200"></canvas>
+        </div>
+
+        <!-- Monthly Summary -->
+        <div class="bg-slate-800/60 rounded-xl p-4 border border-slate-700/50" x-show="trackerMonthly.length > 0">
+          <h3 class="text-sm font-bold text-white mb-3" x-text="t('tracker_monthly_title')"></h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="text-slate-500 border-b border-slate-700/50">
+                  <th class="py-2 px-2 text-left" x-text="nameLang==='cn'?'月份':'Month'"></th>
+                  <th class="py-2 px-2 text-right" x-text="nameLang==='cn'?'天数':'Days'"></th>
+                  <th class="py-2 px-2 text-right" x-text="nameLang==='cn'?'总收入':'Income'"></th>
+                  <th class="py-2 px-2 text-right" x-text="nameLang==='cn'?'服务费':'Fee'"></th>
+                  <th class="py-2 px-2 text-right" x-text="nameLang==='cn'?'净租金':'Net'"></th>
+                  <th class="py-2 px-2 text-right" x-text="nameLang==='cn'?'净租金年化':'Annual'"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="m in trackerMonthly" :key="m.year+'-'+m.month">
+                  <tr class="border-b border-slate-700/30 hover:bg-slate-700/20">
+                    <td class="py-2 px-2 text-slate-300" x-text="m.year+'-'+(m.month<10?'0':'')+m.month"></td>
+                    <td class="py-2 px-2 text-right text-slate-400" x-text="m.days"></td>
+                    <td class="py-2 px-2 text-right text-white font-mono" x-text="'¥'+Number(m.total_income||0).toLocaleString('en-US',{maximumFractionDigits:0})"></td>
+                    <td class="py-2 px-2 text-right text-red-400 font-mono" x-text="'¥'+Number(m.service_fee||0).toLocaleString('en-US',{maximumFractionDigits:0})"></td>
+                    <td class="py-2 px-2 text-right text-emerald-400 font-mono" x-text="'¥'+Number(m.net_rental||0).toLocaleString('en-US',{maximumFractionDigits:0})"></td>
+                    <td class="py-2 px-2 text-right font-mono" :class="m.net_rental_annual>0?'text-emerald-400':'text-slate-500'" x-text="m.net_rental_annual!=null ? (m.net_rental_annual*100).toFixed(2)+'%' : '—'"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Daily Table -->
+        <div class="bg-slate-800/60 rounded-xl border border-slate-700/50 overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="text-slate-500 border-b border-slate-700/50 bg-slate-800/80">
+                  <th class="py-2 px-2 text-left sticky left-0 bg-slate-800/80" x-text="t('tracker_col_date')"></th>
+                  <th class="py-2 px-2 text-right" x-text="t('tracker_col_rented')"></th>
+                  <th class="py-2 px-2 text-right" x-text="t('tracker_col_value')"></th>
+                  <th class="py-2 px-2 text-right" x-text="t('tracker_col_income')"></th>
+                  <th class="py-2 px-2 text-right" x-text="t('tracker_col_short')"></th>
+                  <th class="py-2 px-2 text-right" x-text="t('tracker_col_long')"></th>
+                  <th class="py-2 px-2 text-right" x-text="t('tracker_col_combined')"></th>
+                  <th class="py-2 px-2 text-right" x-text="t('tracker_col_per_item')"></th>
+                  <th class="py-2 px-2 text-right" x-text="t('tracker_col_inv_count')"></th>
+                  <th class="py-2 px-2 text-right" x-text="t('tracker_col_inv_value')"></th>
+                  <th class="py-2 px-2 text-right" x-text="t('tracker_col_change')"></th>
+                  <th class="py-2 px-2 text-right" x-text="t('tracker_col_index')"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="row in trackerData" :key="row.date">
+                  <tr class="border-b border-slate-700/30 hover:bg-slate-700/20">
+                    <td class="py-1.5 px-2 text-slate-300 sticky left-0 bg-slate-900/80 font-mono" x-text="row.date"></td>
+                    <td class="py-1.5 px-2 text-right text-white" x-text="row.rented_count?.toLocaleString()??'—'"></td>
+                    <td class="py-1.5 px-2 text-right text-white font-mono" x-text="row.rented_value!=null?'¥'+Number(row.rented_value).toLocaleString('en-US',{maximumFractionDigits:0}):'—'"></td>
+                    <td class="py-1.5 px-2 text-right text-amber-400 font-mono" x-text="row.daily_income!=null?'¥'+Number(row.daily_income).toFixed(2):'—'"></td>
+                    <td class="py-1.5 px-2 text-right font-mono text-slate-400" x-text="row.short_lease_annual!=null?(row.short_lease_annual*100).toFixed(2)+'%':'—'"></td>
+                    <td class="py-1.5 px-2 text-right font-mono text-slate-400" x-text="row.long_lease_annual!=null?(row.long_lease_annual*100).toFixed(2)+'%':'—'"></td>
+                    <td class="py-1.5 px-2 text-right font-mono font-bold" :class="row.combined_annual>0?'text-emerald-400':'text-slate-500'" x-text="row.combined_annual!=null?(row.combined_annual*100).toFixed(2)+'%':'—'"></td>
+                    <td class="py-1.5 px-2 text-right font-mono text-slate-400" x-text="row.income_per_item!=null?'¥'+Number(row.income_per_item).toFixed(2):'—'"></td>
+                    <td class="py-1.5 px-2 text-right text-white" x-text="row.total_inventory?.toLocaleString()??'—'"></td>
+                    <td class="py-1.5 px-2 text-right text-white font-mono" x-text="row.inventory_value!=null?'¥'+Number(row.inventory_value).toLocaleString('en-US',{maximumFractionDigits:0}):'—'"></td>
+                    <td class="py-1.5 px-2 text-right font-mono" :class="row.price_change>0?'text-emerald-400':row.price_change<0?'text-red-400':'text-slate-500'" x-text="row.price_change!=null?(row.price_change*100).toFixed(2)+'%':'—'"></td>
+                    <td class="py-1.5 px-2 text-right font-mono text-slate-400" x-text="row.steamdt_index??'—'"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
     <!-- ════════════ CHANGELOG TAB ════════════ -->
     <div x-show="activeTab==='changelog'" class="fade-up">
 
@@ -2478,6 +2618,12 @@
     function app() {
       return {
         activeTab: 'inventory',
+        trackerData: [],
+        trackerMonthly: [],
+        trackerLoading: false,
+        trackerSnapshotting: false,
+        _trackerChart: null,
+        trackerChartType: 'combined_annual',
         overview: {},
         items: [],
         total: 0,
@@ -2774,7 +2920,27 @@
           tab_overview: ['资产概览', 'Overview'],
           tab_listing: ['上架管理', 'Listing'],
           tab_analysis: ['量化分析', 'Analysis'],
+          tab_tracker: ['收益追踪', 'Income Tracker'],
           tab_changelog: ['更新日志', 'Changelog'],
+          tracker_title: ['每日收益追踪', 'Daily Income Tracker'],
+          tracker_subtitle: ['自动记录出租收益、库存价值与年化收益率', 'Auto-track rental income, inventory value & annualized returns'],
+          tracker_snapshot: ['刷新今日', 'Refresh Today'],
+          tracker_snapshotting: ['刷新中…', 'Refreshing…'],
+          tracker_import: ['导入Excel', 'Import Excel'],
+          tracker_export: ['导出Excel', 'Export Excel'],
+          tracker_monthly_title: ['月度汇总', 'Monthly Summary'],
+          tracker_col_date: ['日期', 'Date'],
+          tracker_col_rented: ['出租件数', 'Rented'],
+          tracker_col_value: ['出租价值', 'Value'],
+          tracker_col_income: ['日租金', 'Daily Income'],
+          tracker_col_short: ['短租年化', 'Short Annual'],
+          tracker_col_long: ['长租年化', 'Long Annual'],
+          tracker_col_combined: ['综合年化', 'Combined'],
+          tracker_col_per_item: ['单件/天', 'Per Item/Day'],
+          tracker_col_inv_count: ['总库存', 'Total Inv'],
+          tracker_col_inv_value: ['库存价值', 'Inv Value'],
+          tracker_col_change: ['涨跌', 'Change'],
+          tracker_col_index: ['大盘指数', 'Market Index'],
           // Navbar buttons & status
           btn_sync: ['同步库存', 'Sync Inventory'],
           btn_syncing: ['同步中…', 'Syncing…'],
@@ -3088,6 +3254,10 @@
               this._startRefreshPoll();
             }
           }
+          // Lazy-load tracker data when tab is selected
+          this.$watch('activeTab', (tab) => {
+            if (tab === 'tracker' && this.trackerData.length === 0) this.loadTracker();
+          });
           // 持久化用户偏好到 localStorage
           this.$watch('nameLang', v => localStorage.setItem('nameLang', v));
           this.$watch('memberLevel', v => localStorage.setItem('memberLevel', v));
@@ -3252,6 +3422,104 @@
 
         async loadAll() {
           await Promise.all([this.loadOverview(), this.loadItems(), this.loadPortfolioHistory(), this.loadMonitorStatus()]);
+        },
+
+        // ── Tracker ────────────────────────────────────────────────
+        async loadTracker() {
+          this.trackerLoading = true;
+          try {
+            const [dailyR, monthlyR] = await Promise.all([
+              fetch('/api/tracker/daily'),
+              fetch('/api/tracker/monthly?year=' + new Date().getFullYear()),
+            ]);
+            if (dailyR.ok) this.trackerData = await dailyR.json();
+            if (monthlyR.ok) this.trackerMonthly = await monthlyR.json();
+            this.$nextTick(() => this.renderTrackerChart());
+          } catch (e) {
+            this.showToast(e.message || 'Failed to load tracker data', 'error');
+          } finally {
+            this.trackerLoading = false;
+          }
+        },
+
+        async trackerSnapshot() {
+          this.trackerSnapshotting = true;
+          try {
+            const r = await fetch('/api/tracker/snapshot', { method: 'POST' });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.detail || 'Snapshot failed');
+            this.showToast(this.nameLang==='cn'?'今日数据已刷新':'Today refreshed', 'success');
+            await this.loadTracker();
+          } catch (e) {
+            this.showToast(e.message, 'error');
+          } finally {
+            this.trackerSnapshotting = false;
+          }
+        },
+
+        async trackerImportExcel(ev) {
+          const file = ev.target.files[0];
+          if (!file) return;
+          const form = new FormData();
+          form.append('file', file);
+          try {
+            const r = await fetch('/api/tracker/import', { method: 'POST', body: form });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.detail || 'Import failed');
+            this.showToast(`${this.nameLang==='cn'?'导入成功':'Imported'}: ${d.imported} ${this.nameLang==='cn'?'条':'records'}`, 'success');
+            await this.loadTracker();
+          } catch (e) {
+            this.showToast(e.message, 'error');
+          }
+          ev.target.value = '';
+        },
+
+        renderTrackerChart() {
+          const el = document.getElementById('trackerChart');
+          if (!el || !this.trackerData?.length) return;
+          if (this._trackerChart) { this._trackerChart.destroy(); this._trackerChart = null; }
+
+          const data = [...this.trackerData].reverse();
+          const labels = data.map(d => d.date);
+          const key = this.trackerChartType;
+          const values = data.map(d => {
+            const v = d[key];
+            return v != null ? (key === 'combined_annual' || key === 'short_lease_annual' || key === 'long_lease_annual' || key === 'price_change' ? v * 100 : v) : null;
+          });
+
+          const isPct = ['combined_annual','short_lease_annual','long_lease_annual','price_change'].includes(key);
+          const isMoney = ['daily_income','inventory_value','rented_value'].includes(key);
+
+          this._trackerChart = new Chart(el, {
+            type: 'line',
+            data: {
+              labels,
+              datasets: [{
+                data: values,
+                borderColor: '#3b82f6',
+                backgroundColor: 'rgba(59,130,246,0.1)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 1,
+                borderWidth: 2,
+              }],
+            },
+            options: {
+              responsive: true,
+              plugins: { legend: { display: false } },
+              scales: {
+                x: { ticks: { color: '#64748b', maxTicksLimit: 12, font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.3)' } },
+                y: {
+                  ticks: {
+                    color: '#64748b',
+                    font: { size: 10 },
+                    callback: v => isPct ? v.toFixed(1) + '%' : isMoney ? '¥' + (v/10000).toFixed(0) + 'w' : v,
+                  },
+                  grid: { color: 'rgba(51,65,85,0.3)' },
+                },
+              },
+            },
+          });
         },
 
         async loadOverview() {

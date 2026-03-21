@@ -20,7 +20,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, Integer, String, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -269,6 +269,38 @@ class PortfolioSnapshot(Base):
     # 市价覆盖率
     market_priced_count: Mapped[int] = mapped_column(Integer, default=0)
     cost_priced_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class DailyTracker(Base):
+    """每日收益追踪记录（取代 Excel 手动记录）"""
+
+    __tablename__ = "daily_tracker"
+
+    date: Mapped[str] = mapped_column(String(10), primary_key=True)  # YYYY-MM-DD
+
+    # 出租数据（来自悠悠 API 统计摘要）
+    rented_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    rented_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    daily_income: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # 年化收益率（公式计算）
+    short_lease_annual: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    long_lease_annual: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    combined_annual: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    income_per_item: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # 库存数据（DB 查询）
+    total_inventory: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    inventory_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # 涨跌 & 指数
+    price_change: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    steamdt_index: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # 备注
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
