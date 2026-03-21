@@ -381,9 +381,9 @@
           <span class="text-[11px] whitespace-nowrap" :class="youpinMembership?'text-amber-400':'text-slate-500'" x-text="nameLang==='cn'?'大会员':'VIP'"></span>
         </label>
 
-        <!-- Import button -->
-        <button @click="triggerImport()" :disabled="importing"
-          class="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed text-white"
+        <!-- Quick Sync button (stock + lease only) -->
+        <button @click="triggerImport('quick')" :disabled="importing"
+          class="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed text-white"
           style="background: linear-gradient(135deg,#1d4ed8,#2563eb); box-shadow: 0 0 20px rgba(37,99,235,0.3);"
           @mouseenter="$el.style.boxShadow='0 0 28px rgba(37,99,235,0.5)'"
           @mouseleave="$el.style.boxShadow='0 0 20px rgba(37,99,235,0.3)'">
@@ -392,6 +392,19 @@
               d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
           </svg>
           <span x-text="importing ? t('btn_syncing') : t('btn_sync')"></span>
+        </button>
+
+        <!-- Records Match button (buy + sell records) -->
+        <button @click="triggerImport('records')" :disabled="importing"
+          class="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed text-white"
+          style="background: linear-gradient(135deg,#7c3aed,#8b5cf6); box-shadow: 0 0 20px rgba(139,92,246,0.3);"
+          @mouseenter="$el.style.boxShadow='0 0 28px rgba(139,92,246,0.5)'"
+          @mouseleave="$el.style.boxShadow='0 0 20px rgba(139,92,246,0.3)'">
+          <svg class="w-3.5 h-3.5 flex-shrink-0" :class="importing?'animate-spin':''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          </svg>
+          <span x-text="t('btn_match_records')"></span>
         </button>
       </div>
     </div>
@@ -2763,8 +2776,9 @@
           tab_analysis: ['量化分析', 'Analysis'],
           tab_changelog: ['更新日志', 'Changelog'],
           // Navbar buttons & status
-          btn_sync: ['同步数据', 'Sync Data'],
+          btn_sync: ['同步库存', 'Sync Inventory'],
           btn_syncing: ['同步中…', 'Syncing…'],
+          btn_match_records: ['匹配记录', 'Match Records'],
           btn_refresh_price: ['刷新市价', 'Refresh Prices'],
           btn_login_youpin: ['登录悠悠', 'Login YouPin'],
           btn_switch_account: ['切换账号', 'Switch'],
@@ -3875,14 +3889,17 @@
         },
 
         // ── Import ────────────────────────────────────────────────────
-        async triggerImport() {
+        async triggerImport(mode = 'quick') {
           this.importing = true;
           this.importProgress = 0;
-          const stepMap = { stock: 0, lease: 25, buy: 50, sell: 75 };
+
+          const endpoint = mode === 'records' ? '/api/youpin/import/records'
+                         : mode === 'all'     ? '/api/youpin/import/all'
+                         :                      '/api/youpin/import/quick';
 
           try {
             // 1) Fire-and-forget: start background import
-            const r = await fetch('/api/youpin/import/all', { method: 'POST' });
+            const r = await fetch(endpoint, { method: 'POST' });
             if (!r.ok) throw new Error(await r.text());
             const start = await r.json();
             if (start.started === false && start.state?.status !== 'running') {
@@ -3898,9 +3915,11 @@
                 try {
                   const sr = await fetch('/api/youpin/import/status');
                   const st = await sr.json();
-                  // progress bar: base from completed steps + partial for current
-                  const base = (st.completed || []).length * 25;
-                  this.importProgress = Math.min(base + 10, 95);
+                  // progress bar: dynamic based on total_steps
+                  const total = st.total_steps || 4;
+                  const stepPct = 100 / total;
+                  const base = (st.completed || []).length * stepPct;
+                  this.importProgress = Math.min(base + stepPct * 0.4, 95);
 
                   if (st.status === 'done') {
                     clearInterval(this._importPoll);

@@ -401,25 +401,21 @@ _import_state: dict = {
     "status": "idle",      # idle | running | done | error
     "current_step": None,  # stock / lease / buy / sell
     "completed": [],       # 已完成的步骤名
+    "total_steps": 0,      # 本次导入总步骤数
     "results": {},
     "error": None,
 }
 
 
-async def _run_import_all():
-    """后台执行全量导入（不阻塞 HTTP 请求）"""
+async def _run_import(steps: list[tuple[str, callable]]):
+    """后台执行导入步骤（不阻塞 HTTP 请求）"""
     from app.core.database import AsyncSessionLocal
 
-    steps = [
-        ("stock", youpin_svc.import_stock_records),
-        ("lease", youpin_svc.import_lease_records),
-        ("buy",   youpin_svc.import_buy_records),
-        ("sell",  youpin_svc.import_sell_records),
-    ]
     _import_state["status"] = "running"
     _import_state["completed"] = []
     _import_state["results"] = {}
     _import_state["error"] = None
+    _import_state["total_steps"] = len(steps)
 
     async with AsyncSessionLocal() as db:
         for name, fn in steps:
@@ -440,15 +436,48 @@ async def _run_import_all():
     _import_state["status"] = "done"
 
 
+_STEPS_QUICK = [
+    ("stock", youpin_svc.import_stock_records),
+    ("lease", youpin_svc.import_lease_records),
+]
+_STEPS_RECORDS = [
+    ("buy",   youpin_svc.import_buy_records),
+    ("sell",  youpin_svc.import_sell_records),
+]
+_STEPS_ALL = _STEPS_QUICK + _STEPS_RECORDS
+
+
 @router.post("/import/all")
 async def import_all():
-    """全量导入：启动后台任务，立即返回"""
+    """全量导入（库存 + 租赁 + 购买 + 出售）：启动后台任务，立即返回"""
     _require_token()
     if _import_state["status"] == "running":
         return {"started": False, "message": "导入正在进行中", "state": _import_state}
 
-    asyncio.create_task(_run_import_all())
-    return {"started": True, "message": "导入已启动", "state": _import_state}
+    asyncio.create_task(_run_import(_STEPS_ALL))
+    return {"started": True, "message": "全量导入已启动", "state": _import_state}
+
+
+@router.post("/import/quick")
+async def import_quick():
+    """快速同步（仅库存 + 租赁信息）：启动后台任务，立即返回"""
+    _require_token()
+    if _import_state["status"] == "running":
+        return {"started": False, "message": "导入正在进行中", "state": _import_state}
+
+    asyncio.create_task(_run_import(_STEPS_QUICK))
+    return {"started": True, "message": "快速同步已启动", "state": _import_state}
+
+
+@router.post("/import/records")
+async def import_records():
+    """记录匹配（仅购买 + 出售记录）：启动后台任务，立即返回"""
+    _require_token()
+    if _import_state["status"] == "running":
+        return {"started": False, "message": "导入正在进行中", "state": _import_state}
+
+    asyncio.create_task(_run_import(_STEPS_RECORDS))
+    return {"started": True, "message": "记录匹配已启动", "state": _import_state}
 
 
 @router.get("/import/status")
