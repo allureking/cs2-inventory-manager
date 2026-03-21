@@ -1,5 +1,28 @@
 # Changelog / 更新日志
 
+## [0.5.2] - 2026-03-21
+
+### 修复 / Fixed
+- **购买记录匹配失败**：修复 `assertId` 拼写错误（应为 `assetId`），导致 asset_id 匹配分支永远无法命中 / **Buy record matching broken**: Fixed `assertId` typo (should be `assetId`), causing asset_id matching branch to never trigger
+- **物品"消失"bug**：对账逻辑将物品设为 `status="unknown"` 但该状态不在合法集合中，导致 UI 不可见。已将 `unknown` 加入 `VALID_STATUSES`，前端新增「待确认」过滤选项 / **Items "disappearing"**: Reconciliation set `status="unknown"` which wasn't in `VALID_STATUSES`, making items invisible. Added `unknown` to valid set with "Unknown" filter option
+- **市价刷新状态卡死**：`bulk_refresh_market_prices` 异常后状态永久卡在 `running`，已添加 `finally` 防护 / **Market refresh state stuck**: Added `finally` guard to prevent `market_refresh_state` from being permanently stuck as "running"
+- **前端静默错误**：修复 22 个空 `catch {}` 块，补充用户可见的错误提示 / **Silent frontend errors**: Fixed 22 empty `catch {}` blocks with proper toast error messages
+- **轮询计时器竞态条件**：快速连续点击可创建重复 `setInterval`，已添加 `clearInterval` 防护 / **Polling timer race condition**: Rapid clicks could create duplicate intervals, added `clearInterval` guard
+- **浮点定价精度**：`calc_sell_price` 改用 `Decimal` 精确运算，消除 0.01 级别误差 / **Float pricing precision**: `calc_sell_price` now uses `Decimal` to eliminate penny-level rounding errors
+- **磨损值匹配过严**：`import_buy_records` 中磨损值比较容差从 `1e-8` 放宽到 `0.0001` / **Wear value matching too strict**: Tolerance in `import_buy_records` relaxed from `1e-8` to `0.0001`
+- **表单缺少输入验证**：`saveReprice` 和 `smartListItem` 提交前验证数值有效性 / **Missing form validation**: Added numeric validation before submit in `saveReprice` and `smartListItem`
+
+### 变更 / Changed
+- **CORS 收紧**：`allow_origins` 从 `*` 限制为实际部署域名和 localhost / **CORS tightened**: `allow_origins` restricted from `*` to actual deployment domains
+- **Token 持久化安全加固**：改为原子写入（tmp + replace）+ `chmod 600` / **Token persistence hardened**: Atomic writes (tmp + replace) with `chmod 600`
+- **并发保护**：市价刷新和价格采集添加 `asyncio.Lock`，防止定时任务与手动操作冲突 / **Concurrency protection**: Added `asyncio.Lock` to market refresh and price collection, preventing scheduler/manual conflicts
+- **调度任务错开执行**：价格采集在 :00/:30，组合快照在 :15/:45，添加 `max_instances=1` / **Staggered scheduler**: Price collection at :00/:30, portfolio snapshot at :15/:45, with `max_instances=1`
+- **数据库迁移日志**：新增列成功时记录日志，不再完全静默 / **Migration logging**: Successful column additions now logged
+- **图片加载失败统一处理**：使用 placeholder SVG 替代隐藏元素 / **Unified image error handling**: Placeholder SVG instead of hiding elements
+
+### 新增 / Added
+- **定价算法单元测试**：19 个测试覆盖 `calc_sell_price` / `calc_lease_price` 核心场景（outlier 过滤、止盈率、浮点精度、租赁定价） / **Pricing algorithm unit tests**: 19 tests covering `calc_sell_price` / `calc_lease_price` core scenarios (outlier filtering, take-profit, float precision, lease pricing)
+
 ## [0.5.1] - 2026-02-26
 
 ### 修复 / Fixed

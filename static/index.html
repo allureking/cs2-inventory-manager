@@ -2557,6 +2557,35 @@
         // Changelog data (bilingual, derived from git history)
         changelogData: [
           {
+            version: '0.5.2', date: '2026-03-21', major: false,
+            title_cn: '全面代码审查 — 16 项 Bug 修复与架构加固',
+            title_en: 'Comprehensive Code Audit — 16 Bug Fixes & Architecture Hardening',
+            fixed: [
+              ['购买记录匹配失败：assertId 拼写错误修复', 'Buy record matching broken: fixed assertId typo (should be assetId)'],
+              ['物品"消失"bug：unknown 状态加入合法集合，新增「待确认」过滤', 'Items disappearing: unknown status added to VALID_STATUSES with filter option'],
+              ['市价刷新状态卡死：添加 finally 防护', 'Market refresh state stuck: added finally guard'],
+              ['前端 22 个空 catch 块补充错误提示', '22 empty catch blocks now show proper error messages'],
+              ['轮询计时器竞态条件：防止重复 setInterval', 'Polling timer race condition: prevent duplicate intervals'],
+              ['浮点定价精度：calc_sell_price 改用 Decimal', 'Float pricing precision: calc_sell_price uses Decimal'],
+              ['磨损值匹配容差从 1e-8 放宽到 0.0001', 'Wear value matching tolerance relaxed from 1e-8 to 0.0001'],
+              ['表单输入验证：saveReprice / smartListItem', 'Form validation added to saveReprice / smartListItem'],
+            ],
+            changed: [
+              ['CORS 收紧为实际部署域名', 'CORS restricted to actual deployment domains'],
+              ['Token 持久化原子写入 + chmod 600', 'Token persistence: atomic writes + chmod 600'],
+              ['市价刷新和价格采集添加 asyncio.Lock 并发保护', 'asyncio.Lock for market refresh and price collection'],
+              ['调度任务错开执行（:00/:30 vs :15/:45）+ max_instances=1', 'Staggered scheduler (:00/:30 vs :15/:45) + max_instances=1'],
+              ['数据库迁移成功时记录日志', 'Migration logging for successful column additions'],
+              ['图片加载失败统一使用 placeholder SVG', 'Unified image error handling with placeholder SVG'],
+            ],
+            added: [
+              ['19 个定价算法单元测试（outlier/止盈率/浮点精度/租赁）', '19 pricing algorithm unit tests (outlier/take-profit/float precision/lease)'],
+            ],
+            commits: [
+              { hash: '9f66378', msg: 'fix: 全面代码审查修复16项bug与改进', date: '03-21' },
+            ],
+          },
+          {
             version: '0.5.1', date: '2026-02-26', major: false,
             title_cn: 'Bug 修复 — ATH 数据源 / 年化收益拆分 / 大会员开关 / 图表修复',
             title_en: 'Bug Fixes — ATH Data Source / Return Split / VIP Toggle / Chart Fix',
