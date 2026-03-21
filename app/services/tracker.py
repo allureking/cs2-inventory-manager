@@ -19,7 +19,7 @@ from calendar import monthrange
 from datetime import date, datetime, timezone
 from typing import Optional
 
-from sqlalchemy import select, func, or_
+from sqlalchemy import and_, select, func, or_
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,7 +47,7 @@ _VIP_LONG_DAYS = 346.1   # R=22, 期望周期=22+0.15*8=23.2 → (365/23.2)*22
 _SHORT_WEIGHT = 0.7
 _LONG_WEIGHT = 0.3
 
-_ACTIVE = ["in_steam", "rented_out", "in_storage"]
+_ACTIVE = ["in_steam", "rented_out"]  # 不含 in_storage（收藏品不计入库存价值）
 
 
 # ══════════════════════════════════════════════════════════════
@@ -208,32 +208,42 @@ async def snapshot_daily(is_vip: bool = True) -> dict:
 
 
 async def _get_latest_prices(names: list[str], db: AsyncSession) -> dict[str, float]:
-    """获取一批饰品的最新价格（优先 YOUPIN，其次其他平台）"""
+    """
+    获取一批饰品的最新价格（与 dashboard.py 逻辑一致）。
+    子查询取每个饰品最新 snapshot_minute，再在该时间点取跨平台最低卖价。
+    """
     if not names:
         return {}
 
-    # 取每个 market_hash_name 最新的 sell_price
+    # 子查询：每个饰品的最新 snapshot_minute
+    latest_subq = (
+        select(
+            PriceSnapshot.market_hash_name,
+            func.max(PriceSnapshot.snapshot_minute).label("latest_minute"),
+        )
+        .where(PriceSnapshot.market_hash_name.in_(names))
+        .group_by(PriceSnapshot.market_hash_name)
+        .subquery()
+    )
+
+    # 在最新快照中取最低卖价（跨平台）
     rows = (await db.execute(
         select(
             PriceSnapshot.market_hash_name,
-            PriceSnapshot.sell_price,
+            func.min(PriceSnapshot.sell_price).label("current_price"),
         )
-        .where(
-            PriceSnapshot.market_hash_name.in_(names),
-            PriceSnapshot.sell_price.isnot(None),
-            PriceSnapshot.sell_price > 0,
+        .join(
+            latest_subq,
+            and_(
+                PriceSnapshot.market_hash_name == latest_subq.c.market_hash_name,
+                PriceSnapshot.snapshot_minute == latest_subq.c.latest_minute,
+            ),
         )
-        .order_by(PriceSnapshot.snapshot_minute.desc())
-        .distinct(PriceSnapshot.market_hash_name)
+        .where(PriceSnapshot.sell_price.isnot(None), PriceSnapshot.sell_price > 0)
+        .group_by(PriceSnapshot.market_hash_name)
     )).all()
 
-    # SQLite 不支持 DISTINCT ON，用 Python 去重取最新
-    price_map: dict[str, float] = {}
-    for name, price in rows:
-        if name not in price_map:
-            price_map[name] = float(price)
-
-    return price_map
+    return {name: float(price) for name, price in rows}
 
 
 # ══════════════════════════════════════════════════════════════
