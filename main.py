@@ -33,7 +33,11 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://cs2.kingke.dev",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -55,18 +59,18 @@ async def startup():
     await init_db()
 
     # ── Background jobs ──
-    # Price collection: every 30 min
-    scheduler.add_job(collect_prices, "interval", minutes=30, id="price_collect",
-                      misfire_grace_time=300)
+    # Price collection: every 30 min, on :00/:30
+    scheduler.add_job(collect_prices, "cron", minute="0,30", id="price_collect",
+                      misfire_grace_time=300, max_instances=1)
     # Daily aggregation: 00:05 UTC
     scheduler.add_job(aggregate_daily, "cron", hour=0, minute=5, id="daily_aggregate",
                       misfire_grace_time=600)
     # Signal computation: 00:10 UTC
     scheduler.add_job(compute_signals, "cron", hour=0, minute=10, id="daily_signals",
                       misfire_grace_time=600)
-    # Portfolio snapshot: every 30 min (offset +5 from price collect for fresh data)
-    scheduler.add_job(snapshot_portfolio, "interval", minutes=30, id="portfolio_snapshot",
-                      misfire_grace_time=300)
+    # Portfolio snapshot: every 30 min, on :15/:45 (offset from price collect for fresh data)
+    scheduler.add_job(snapshot_portfolio, "cron", minute="15,45", id="portfolio_snapshot",
+                      misfire_grace_time=300, max_instances=1)
     # Cleanup old snapshots: 01:00 UTC
     scheduler.add_job(cleanup_old_snapshots, "cron", hour=1, minute=0, id="cleanup_snapshots",
                       misfire_grace_time=600)

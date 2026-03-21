@@ -23,6 +23,8 @@ from app.models.db_models import InventoryItem, PortfolioSnapshot, PriceHistory,
 
 logger = logging.getLogger(__name__)
 
+_collect_lock = asyncio.Lock()
+
 # ── 运行状态（内存，供前端轮询） ──────────────────────────────────────────
 collector_state: dict = {
     "status": "idle",        # idle | running | error
@@ -57,6 +59,15 @@ async def collect_prices() -> None:
         logger.debug("collect_prices: no SteamDT API key configured, skipping")
         return
 
+    if _collect_lock.locked():
+        logger.warning("collect_prices: 已有采集任务在运行，跳过")
+        return
+
+    async with _collect_lock:
+        await _do_collect_prices(steamdt_svc)
+
+
+async def _do_collect_prices(steamdt_svc) -> None:
     collector_state["status"] = "running"
     collector_state["last_error"] = None
     collector_state["items_collected"] = 0

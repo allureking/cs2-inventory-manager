@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import logging
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
 
 import httpx
@@ -90,16 +91,20 @@ def calc_sell_price(
         # 差距 >= 5%，取第二低（避免追单价位孤立的极低价）
         sale_price = prices[1]
 
+    # 用 Decimal 避免浮点精度问题
+    d_price = Decimal(str(sale_price))
+    cent = Decimal("0.01")
+
     # 止盈率保护：不低于 buy_price × (1 + ratio)
     if buy_price > 0 and take_profit_ratio > 0:
-        floor = round(buy_price * (1 + take_profit_ratio), 2)
-        sale_price = max(sale_price, floor)
+        floor = (Decimal(str(buy_price)) * Decimal(str(1 + take_profit_ratio))).quantize(cent, rounding=ROUND_HALF_UP)
+        d_price = max(d_price, floor)
 
     # 低一分策略
-    if use_undercut and sale_price > min_price + 0.01:
-        sale_price = round(sale_price - 0.01, 2)
+    if use_undercut and d_price > Decimal(str(min_price)) + cent:
+        d_price -= cent
 
-    return max(round(sale_price, 2), min_price)
+    return float(max(d_price.quantize(cent, rounding=ROUND_HALF_UP), Decimal(str(min_price))))
 
 
 def calc_lease_price(

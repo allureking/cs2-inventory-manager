@@ -49,8 +49,11 @@ async def init_db() -> None:
             "ALTER TABLE quant_signal ADD COLUMN projected_annual_return FLOAT",
             "ALTER TABLE quant_signal ADD COLUMN csqaq_ath_price FLOAT",
         ]
+        import logging
+        _logger = logging.getLogger(__name__)
         for sql in _new_columns:
             try:
                 await conn.execute(text(sql))
+                _logger.info("migration: %s", sql)
             except Exception:
                 pass  # 列已存在则忽略

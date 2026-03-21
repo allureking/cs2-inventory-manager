@@ -31,6 +31,7 @@ import asyncio
 import base64
 import json
 import logging
+import os
 import random
 import string
 import time
@@ -86,6 +87,8 @@ _runtime_token: Optional[str] = None
 _runtime_nickname: Optional[str] = None
 
 _RUNTIME_STATE_FILE = Path(".runtime_state.json")
+_token_lock = asyncio.Lock()
+_refresh_lock = asyncio.Lock()
 
 
 def _load_runtime_state() -> None:
@@ -101,12 +104,14 @@ def _load_runtime_state() -> None:
 
 
 def _save_runtime_state() -> None:
-    """将运行时 token 持久化到磁盘"""
+    """将运行时 token 原子写入磁盘（先写临时文件再 rename，防止写入中断导致数据丢失）"""
     try:
-        _RUNTIME_STATE_FILE.write_text(json.dumps({
-            "token": _runtime_token,
-            "nickname": _runtime_nickname,
-        }))
+        data = json.dumps({"token": _runtime_token, "nickname": _runtime_nickname})
+        tmp_path = str(_RUNTIME_STATE_FILE) + ".tmp"
+        with open(tmp_path, "w") as f:
+            f.write(data)
+        os.chmod(tmp_path, 0o600)
+        os.replace(tmp_path, str(_RUNTIME_STATE_FILE))
     except Exception:
         pass
 
@@ -633,82 +638,95 @@ async def bulk_refresh_market_prices(db: AsyncSession) -> None:
     无 templateId 的物品跳过（需先 sync_template_ids）。
     """
     global market_refresh_state
-    market_refresh_state.update(
-        status="running", progress=0, done=0, error=None,
-        started_at=datetime.now(timezone.utc).isoformat(),
-    )
 
-    try:
-        from app.core.database import AsyncSessionLocal
+    if _refresh_lock.locked():
+        logger.warning("bulk_refresh_market_prices: 已有刷新任务在运行，跳过")
+        return
 
-        # 查所有有 templateId 的活跃物品（按 templateId + market_hash_name 去重）
-        async with AsyncSessionLocal() as sess:
-            rows = (await sess.execute(
-                select(
-                    InventoryItem.youpin_template_id,
-                    InventoryItem.market_hash_name,
-                    func.min(InventoryItem.abrade).label("abrade"),
+    async with _refresh_lock:
+        market_refresh_state.update(
+            status="running", progress=0, done=0, error=None,
+            started_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+        try:
+            from app.core.database import AsyncSessionLocal
+
+            # 查所有有 templateId 的活跃物品（按 templateId + market_hash_name 去重）
+            async with AsyncSessionLocal() as sess:
+                rows = (await sess.execute(
+                    select(
+                        InventoryItem.youpin_template_id,
+                        InventoryItem.market_hash_name,
+                        func.min(InventoryItem.abrade).label("abrade"),
+                    )
+                    .where(
+                        InventoryItem.status.in_(_ACTIVE),
+                        InventoryItem.youpin_template_id.isnot(None),
+                    )
+                    .group_by(InventoryItem.youpin_template_id, InventoryItem.market_hash_name)
+                )).all()
+
+            items = [(r[0], r[1], r[2]) for r in rows]
+            total = len(items)
+            market_refresh_state["total"] = total
+
+            if total == 0:
+                market_refresh_state.update(
+                    status="done", progress=100,
+                    finished_at=datetime.now(timezone.utc).isoformat(),
+                    price_updated_at=_snapshot_minute(),
                 )
-                .where(
-                    InventoryItem.status.in_(_ACTIVE),
-                    InventoryItem.youpin_template_id.isnot(None),
-                )
-                .group_by(InventoryItem.youpin_template_id, InventoryItem.market_hash_name)
-            )).all()
+                return
 
-        items = [(r[0], r[1], r[2]) for r in rows]
-        total = len(items)
-        market_refresh_state["total"] = total
+            for idx, (template_id, hash_name, abrade) in enumerate(items):
+                try:
+                    price_list = await fetch_market_sell_price(template_id, abrade)
+                    # 取最低非零卖价
+                    prices = [
+                        float(p.get("price", p.get("Price", 0)) or 0)
+                        for p in price_list
+                        if p.get("price") or p.get("Price")
+                    ]
+                    sell_price = min((p for p in prices if p > 0), default=None)
 
-        if total == 0:
+                    async with AsyncSessionLocal() as sess:
+                        await _upsert_youpin_price(hash_name, sell_price, sess)
+                        await sess.commit()
+
+                except TokenExpiredError:
+                    raise
+                except Exception as e:
+                    logger.warning("获取市价失败 [%s]: %s", hash_name, e)
+
+                market_refresh_state["done"] = idx + 1
+                market_refresh_state["progress"] = int((idx + 1) / total * 100)
+                await asyncio.sleep(0.5)
+
+            now_str = _snapshot_minute()
             market_refresh_state.update(
                 status="done", progress=100,
                 finished_at=datetime.now(timezone.utc).isoformat(),
-                price_updated_at=_snapshot_minute(),
+                price_updated_at=now_str,
             )
-            return
 
-        for idx, (template_id, hash_name, abrade) in enumerate(items):
-            try:
-                price_list = await fetch_market_sell_price(template_id, abrade)
-                # 取最低非零卖价
-                prices = [
-                    float(p.get("price", p.get("Price", 0)) or 0)
-                    for p in price_list
-                    if p.get("price") or p.get("Price")
-                ]
-                sell_price = min((p for p in prices if p > 0), default=None)
-
-                async with AsyncSessionLocal() as sess:
-                    await _upsert_youpin_price(hash_name, sell_price, sess)
-                    await sess.commit()
-
-            except TokenExpiredError:
-                raise
-            except Exception as e:
-                logger.warning("获取市价失败 [%s]: %s", hash_name, e)
-
-            market_refresh_state["done"] = idx + 1
-            market_refresh_state["progress"] = int((idx + 1) / total * 100)
-            await asyncio.sleep(0.5)
-
-        now_str = _snapshot_minute()
-        market_refresh_state.update(
-            status="done", progress=100,
-            finished_at=datetime.now(timezone.utc).isoformat(),
-            price_updated_at=now_str,
-        )
-
-    except TokenExpiredError as e:
-        market_refresh_state.update(
-            status="token_expired", error=str(e),
-            finished_at=datetime.now(timezone.utc).isoformat(),
-        )
-    except Exception as e:
-        market_refresh_state.update(
-            status="error", error=str(e),
-            finished_at=datetime.now(timezone.utc).isoformat(),
-        )
+        except TokenExpiredError as e:
+            market_refresh_state.update(
+                status="token_expired", error=str(e),
+                finished_at=datetime.now(timezone.utc).isoformat(),
+            )
+        except Exception as e:
+            market_refresh_state.update(
+                status="error", error=str(e),
+                finished_at=datetime.now(timezone.utc).isoformat(),
+            )
+        finally:
+            # 防止异常后状态永久卡在 running
+            if market_refresh_state.get("status") == "running":
+                market_refresh_state.update(
+                    status="error", error="异常中断",
+                    finished_at=datetime.now(timezone.utc).isoformat(),
+                )
 
 
 # ── 模板 ID 同步 ────────────────────────────────────────────────────────────
@@ -1118,7 +1136,7 @@ async def import_buy_records(db: AsyncSession) -> dict:
         buy_abrade = _parse_abrade(rec)
         detail = rec.get("productDetail") or {}
         buy_commodity_id = detail.get("commodityId")
-        buy_asset_id = str(detail.get("assertId") or "").strip()
+        buy_asset_id = str(detail.get("assetId") or detail.get("assertId") or "").strip()
 
         for _ in range(qty):
             item = None
@@ -1154,7 +1172,7 @@ async def import_buy_records(db: AsyncSession) -> dict:
                         InventoryItem.purchase_price.is_(None),
                         InventoryItem.status.in_(["in_steam", "rented_out", "in_storage"]),
                         InventoryItem.abrade.isnot(None),
-                        func.abs(InventoryItem.abrade - buy_abrade) < 1e-8,
+                        func.abs(InventoryItem.abrade - buy_abrade) < 0.0001,
                     ).limit(1)
                 )
                 item = result.scalar_one_or_none()

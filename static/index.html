@@ -990,7 +990,7 @@
                   <td class="py-2 px-1 w-12">
                     <div class="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0" style="background:rgba(20,30,48,0.8)">
                       <img :src="shelfImgUrl(item)" class="w-full h-full object-cover"
-                        @error="$el.style.opacity='0'" loading="lazy" />
+                        @error="$el.src='/static/placeholder.svg'" loading="lazy" />
                     </div>
                   </td>
                   <td class="py-2.5 px-4">
@@ -1114,7 +1114,7 @@
                     <div class="flex items-center gap-2.5">
                       <div class="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0" style="background:rgba(20,30,48,0.8)">
                         <img :src="shelfImgUrl(item)" class="w-full h-full object-cover"
-                          @error="$el.style.opacity='0'" loading="lazy" />
+                          @error="$el.src='/static/placeholder.svg'" loading="lazy" />
                       </div>
                       <div class="min-w-0">
                         <p class="font-medium leading-tight truncate" style="max-width:260px"
@@ -1204,7 +1204,7 @@
                   <td class="py-2 px-1 w-12">
                     <div class="w-10 h-10 rounded-lg overflow-hidden" style="background:rgba(20,30,48,0.8)">
                       <img :src="shelfImgUrl(item)" class="w-full h-full object-cover"
-                        @error="$el.style.opacity='0'" loading="lazy" />
+                        @error="$el.src='/static/placeholder.svg'" loading="lazy" />
                     </div>
                   </td>
                   <td class="py-2.5 px-3">
@@ -1445,7 +1445,7 @@
                     <td class="py-2 px-3">
                       <div class="flex items-center gap-2">
                         <div class="w-7 h-7 rounded overflow-hidden flex-shrink-0" style="background:rgba(20,30,48,0.8)">
-                          <img :src="iconUrl(s.icon_url)" class="w-full h-full object-cover" @error="$el.style.opacity='0'" loading="lazy" x-show="s.icon_url" />
+                          <img :src="iconUrl(s.icon_url)" class="w-full h-full object-cover" @error="$el.src='/static/placeholder.svg'" loading="lazy" x-show="s.icon_url" />
                         </div>
                         <div class="min-w-0">
                           <p class="font-medium truncate max-w-[160px]" :style="rarityStyle(s.market_hash_name)" :title="s.market_hash_name"
@@ -1544,7 +1544,7 @@
               <div class="flex items-center justify-between mb-3">
                 <div class="flex items-center gap-2">
                   <div class="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0" style="background:rgba(20,30,48,0.8)" x-show="itemSignals.icon_url">
-                    <img :src="iconUrl(itemSignals.icon_url)" class="w-full h-full object-cover" @error="$el.style.opacity='0'" loading="lazy" />
+                    <img :src="iconUrl(itemSignals.icon_url)" class="w-full h-full object-cover" @error="$el.src='/static/placeholder.svg'" loading="lazy" />
                   </div>
                   <div>
                     <p class="text-sm font-medium" :style="rarityStyle(analysisSelectedItem)"
@@ -1758,7 +1758,7 @@
                 @click="analysisSelectedItem=ti.market_hash_name; analysisSearch=ti.market_hash_name; loadItemSignals(ti.market_hash_name)">
                 <div class="flex items-center gap-2 mb-2">
                   <div class="w-8 h-8 rounded overflow-hidden flex-shrink-0" style="background:rgba(20,30,48,0.8)" x-show="ti.icon_url">
-                    <img :src="iconUrl(ti.icon_url)" class="w-full h-full object-cover" @error="$el.style.opacity='0'" loading="lazy" />
+                    <img :src="iconUrl(ti.icon_url)" class="w-full h-full object-cover" @error="$el.src='/static/placeholder.svg'" loading="lazy" />
                   </div>
                   <div class="min-w-0">
                     <p class="text-xs font-medium truncate" :style="rarityStyle(ti.market_hash_name)"
@@ -2041,6 +2041,7 @@
             <option value="rented_out" x-text="t('status_rented')"></option>
             <option value="in_steam" x-text="t('status_steam')"></option>
             <option value="in_storage" x-text="t('status_storage')"></option>
+            <option value="unknown" x-text="t('status_unknown')"></option>
           </select>
 
           <!-- Category filter -->
@@ -2199,7 +2200,7 @@
                     <div class="flex items-center gap-2.5">
                       <div class="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0" style="background:rgba(20,30,48,0.8)">
                         <img :src="iconUrl(item.icon_url)" class="w-full h-full object-cover"
-                          @error="$el.style.opacity='0'" loading="lazy" />
+                          @error="$el.src='/static/placeholder.svg'" loading="lazy" />
                       </div>
                       <div class="min-w-0">
                         <p class="font-medium leading-tight truncate" style="max-width:260px"
@@ -2344,7 +2345,7 @@
           <div class="rounded-xl mb-4 flex items-center justify-center h-36 overflow-hidden"
             style="background:rgba(10,18,35,0.8); border:1px solid rgba(51,65,85,0.25)">
             <img :src="iconUrl(panel?.icon_url, 200)" class="max-h-full max-w-full object-contain"
-              @error="$el.style.display='none'" x-show="panel?.icon_url" />
+              @error="$el.src='/static/placeholder.svg'" x-show="panel?.icon_url" />
             <span x-show="!panel?.icon_url" class="text-xs" style="color:#1e293b">No image</span>
           </div>
 
@@ -2524,6 +2525,7 @@
         refreshing: false,
         refreshProgress: 0,
         _refreshPollTimer: null,
+        _importPoll: null,
 
         tokenExpired: false,
         syncing: false,
@@ -2795,6 +2797,7 @@
           status_rented: ['出租中', 'Rented'],
           status_steam: ['Steam中', 'In Steam'],
           status_storage: ['收藏', 'Storage'],
+          status_unknown: ['待确认', 'Unknown'],
           status_sold: ['已售', 'Sold'],
           inv_value: ['库存市值', 'Inventory Value'],
           rented_value: ['出租市值', 'Rented Value'],
@@ -3052,7 +3055,7 @@
           try {
             const ar = await fetch('/api/analysis/alerts?page_size=1&unread_only=true');
             if (ar.ok) { const ad = await ar.json(); this.unreadAlertCount = ad.total || 0; }
-          } catch {}
+          } catch (e) { console.warn('Failed to load unread alerts:', e.message); }
         },
 
         async _checkToken() {
@@ -3063,14 +3066,14 @@
               this.tokenExpired = !s.valid;
               if (s.valid && s.nickname) this.authState.nickname = s.nickname;
             }
-          } catch {}
+          } catch (e) { console.warn('Token check failed:', e.message); }
         },
 
         async _loadAuthState() {
           try {
             const r = await fetch('/api/youpin/auth/state');
             if (r.ok) this.authState = await r.json();
-          } catch {}
+          } catch (e) { console.warn('Auth state load failed:', e.message); }
         },
 
         async sendSmsCode() {
@@ -3212,7 +3215,7 @@
           try {
             const r = await fetch('/api/dashboard/overview');
             if (r.ok) this.overview = await r.json();
-          } catch {}
+          } catch (e) { this.showToast(e.message || '加载概览失败', 'error'); }
         },
 
         // ── Portfolio Trend Chart ──────────────────────────────────────
@@ -3223,7 +3226,7 @@
             const d = await r.json();
             this.portfolioData = d.data || [];
             this.$nextTick(() => this.renderPortfolioChart());
-          } catch {}
+          } catch (e) { this.showToast(e.message || '加载持仓历史失败', 'error'); }
         },
 
         renderPortfolioChart() {
@@ -3387,7 +3390,7 @@
           try {
             const r = await fetch('/api/monitoring/status');
             if (r.ok) this.monitorStatus = await r.json();
-          } catch {}
+          } catch (e) { this.showToast(e.message || '加载监控状态失败', 'error'); }
         },
 
         async loadItems() {
@@ -3406,7 +3409,7 @@
             if (!this.showSold)             p.set('exclude_sold', '1');
             const r = await fetch('/api/dashboard/items?' + p);
             if (r.ok) { const d = await r.json(); this.items = d.items; this.total = d.total; }
-          } catch {}
+          } catch (e) { this.showToast(e.message || '加载物品列表失败', 'error'); }
           finally { this.loading = false; }
         },
 
@@ -3525,7 +3528,7 @@
                   this.showToast('市价刷新失败：' + (s.error || '未知错误'), 'error');
                 }
               }
-            } catch {}
+            } catch (e) { this.showToast(e.message || '刷新轮询失败', 'error'); }
           }, 2500);
         },
 
@@ -3539,7 +3542,7 @@
             ]);
             if (sr.ok) this.sellShelf = await sr.json();
             if (lr.ok) this.leaseShelf = await lr.json();
-          } catch {}
+          } catch (e) { this.showToast(e.message || '加载上架列表失败', 'error'); }
           finally { this.shelfLoading = false; }
         },
 
@@ -3550,7 +3553,7 @@
             const p = new URLSearchParams({ page, page_size: 50 });
             const r = await fetch('/api/youpin/lease/live-list?' + p);
             if (r.ok) this.rentedList = await r.json();
-          } catch {}
+          } catch (e) { this.showToast(e.message || '加载租赁列表失败', 'error'); }
           finally { this.rentedLoading = false; }
         },
 
@@ -3561,7 +3564,7 @@
             const p = new URLSearchParams({ page, page_size: 50 });
             const r = await fetch('/api/youpin/lease/sublet-list?' + p);
             if (r.ok) this.subletList = await r.json();
-          } catch {}
+          } catch (e) { this.showToast(e.message || '加载转租列表失败', 'error'); }
           finally { this.subletLoading = false; }
         },
 
@@ -3572,7 +3575,7 @@
             const p = new URLSearchParams({ page, page_size: 50 });
             const r = await fetch('/api/listing/shelf/unlisted?' + p);
             if (r.ok) this.unlistedItems = await r.json();
-          } catch {}
+          } catch (e) { this.showToast(e.message || '加载未上架物品失败', 'error'); }
           finally { this.unlistedLoading = false; }
         },
 
@@ -3691,9 +3694,13 @@
         async saveReprice() {
           const { item, newPrice, newLeaseUnit, newLongLeaseUnit, newDeposit } = this.repriceModal;
           if (!item || !item.commodityId) return;
+          const isLease = this.shelfTab === 'lease' || this.repriceModal.isSublet;
+          if (!isLease) {
+            const p = parseFloat(newPrice);
+            if (isNaN(p) || p <= 0) { this.showToast('请输入有效价格', 'error'); return; }
+          }
           this.repriceModal.saving = true;
           try {
-            const isLease = this.shelfTab === 'lease' || this.repriceModal.isSublet;
             const body = {
               commodity_id: item.commodityId,
               is_can_sold: !isLease,
@@ -3756,7 +3763,7 @@
                     this.showToast((this.nameLang==='cn'?'同步失败: ':'Sync failed: ') + (st.error||''), 'error');
                     resolve();
                   }
-                } catch {}
+                } catch (e) { console.warn('Template ID sync poll error:', e.message); }
               }, 2000);
               setTimeout(() => { clearInterval(poll); resolve(); }, 5 * 60 * 1000);
             });
@@ -3803,6 +3810,10 @@
 
         async smartListItem() {
           if (!this.quickList.assetId || !this.quickList.templateId) return;
+          const bp = parseFloat(this.quickList.buyPrice);
+          const tpr = parseFloat(this.quickList.takeProfitRatio);
+          if (isNaN(bp) || bp <= 0) { this.showToast('请输入有效的购入价格', 'error'); return; }
+          if (isNaN(tpr) || tpr < 0) { this.showToast('请输入有效的止盈比例', 'error'); return; }
           this.quickList.listing = true;
           try {
             const r = await fetch('/api/listing/smart', {
@@ -3853,6 +3864,7 @@
 
             // 2) Poll /import/status every 2s until done/error
             await new Promise((resolve, reject) => {
+              clearInterval(this._importPoll);
               this._importPoll = setInterval(async () => {
                 try {
                   const sr = await fetch('/api/youpin/import/status');
@@ -3876,7 +3888,7 @@
                     resolve();
                   }
                 } catch (pe) {
-                  // network glitch during poll — ignore, retry next tick
+                  console.warn('Import poll network error:', pe.message);
                 }
               }, 2000);
 
@@ -3903,7 +3915,7 @@
             const r = await fetch('/api/analysis/overview');
             if (r.ok) this.ao = await r.json();
             this.unreadAlertCount = this.ao.unread_alerts || 0;
-          } catch {}
+          } catch (e) { this.showToast(e.message || '加载分析概览失败', 'error'); }
         },
 
         loadAnalysisSubTab(tab) {
@@ -3918,7 +3930,7 @@
           try {
             const r = await fetch('/api/analysis/rankings?sort_by=sell_score&sort_order=desc&page_size=6');
             if (r.ok) { const d = await r.json(); this.analysisTopItems = d.items || []; }
-          } catch {}
+          } catch (e) { this.showToast(e.message || '加载排行数据失败', 'error'); }
         },
 
         async openScoreBucket(i) {
@@ -3929,7 +3941,7 @@
           try {
             const r = await fetch(`/api/analysis/rankings?sort_by=sell_score&sort_order=desc&min_score=${min}&max_score=${max}&page_size=50`);
             if (r.ok) { const d = await r.json(); this.scoreBucket.items = d.items || []; }
-          } catch {}
+          } catch (e) { this.showToast(e.message || '加载评分区间失败', 'error'); }
         },
 
         async loadAlerts(page) {
@@ -3941,7 +3953,7 @@
           try {
             const r = await fetch('/api/analysis/alerts?' + p);
             if (r.ok) this.analysisAlerts = await r.json();
-          } catch {}
+          } catch (e) { this.showToast(e.message || '加载预警列表失败', 'error'); }
         },
 
         async markAlertRead(a) {
@@ -3961,7 +3973,7 @@
           try {
             const r = await fetch('/api/analysis/spreads?' + p);
             if (r.ok) this.analysisSpreads = await r.json();
-          } catch {}
+          } catch (e) { this.showToast(e.message || '加载价差数据失败', 'error'); }
         },
 
         async searchAnalysisItems() {
@@ -3969,7 +3981,7 @@
           try {
             const r = await fetch('/api/analysis/search-items?q=' + encodeURIComponent(q) + '&limit=15');
             if (r.ok) { const d = await r.json(); this.analysisSearchResults = d.items || []; }
-          } catch {}
+          } catch (e) { this.showToast(e.message || '搜索物品失败', 'error'); }
         },
 
         async loadItemSignals(name) {
@@ -3980,7 +3992,7 @@
               this.itemSignals = await r.json();
               this.$nextTick(() => this.renderPriceChart());
             }
-          } catch {}
+          } catch (e) { this.showToast(e.message || '加载信号数据失败', 'error'); }
         },
 
         renderPriceChart() {
@@ -4070,7 +4082,7 @@
                     this.loadAnalysis();
                   }
                 }
-              } catch {}
+              } catch (e) { console.warn('Backfill poll error:', e.message); }
             }, 3000);
           } catch (e) {
             this.backfillRunning = false;
@@ -4096,7 +4108,7 @@
         async collectNow() {
           try {
             this.showToast('价格采集已触发，后台运行中（约8分钟）', 'success');
-          } catch {}
+          } catch (e) { this.showToast(e.message || '价格采集触发失败', 'error'); }
         },
 
         async triggerCsqaqSync() {
@@ -4115,7 +4127,7 @@
                     this.showToast(`CSQAQ 同步完成: ${st.mapped||0} 映射, ${st.synced||0} 同步`, 'success');
                     this.loadAnalysis();
                   }
-                } catch {}
+                } catch (e) { console.warn('CSQAQ sync poll error:', e.message); }
               }, 5000);
               // Auto-stop polling after 15 min
               setTimeout(() => clearInterval(poll), 900000);
@@ -4324,6 +4336,7 @@
             in_steam: this.t('status_steam'),
             rented_out: this.t('status_rented'),
             in_storage: this.t('status_storage'),
+            unknown: this.t('status_unknown'),
             sold: this.t('status_sold'),
           };
           return map[s] || s || '—';
