@@ -3461,7 +3461,7 @@
         async trackerSnapshot() {
           this.trackerSnapshotting = true;
           try {
-            const r = await fetch('/api/tracker/snapshot', { method: 'POST' });
+            const r = await fetch('/api/tracker/snapshot?is_vip=' + this.youpinMembership, { method: 'POST' });
             const d = await r.json();
             if (!r.ok) throw new Error(d.detail || 'Snapshot failed');
             this.showToast(this.nameLang==='cn'?'今日数据已刷新':'Today refreshed', 'success');

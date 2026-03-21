@@ -48,6 +48,8 @@ async def init_db() -> None:
             "ALTER TABLE quant_signal ADD COLUMN pnl_rate FLOAT",
             "ALTER TABLE quant_signal ADD COLUMN projected_annual_return FLOAT",
             "ALTER TABLE quant_signal ADD COLUMN csqaq_ath_price FLOAT",
+            # v0.6.0: 每日追踪大会员标记
+            "ALTER TABLE daily_tracker ADD COLUMN is_vip BOOLEAN DEFAULT 1",
         ]
         import logging
         _logger = logging.getLogger(__name__)

@@ -299,6 +299,9 @@ class DailyTracker(Base):
     price_change: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     steamdt_index: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
+    # 大会员状态
+    is_vip: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True, default=True)
+
     # 备注
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 

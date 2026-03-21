@@ -27,15 +27,25 @@ from app.models.db_models import DailyTracker, InventoryItem, PriceSnapshot
 
 logger = logging.getLogger(__name__)
 
-# 悠悠平台服务费 20%
-_FEE_RATE = 0.20
-_NET_RATE = 1 - _FEE_RATE  # 0.8
+# ── 年化参数 ──────────────────────────────────────────────────────────────
+# 公式：期望周期 = R + (1-S)×CD，有效天数 = (365/期望周期)×R
+# R=租期, S=转租成功率, CD=冷却天数
 
-# 年化计算参数（与 Excel 公式一致）
-_SHORT_DAYS = 182.5   # 短租年化天数
-_LONG_DAYS = 267.0    # 长租年化天数
-_SHORT_WEIGHT = 0.7   # 综合年化中短租权重
-_LONG_WEIGHT = 0.3    # 综合年化中长租权重
+# 非大会员：传统模式（无转租，S=0）
+_FEE_RATE = 0.20        # 服务费 20%
+_NET_RATE = 0.80        # 净比例
+_SHORT_DAYS = 182.5     # R=8, CD=8 → 周期16 → (365/16)*8 = 182.5
+_LONG_DAYS = 267.7      # R=22, CD=8 → 周期30 → (365/30)*22 = 267.7
+
+# 大会员 V3：0CD 转租（S=0.85, CD=8, 服务费 10%）
+_VIP_FEE_RATE = 0.10    # 服务费 10%
+_VIP_NET_RATE = 0.90    # 净比例
+_VIP_SHORT_DAYS = 317.4  # R=8, 期望周期=8+0.15*8=9.2 → (365/9.2)*8
+_VIP_LONG_DAYS = 346.1   # R=22, 期望周期=22+0.15*8=23.2 → (365/23.2)*22
+
+# 综合年化权重
+_SHORT_WEIGHT = 0.7
+_LONG_WEIGHT = 0.3
 
 _ACTIVE = ["in_steam", "rented_out", "in_storage"]
 
@@ -72,14 +82,18 @@ def _parse_stats_desc(text: str) -> dict:
     return result
 
 
-def _calc_annuals(daily_income: float, rented_value: float) -> dict:
-    """计算短租/长租/综合年化收益率"""
+def _calc_annuals(daily_income: float, rented_value: float, is_vip: bool = True) -> dict:
+    """计算短租/长租/综合年化收益率（根据是否大会员选取参数）"""
     if not rented_value or rented_value <= 0:
         return {"short": None, "long": None, "combined": None}
 
-    net = daily_income * _NET_RATE
-    short = net * _SHORT_DAYS / rented_value
-    long = net * _LONG_DAYS / rented_value
+    net_rate = _VIP_NET_RATE if is_vip else _NET_RATE
+    short_days = _VIP_SHORT_DAYS if is_vip else _SHORT_DAYS
+    long_days = _VIP_LONG_DAYS if is_vip else _LONG_DAYS
+
+    net = daily_income * net_rate
+    short = net * short_days / rented_value
+    long = net * long_days / rented_value
     combined = short * _SHORT_WEIGHT + long * _LONG_WEIGHT
 
     return {
@@ -93,12 +107,12 @@ def _calc_annuals(daily_income: float, rented_value: float) -> dict:
 #  自动快照
 # ══════════════════════════════════════════════════════════════
 
-async def snapshot_daily() -> dict:
+async def snapshot_daily(is_vip: bool = True) -> dict:
     """
     抓取当日数据并写入 daily_tracker。
     1. 调用悠悠 API 获取租赁统计（几秒内完成）
     2. DB 查询库存件数和总市值
-    3. 计算年化、涨跌
+    3. 计算年化、涨跌（根据 is_vip 选择参数）
     4. 写入 daily_tracker（upsert）
     """
     from app.core.database import AsyncSessionLocal
@@ -157,8 +171,8 @@ async def snapshot_daily() -> dict:
         base_val = base_val_row if base_val_row else inv_value
         price_change = (inv_value - base_val) / base_val if base_val > 0 else 0.0
 
-        # 4) 计算年化
-        annuals = _calc_annuals(rental["income"], rental["value"])
+        # 4) 计算年化（根据大会员状态选取参数）
+        annuals = _calc_annuals(rental["income"], rental["value"], is_vip=is_vip)
 
         income_per_item = (
             round(rental["income"] / rental["count"], 8)
@@ -175,6 +189,7 @@ async def snapshot_daily() -> dict:
             "long_lease_annual": annuals["long"],
             "combined_annual": annuals["combined"],
             "income_per_item": income_per_item,
+            "is_vip": is_vip,
             "total_inventory": total_inv,
             "inventory_value": round(inv_value, 2),
             "price_change": round(price_change, 8),
@@ -297,14 +312,15 @@ async def update_record(db: AsyncSession, date_str: str, fields: dict) -> dict |
         return None
 
     allowed = {"steamdt_index", "notes", "rented_count", "rented_value",
-               "daily_income", "total_inventory", "inventory_value"}
+               "daily_income", "total_inventory", "inventory_value", "is_vip"}
     for k, v in fields.items():
         if k in allowed:
             setattr(row, k, v)
 
-    # 如果修改了核心字段，重新计算年化
-    if any(k in fields for k in ("daily_income", "rented_value", "rented_count")):
-        annuals = _calc_annuals(row.daily_income or 0, row.rented_value or 0)
+    # 如果修改了核心字段或 VIP 状态，重新计算年化
+    if any(k in fields for k in ("daily_income", "rented_value", "rented_count", "is_vip")):
+        vip = row.is_vip if hasattr(row, 'is_vip') and row.is_vip is not None else True
+        annuals = _calc_annuals(row.daily_income or 0, row.rented_value or 0, is_vip=vip)
         row.short_lease_annual = annuals["short"]
         row.long_lease_annual = annuals["long"]
         row.combined_annual = annuals["combined"]
@@ -442,6 +458,7 @@ def _row_to_dict(r: DailyTracker) -> dict:
         "inventory_value": r.inventory_value,
         "price_change": r.price_change,
         "steamdt_index": r.steamdt_index,
+        "is_vip": r.is_vip,
         "notes": r.notes,
     }
 

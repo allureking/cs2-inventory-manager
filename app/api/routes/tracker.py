@@ -68,10 +68,10 @@ async def get_monthly(
 # ── 快照 ───────────────────────────────────────────────────────────────────
 
 @router.post("/snapshot")
-async def trigger_snapshot():
-    """手动触发当天快照"""
+async def trigger_snapshot(is_vip: bool = True):
+    """手动触发当天快照。is_vip=true 时使用大会员参数（10%服务费+0CD天数）"""
     try:
-        result = await tracker_svc.snapshot_daily()
+        result = await tracker_svc.snapshot_daily(is_vip=is_vip)
         return {"ok": True, "data": result}
     except Exception as e:
         logger.exception("tracker snapshot failed: %s", e)
@@ -83,6 +83,7 @@ async def trigger_snapshot():
 class TrackerUpdate(BaseModel):
     steamdt_index: Optional[float] = None
     notes: Optional[str] = None
+    is_vip: Optional[bool] = None
     rented_count: Optional[int] = None
     rented_value: Optional[float] = None
     daily_income: Optional[float] = None
