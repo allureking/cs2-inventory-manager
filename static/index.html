@@ -2716,6 +2716,22 @@
         // Changelog data (bilingual, derived from git history)
         changelogData: [
           {
+            version: '0.6.0', date: '2026-03-21', major: true,
+            title_cn: '每日收益追踪系统 — 替代 Excel 手动记录',
+            title_en: 'Daily Income Tracker — Replace Manual Excel Tracking',
+            added: [
+              ['每日收益追踪系统：自动抓取出租件数、总价值、日租金、年化收益率、库存价值、涨跌', 'Daily income tracker: auto-capture rental count, value, income, annualized returns, inventory value'],
+              ['每日 00:01 UTC 自动快照（悠悠 API + DB 查询，几秒完成）', 'Auto snapshot daily at 00:01 UTC (Youpin API + DB, seconds)'],
+              ['月度汇总：总收入、服务费(20%)、净租金、净租金年化', 'Monthly summary: income, service fee (20%), net rental, annualized'],
+              ['Excel 导入/导出（xlsx 格式）', 'Excel import/export (xlsx format)'],
+              ['前端「收益追踪」Tab：汇总卡片 + 趋势图表 + 月度表 + 每日明细', 'Frontend "Income Tracker" tab: cards + charts + monthly + daily table'],
+              ['历史数据导入 123 条记录（2025-10 至 2026-03）', 'Historical data: 123 records imported (Oct 2025 - Mar 2026)'],
+            ],
+            commits: [
+              { hash: '728e065', msg: 'feat: 每日收益追踪系统 — 替代 Excel 手动记录', date: '03-21' },
+            ],
+          },
+          {
             version: '0.5.2', date: '2026-03-21', major: false,
             title_cn: '全面代码审查 — 16 项 Bug 修复与架构加固',
             title_en: 'Comprehensive Code Audit — 16 Bug Fixes & Architecture Hardening',

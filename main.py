@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="CS2 Inventory Manager",
     description="CS2 饰品量化交易监控系统",
-    version="0.5.2",
+    version="0.6.0",
 )
 
 app.add_middleware(
@@ -105,7 +105,7 @@ async def serve_ui():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "0.5.2"}
+    return {"status": "ok", "version": "0.6.0"}
 
 
 if __name__ == "__main__":

@@ -1,5 +1,20 @@
 # Changelog / 更新日志
 
+## [0.6.0] - 2026-03-21
+
+### 新增 / Added
+- **每日收益追踪系统**：替代 Excel 手动记录，自动抓取出租件数、总价值、日租金、年化收益率、库存价值、涨跌 / **Daily Income Tracker**: Replaces manual Excel tracking with auto-capture of rental count, value, daily income, annualized returns, inventory value, price change
+- **自动快照**：每日 00:01 UTC 从悠悠 API 获取租赁统计 + DB 查库存，几秒完成 / **Auto snapshot**: Daily 00:01 UTC, fetches rental stats from Youpin API + DB inventory query in seconds
+- **月度汇总**：自动聚合总收入、服务费(20%)、净租金、净租金年化 / **Monthly summary**: Auto-aggregated income, service fee (20%), net rental, annualized net rental
+- **Excel 导入/导出**：支持 xlsx 格式上传导入和下载导出 / **Excel import/export**: Upload xlsx to import, download to export
+- **前端「收益追踪」Tab**：汇总卡片、趋势图表（综合年化/日租金/库存价值/涨跌）、月度汇总表、每日明细表格 / **Frontend "Income Tracker" tab**: Summary cards, trend charts, monthly summary table, daily detail table
+- **历史数据导入**：从 csgo饰品收益.xlsx 导入 123 条建仓后数据（2025-10 至 2026-03） / **Historical data import**: 123 records imported from Excel (Oct 2025 - Mar 2026)
+
+### 变更 / Changed
+- 版本号升至 v0.6.0 / Version bump to v0.6.0
+- 定时任务增至 7 个 / Scheduled jobs increased to 7
+- 新增 `openpyxl` 依赖 / Added `openpyxl` dependency
+
 ## [0.5.2] - 2026-03-21
 
 ### 修复 / Fixed
