@@ -3529,7 +3529,7 @@
                   ticks: {
                     color: '#64748b',
                     font: { size: 10 },
-                    callback: v => isPct ? v.toFixed(1) + '%' : isMoney ? '¥' + (v/10000).toFixed(0) + 'w' : v,
+                    callback: v => isPct ? v.toFixed(1) + '%' : isMoney ? (v >= 10000 ? '¥' + (v/10000).toFixed(1) + 'w' : '¥' + v.toFixed(0)) : v,
                   },
                   grid: { color: 'rgba(51,65,85,0.3)' },
                 },
