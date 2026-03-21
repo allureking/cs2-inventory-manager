@@ -3294,6 +3294,11 @@
               const s = await r.json();
               this.tokenExpired = !s.valid;
               if (s.valid && s.nickname) this.authState.nickname = s.nickname;
+              // 同步会员等级 → 自动开启大会员开关
+              if (s.valid && s.member_level >= 2) {
+                this.youpinMembership = true;
+                localStorage.setItem('youpinMembership', 'true');
+              }
             }
           } catch (e) { console.warn('Token check failed:', e.message); }
         },
@@ -3301,7 +3306,14 @@
         async _loadAuthState() {
           try {
             const r = await fetch('/api/youpin/auth/state');
-            if (r.ok) this.authState = await r.json();
+            if (r.ok) {
+              this.authState = await r.json();
+              // 自动根据会员等级设置大会员开关（≥2 为大会员/黑金大会员）
+              if (this.authState.member_level >= 2) {
+                this.youpinMembership = true;
+                localStorage.setItem('youpinMembership', 'true');
+              }
+            }
           } catch (e) { console.warn('Auth state load failed:', e.message); }
         },
 

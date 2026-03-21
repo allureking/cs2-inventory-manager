@@ -85,6 +85,7 @@ _device_token: str = ""
 # ── 运行时 token（SMS 登录后覆盖 .env 中的值）────────────────────────────
 _runtime_token: Optional[str] = None
 _runtime_nickname: Optional[str] = None
+_runtime_member_level: int = 0  # 0=未知, 1=普通, 2=大会员, 3=黑金大会员
 
 _RUNTIME_STATE_FILE = Path(".runtime_state.json")
 _token_lock = asyncio.Lock()
@@ -93,12 +94,13 @@ _refresh_lock = asyncio.Lock()
 
 def _load_runtime_state() -> None:
     """从磁盘加载持久化的运行时 token（进程重启后恢复）"""
-    global _runtime_token, _runtime_nickname
+    global _runtime_token, _runtime_nickname, _runtime_member_level
     try:
         if _RUNTIME_STATE_FILE.exists():
             data = json.loads(_RUNTIME_STATE_FILE.read_text())
             _runtime_token = data.get("token") or None
             _runtime_nickname = data.get("nickname") or None
+            _runtime_member_level = data.get("member_level") or 0
     except Exception:
         pass
 
@@ -106,7 +108,7 @@ def _load_runtime_state() -> None:
 def _save_runtime_state() -> None:
     """将运行时 token 原子写入磁盘（先写临时文件再 rename，防止写入中断导致数据丢失）"""
     try:
-        data = json.dumps({"token": _runtime_token, "nickname": _runtime_nickname})
+        data = json.dumps({"token": _runtime_token, "nickname": _runtime_nickname, "member_level": _runtime_member_level})
         tmp_path = str(_RUNTIME_STATE_FILE) + ".tmp"
         with open(tmp_path, "w") as f:
             f.write(data)
@@ -269,9 +271,12 @@ async def check_token_status() -> dict:
         _check(body, "getUserInfo")
         data = _data(body)
         nickname = None
+        member_level = 0
         if isinstance(data, dict):
             nickname = data.get("NickName") or data.get("nickName")
-        return {"valid": True, "nickname": nickname, "error": None}
+            # 会员等级：1=普通会员, 2=大会员, 3=黑金大会员
+            member_level = data.get("MemberLevel") or data.get("memberLevel") or 0
+        return {"valid": True, "nickname": nickname, "member_level": member_level, "error": None}
     except TokenExpiredError as e:
         return {"valid": False, "nickname": None, "error": str(e)}
     except Exception as e:
@@ -319,14 +324,16 @@ async def sms_login(phone: str, code: str, session_id: str) -> dict:
         raise RuntimeError("登录成功但未返回 Token")
 
     _runtime_token = token
-    # 验证新 token 并获取昵称
+    # 验证新 token 并获取昵称和会员等级
     info = await check_token_status()
     _runtime_nickname = info.get("nickname")
+    _runtime_member_level = info.get("member_level", 0)
     _save_runtime_state()
     return {
         "ok": True,
         "token": token,
         "nickname": _runtime_nickname,
+        "member_level": _runtime_member_level,
         "valid": info.get("valid", True),
     }
 
@@ -338,6 +345,7 @@ def get_login_state() -> dict:
         "has_token": bool(token),
         "token_source": "sms" if _runtime_token else ("env" if settings.youpin_token else "none"),
         "nickname": _runtime_nickname,
+        "member_level": _runtime_member_level,  # 0=未知, 1=普通, 2=大会员, 3=黑金大会员
         "device_id": _device_id,
     }
 

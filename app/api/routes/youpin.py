@@ -118,8 +118,9 @@ async def auth_apply_token(body: dict):
     try:
         info = await youpin_svc.check_token_status()
         youpin_svc._runtime_nickname = info.get("nickname")
+        youpin_svc._runtime_member_level = info.get("member_level", 0)
         youpin_svc._save_runtime_state()
-        return {"ok": True, "nickname": info.get("nickname"), "token_source": "manual"}
+        return {"ok": True, "nickname": info.get("nickname"), "member_level": info.get("member_level", 0), "token_source": "manual"}
     except Exception as e:
         youpin_svc._runtime_token = None
         youpin_svc._save_runtime_state()
