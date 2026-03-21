@@ -305,6 +305,7 @@ class DailyTracker(Base):
     inventory_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # 涨跌 & 指数
+    cost_basis: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # 当时成本基准
     price_change: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     steamdt_index: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 

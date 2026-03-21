@@ -164,7 +164,14 @@ async def snapshot_daily(is_vip: bool = True) -> dict:
         inv_value = rental["value"] + in_steam_value
 
         # 3) 涨跌：(当日市值 - 成本基准) / 成本基准
-        cost_basis = await _get_cost_basis(db)
+        # 成本基准继承前一天的值，用户可手动修改
+        prev_row = (await db.execute(
+            select(DailyTracker.cost_basis)
+            .where(DailyTracker.date < today, DailyTracker.cost_basis.isnot(None))
+            .order_by(DailyTracker.date.desc())
+            .limit(1)
+        )).scalar()
+        cost_basis = prev_row if prev_row else _DEFAULT_COST_BASIS
         price_change = (inv_value - cost_basis) / cost_basis if cost_basis > 0 else 0.0
 
         # 4) 计算年化（根据大会员状态选取参数）
@@ -188,6 +195,7 @@ async def snapshot_daily(is_vip: bool = True) -> dict:
             "is_vip": is_vip,
             "total_inventory": total_inv,
             "inventory_value": round(inv_value, 2),
+            "cost_basis": cost_basis,
             "price_change": round(price_change, 8),
         }
 
@@ -361,7 +369,7 @@ async def update_record(db: AsyncSession, date_str: str, fields: dict) -> dict |
         return None
 
     allowed = {"steamdt_index", "notes", "rented_count", "rented_value",
-               "daily_income", "total_inventory", "inventory_value", "is_vip"}
+               "daily_income", "total_inventory", "inventory_value", "is_vip", "cost_basis"}
     for k, v in fields.items():
         if k in allowed:
             setattr(row, k, v)
@@ -375,6 +383,12 @@ async def update_record(db: AsyncSession, date_str: str, fields: dict) -> dict |
         row.combined_annual = annuals["combined"]
         if row.rented_count and row.daily_income:
             row.income_per_item = round(row.daily_income / row.rented_count, 8)
+
+    # 如果修改了成本基准或库存价值，重新计算涨跌
+    if any(k in fields for k in ("cost_basis", "inventory_value")):
+        cb = row.cost_basis or _DEFAULT_COST_BASIS
+        iv = row.inventory_value or 0
+        row.price_change = round((iv - cb) / cb, 8) if cb > 0 else 0.0
 
     await db.commit()
     return _row_to_dict(row)
@@ -506,6 +520,7 @@ def _row_to_dict(r: DailyTracker) -> dict:
         "total_inventory": r.total_inventory,
         "inventory_value": r.inventory_value,
         "price_change": r.price_change,
+        "cost_basis": r.cost_basis,
         "steamdt_index": r.steamdt_index,
         "is_vip": r.is_vip,
         "notes": r.notes,

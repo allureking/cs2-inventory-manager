@@ -1907,15 +1907,6 @@
             <p class="text-xs text-slate-600 mt-0.5" x-text="t('tracker_subtitle')"></p>
           </div>
           <div class="flex flex-wrap items-center gap-2">
-            <!-- 成本基准 -->
-            <div class="flex items-center gap-1 bg-slate-800 rounded-lg px-2 py-1 border border-slate-700/50">
-              <span class="text-[10px] text-slate-500 whitespace-nowrap" x-text="nameLang==='cn'?'成本基准':'Cost Basis'"></span>
-              <span class="text-[10px] text-slate-500">¥</span>
-              <input type="number" step="10000" min="0"
-                x-model.number="trackerCostBasis"
-                @change="saveTrackerConfig()"
-                class="w-24 bg-transparent text-xs text-white font-mono border-none outline-none p-0">
-            </div>
             <button @click="trackerSnapshot()" :disabled="trackerSnapshotting"
               class="px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-40">
               <span x-text="trackerSnapshotting ? t('tracker_snapshotting') : t('tracker_snapshot')"></span>
@@ -2012,6 +2003,7 @@
                   <th class="py-2 px-2 text-right" x-text="t('tracker_col_per_item')"></th>
                   <th class="py-2 px-2 text-right" x-text="t('tracker_col_inv_count')"></th>
                   <th class="py-2 px-2 text-right" x-text="t('tracker_col_inv_value')"></th>
+                  <th class="py-2 px-2 text-right" x-text="t('tracker_col_cost')"></th>
                   <th class="py-2 px-2 text-right" x-text="t('tracker_col_change')"></th>
                   <th class="py-2 px-2 text-right" x-text="t('tracker_col_index')"></th>
                 </tr>
@@ -2029,6 +2021,13 @@
                     <td class="py-1.5 px-2 text-right font-mono text-slate-400" x-text="row.income_per_item!=null?'¥'+Number(row.income_per_item).toFixed(2):'—'"></td>
                     <td class="py-1.5 px-2 text-right text-white" x-text="row.total_inventory?.toLocaleString()??'—'"></td>
                     <td class="py-1.5 px-2 text-right text-white font-mono" x-text="row.inventory_value!=null?'¥'+Number(row.inventory_value).toLocaleString('en-US',{maximumFractionDigits:0}):'—'"></td>
+                    <td class="py-1.5 px-2 text-right font-mono text-slate-500">
+                      <input type="number" step="10000" min="0"
+                        :value="row.cost_basis??''"
+                        :placeholder="'—'"
+                        @change="trackerEditField(row.date, 'cost_basis', parseFloat($event.target.value) || null)"
+                        class="w-20 bg-transparent text-right text-xs font-mono text-slate-500 border-none outline-none p-0 hover:text-white focus:text-white placeholder-slate-600">
+                    </td>
                     <td class="py-1.5 px-2 text-right font-mono" :class="row.price_change>0?'text-emerald-400':row.price_change<0?'text-red-400':'text-slate-500'" x-text="row.price_change!=null?(row.price_change*100).toFixed(2)+'%':'—'"></td>
                     <td class="py-1.5 px-2 text-right font-mono text-slate-400">
                       <input type="number" step="0.01"
@@ -2639,7 +2638,6 @@
         trackerSnapshotting: false,
         _trackerChart: null,
         trackerChartType: 'combined_annual',
-        trackerCostBasis: 4400000,
         overview: {},
         items: [],
         total: 0,
@@ -2971,6 +2969,7 @@
           tracker_col_per_item: ['单件/天', 'Per Item/Day'],
           tracker_col_inv_count: ['总库存', 'Total Inv'],
           tracker_col_inv_value: ['库存价值', 'Inv Value'],
+          tracker_col_cost: ['成本', 'Cost Basis'],
           tracker_col_change: ['涨跌', 'Change'],
           tracker_col_index: ['大盘指数', 'Market Index'],
           // Navbar buttons & status
@@ -3472,35 +3471,17 @@
         async loadTracker() {
           this.trackerLoading = true;
           try {
-            const [dailyR, monthlyR, cfgR] = await Promise.all([
+            const [dailyR, monthlyR] = await Promise.all([
               fetch('/api/tracker/daily'),
               fetch('/api/tracker/monthly?year=' + new Date().getFullYear()),
-              fetch('/api/tracker/config'),
             ]);
             if (dailyR.ok) this.trackerData = await dailyR.json();
             if (monthlyR.ok) this.trackerMonthly = await monthlyR.json();
-            if (cfgR.ok) {
-              const cfg = await cfgR.json();
-              this.trackerCostBasis = cfg.cost_basis || 4400000;
-            }
             this.$nextTick(() => this.renderTrackerChart());
           } catch (e) {
             this.showToast(e.message || 'Failed to load tracker data', 'error');
           } finally {
             this.trackerLoading = false;
-          }
-        },
-
-        async saveTrackerConfig() {
-          try {
-            const r = await fetch('/api/tracker/config', {
-              method: 'PATCH',
-              headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({ cost_basis: this.trackerCostBasis }),
-            });
-            if (!r.ok) throw new Error('Save failed');
-          } catch (e) {
-            this.showToast(e.message, 'error');
           }
         },
 
