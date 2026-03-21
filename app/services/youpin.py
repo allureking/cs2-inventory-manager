@@ -1066,6 +1066,9 @@ async def import_lease_records(db: AsyncSession) -> dict:
         )
         item = result.scalar_one_or_none()
 
+        # 尝试获取图片 URL
+        icon_url = info.get("iconUrl") or info.get("IconUrl") or info.get("iconUrlLarge")
+
         if item:
             item.youpin_order_id = str(order_id) if order_id else item.youpin_order_id
             item.status = "rented_out"
@@ -1073,7 +1076,21 @@ async def import_lease_records(db: AsyncSession) -> dict:
             item.abrade = abrade
             if template_id and not item.youpin_template_id:
                 item.youpin_template_id = template_id
+            if icon_url and not item.icon_url:
+                item.icon_url = icon_url
         else:
+            # 如果没有直接图片 URL，从同名物品中复制
+            if not icon_url:
+                existing_icon = (await db.execute(
+                    select(InventoryItem.icon_url)
+                    .where(
+                        InventoryItem.market_hash_name == hash_name,
+                        InventoryItem.icon_url.isnot(None),
+                    )
+                    .limit(1)
+                )).scalar()
+                icon_url = existing_icon
+
             item = InventoryItem(
                 steam_id=steam_id,
                 asset_id=str(order_id),
@@ -1088,6 +1105,7 @@ async def import_lease_records(db: AsyncSession) -> dict:
                 youpin_commodity_id=commodity_id,
                 abrade=abrade,
                 youpin_template_id=template_id,
+                icon_url=icon_url,
             )
             db.add(item)
 

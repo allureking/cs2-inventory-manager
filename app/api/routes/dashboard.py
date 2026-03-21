@@ -27,7 +27,7 @@ from app.services.pricing import get_latest_prices as _get_latest_prices
 
 router = APIRouter()
 
-_ACTIVE = ["in_steam", "rented_out", "in_storage"]
+_ACTIVE = ["in_steam", "rented_out"]
 
 # CS2 物品分类（参考悠悠有品筛选）
 _CATEGORY_PATTERNS: dict[str, list[str]] = {
@@ -460,6 +460,9 @@ async def list_items(
                 InventoryItem.name.ilike(f"%{search}%"),
             )
         )
+
+    # 始终排除 unknown 状态（未确认物品不参与显示）
+    q = q.where(InventoryItem.status != "unknown")
 
     if status:
         q = q.where(InventoryItem.status == status)
