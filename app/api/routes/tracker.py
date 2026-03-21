@@ -108,6 +108,26 @@ async def edit_record(
     return result
 
 
+# ── 配置（成本基准等） ─────────────────────────────────────────────────────
+
+@router.get("/config")
+async def get_config(db: AsyncSession = Depends(get_db)):
+    """获取 tracker 配置（成本基准等）"""
+    return await tracker_svc.get_config(db)
+
+
+class ConfigUpdate(BaseModel):
+    cost_basis: Optional[float] = None
+
+
+@router.patch("/config")
+async def update_config(body: ConfigUpdate, db: AsyncSession = Depends(get_db)):
+    """更新 tracker 配置"""
+    if body.cost_basis is not None:
+        return await tracker_svc.set_config(db, "cost_basis", str(body.cost_basis))
+    raise HTTPException(status_code=400, detail="无更新字段")
+
+
 # ── 导入 / 导出 ────────────────────────────────────────────────────────────
 
 @router.post("/import")

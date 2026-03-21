@@ -23,7 +23,7 @@ from sqlalchemy import and_, select, func, or_
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.db_models import DailyTracker, InventoryItem, PriceSnapshot
+from app.models.db_models import DailyTracker, InventoryItem, PriceSnapshot, TrackerConfig
 
 logger = logging.getLogger(__name__)
 
@@ -160,16 +160,10 @@ async def snapshot_daily(is_vip: bool = True) -> dict:
             if p:
                 inv_value += p * cnt
 
-        # 3) 涨跌：(当日市值 - 基准值) / 基准值
-        # 基准值取最早一条记录的 inventory_value，若无则用当前值
-        base_val_row = (await db.execute(
-            select(DailyTracker.inventory_value)
-            .where(DailyTracker.inventory_value.isnot(None), DailyTracker.inventory_value > 0)
-            .order_by(DailyTracker.date.asc())
-            .limit(1)
-        )).scalar()
-        base_val = base_val_row if base_val_row else inv_value
-        price_change = (inv_value - base_val) / base_val if base_val > 0 else 0.0
+        # 3) 涨跌：(当日市值 - 成本基准) / 成本基准
+        # 成本基准从 tracker_config 读取，用户可手动设置（充值-提现）
+        cost_basis = await _get_cost_basis(db)
+        price_change = (inv_value - cost_basis) / cost_basis if cost_basis > 0 else 0.0
 
         # 4) 计算年化（根据大会员状态选取参数）
         annuals = _calc_annuals(rental["income"], rental["value"], is_vip=is_vip)
@@ -244,6 +238,49 @@ async def _get_latest_prices(names: list[str], db: AsyncSession) -> dict[str, fl
     )).all()
 
     return {name: float(price) for name, price in rows}
+
+
+# ══════════════════════════════════════════════════════════════
+#  CRUD
+# ══════════════════════════════════════════════════════════════
+#  配置（成本基准等）
+# ══════════════════════════════════════════════════════════════
+
+_DEFAULT_COST_BASIS = 4400000.0  # 默认成本基准 440万
+
+
+async def _get_cost_basis(db: AsyncSession) -> float:
+    """从 tracker_config 读取成本基准"""
+    row = (await db.execute(
+        select(TrackerConfig.value).where(TrackerConfig.key == "cost_basis")
+    )).scalar()
+    if row:
+        try:
+            return float(row)
+        except (TypeError, ValueError):
+            pass
+    return _DEFAULT_COST_BASIS
+
+
+async def get_config(db: AsyncSession) -> dict:
+    """获取所有 tracker 配置"""
+    rows = (await db.execute(select(TrackerConfig))).scalars().all()
+    cfg = {r.key: r.value for r in rows}
+    return {
+        "cost_basis": float(cfg.get("cost_basis", _DEFAULT_COST_BASIS)),
+    }
+
+
+async def set_config(db: AsyncSession, key: str, value: str) -> dict:
+    """设置 tracker 配置"""
+    stmt = sqlite_insert(TrackerConfig).values([{"key": key, "value": value}])
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["key"],
+        set_={"value": stmt.excluded.value},
+    )
+    await db.execute(stmt)
+    await db.commit()
+    return await get_config(db)
 
 
 # ══════════════════════════════════════════════════════════════

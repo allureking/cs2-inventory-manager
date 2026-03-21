@@ -273,6 +273,15 @@ class PortfolioSnapshot(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class TrackerConfig(Base):
+    """收益追踪配置（键值对存储）"""
+
+    __tablename__ = "tracker_config"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
 class DailyTracker(Base):
     """每日收益追踪记录（取代 Excel 手动记录）"""
 
