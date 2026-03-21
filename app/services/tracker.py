@@ -24,6 +24,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.db_models import DailyTracker, InventoryItem, PriceSnapshot, TrackerConfig
+from app.services.pricing import get_latest_prices
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +152,7 @@ async def snapshot_daily(is_vip: bool = True) -> dict:
         )).all()
 
         steam_names = [r[0] for r in steam_name_rows]
-        price_map = await _get_latest_prices(steam_names, db)
+        price_map = await get_latest_prices(steam_names, db)
 
         in_steam_value = 0.0
         for name, cnt in steam_name_rows:
@@ -211,43 +212,8 @@ async def snapshot_daily(is_vip: bool = True) -> dict:
     return row
 
 
-async def _get_latest_prices(names: list[str], db: AsyncSession) -> dict[str, float]:
-    """
-    获取一批饰品的最新价格（与 dashboard.py 逻辑一致）。
-    子查询取每个饰品最新 snapshot_minute，再在该时间点取跨平台最低卖价。
-    """
-    if not names:
-        return {}
 
-    # 子查询：每个饰品的最新 snapshot_minute
-    latest_subq = (
-        select(
-            PriceSnapshot.market_hash_name,
-            func.max(PriceSnapshot.snapshot_minute).label("latest_minute"),
-        )
-        .where(PriceSnapshot.market_hash_name.in_(names))
-        .group_by(PriceSnapshot.market_hash_name)
-        .subquery()
-    )
-
-    # 在最新快照中取最低卖价（跨平台）
-    rows = (await db.execute(
-        select(
-            PriceSnapshot.market_hash_name,
-            func.min(PriceSnapshot.sell_price).label("current_price"),
-        )
-        .join(
-            latest_subq,
-            and_(
-                PriceSnapshot.market_hash_name == latest_subq.c.market_hash_name,
-                PriceSnapshot.snapshot_minute == latest_subq.c.latest_minute,
-            ),
-        )
-        .where(PriceSnapshot.sell_price.isnot(None), PriceSnapshot.sell_price > 0)
-        .group_by(PriceSnapshot.market_hash_name)
-    )).all()
-
-    return {name: float(price) for name, price in rows}
+# _get_latest_prices 已提取到 app/services/pricing.py，通过 import 引入
 
 
 # ══════════════════════════════════════════════════════════════

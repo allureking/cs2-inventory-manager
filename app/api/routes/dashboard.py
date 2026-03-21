@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import AsyncSessionLocal, get_db
 from app.models.db_models import InventoryItem, PriceSnapshot
 from app.services import steamdt as price_svc
+from app.services.pricing import get_latest_prices as _get_latest_prices
 
 router = APIRouter()
 
@@ -107,48 +108,8 @@ _refresh_state: dict = {
 }
 
 
-# ── 工具函数：从缓存获取最新市价 ────────────────────────────────────────
-async def _get_latest_prices(
-    market_hash_names: list[str], db: AsyncSession
-) -> dict[str, Optional[float]]:
-    """
-    返回 {market_hash_name: min_sell_price}，基于 price_snapshot 中最新一批快照。
-    没有缓存的饰品不出现在返回字典中。
-    """
-    if not market_hash_names:
-        return {}
 
-    # 子查询：每个饰品的最新 snapshot_minute
-    latest_subq = (
-        select(
-            PriceSnapshot.market_hash_name,
-            func.max(PriceSnapshot.snapshot_minute).label("latest_minute"),
-        )
-        .where(PriceSnapshot.market_hash_name.in_(market_hash_names))
-        .group_by(PriceSnapshot.market_hash_name)
-        .subquery()
-    )
-
-    # 在最新快照中取最低卖价（跨平台）
-    rows = (
-        await db.execute(
-            select(
-                PriceSnapshot.market_hash_name,
-                func.min(PriceSnapshot.sell_price).label("current_price"),
-            )
-            .join(
-                latest_subq,
-                and_(
-                    PriceSnapshot.market_hash_name == latest_subq.c.market_hash_name,
-                    PriceSnapshot.snapshot_minute == latest_subq.c.latest_minute,
-                ),
-            )
-            .where(PriceSnapshot.sell_price.isnot(None), PriceSnapshot.sell_price > 0)
-            .group_by(PriceSnapshot.market_hash_name)
-        )
-    ).all()
-
-    return {row[0]: row[1] for row in rows}
+# _get_latest_prices 已提取到 app/services/pricing.py，通过 import 引入
 
 
 # ── 后台价格刷新任务 ────────────────────────────────────────────────────
@@ -314,44 +275,80 @@ async def get_overview(db: AsyncSession = Depends(get_db)):
         )
     ).scalar() or 0
 
-    # --- 市值计算：按 (market_hash_name, status) 聚合，乘以最新缓存价格 ---
-    name_status_rows = (
+    # --- 市值计算 ---
+    # rented_out 价值直接从悠悠 API 获取（最权威），in_steam 从 price_snapshot 计算
+    from app.services.youpin import fetch_lease_records, get_active_token
+    from app.services.tracker import _parse_stats_desc
+
+    market_value_rented = 0.0
+    if get_active_token():
+        try:
+            _, _, stats_desc = await fetch_lease_records(page=1, page_size=1)
+            rental_stats = _parse_stats_desc(stats_desc)
+            market_value_rented = rental_stats["value"]
+        except Exception:
+            pass  # fallback: rented_value = 0, will be added from price_snapshot below
+
+    # in_steam 物品市值：按 market_hash_name 聚合 × 最新价格
+    steam_name_rows = (
         await db.execute(
             select(
                 InventoryItem.market_hash_name,
-                InventoryItem.status,
                 func.count(InventoryItem.id).label("cnt"),
             )
-            .where(InventoryItem.status.in_(_ACTIVE))
-            .group_by(InventoryItem.market_hash_name, InventoryItem.status)
+            .where(InventoryItem.status == "in_steam")
+            .group_by(InventoryItem.market_hash_name)
         )
     ).all()
 
-    # 汇总
-    all_active_names = list({r[0] for r in name_status_rows})
-    name_to_count: dict = {}
-    for n, s, c in name_status_rows:
-        name_to_count[n] = name_to_count.get(n, 0) + c
+    steam_names = [r[0] for r in steam_name_rows]
+    price_map = await _get_latest_prices(steam_names, db)
 
-    price_map = await _get_latest_prices(all_active_names, db)
-
-    market_value = 0.0
     market_value_steam = 0.0
-    market_value_rented = 0.0
     market_priced_count = 0
-    for n, s, c in name_status_rows:
+    for n, c in steam_name_rows:
         mp = price_map.get(n)
         if mp is not None:
-            val = mp * c
-            market_value += val
+            market_value_steam += mp * c
             market_priced_count += c
-            if s == "in_steam":
-                market_value_steam += val
-            elif s == "rented_out":
-                market_value_rented += val
+
+    # 如果悠悠 API 不可用，fallback 从 price_snapshot 计算 rented 价值
+    if market_value_rented == 0.0:
+        rented_name_rows = (
+            await db.execute(
+                select(
+                    InventoryItem.market_hash_name,
+                    func.count(InventoryItem.id).label("cnt"),
+                )
+                .where(InventoryItem.status == "rented_out")
+                .group_by(InventoryItem.market_hash_name)
+            )
+        ).all()
+        rented_names = [r[0] for r in rented_name_rows]
+        rented_price_map = await _get_latest_prices(rented_names, db)
+        for n, c in rented_name_rows:
+            mp = rented_price_map.get(n)
+            if mp is not None:
+                market_value_rented += mp * c
+                market_priced_count += c
+    else:
+        # API 返回了 rented_value，但 priced_count 需要加上 rented 件数
+        rented_item_count = status_counts.get("rented_out", 0)
+        market_priced_count += rented_item_count
+
+    market_value = market_value_steam + market_value_rented
 
     # P&L：仅对同时有【购入价】AND【市价】的物品精确逐件对比
-    # 拉取活跃物品中有购入价的每一件
+    # 需要完整 price_map（in_steam + rented_out）用于逐件比较
+    all_active_names = list({r[0] for r in steam_name_rows})
+    rented_names_for_pnl = (await db.execute(
+        select(InventoryItem.market_hash_name)
+        .where(InventoryItem.status == "rented_out")
+        .distinct()
+    )).scalars().all()
+    all_pnl_names = list(set(all_active_names + list(rented_names_for_pnl)))
+    full_price_map = await _get_latest_prices(all_pnl_names, db)
+
     item_cost_rows = (
         await db.execute(
             select(
@@ -362,7 +359,7 @@ async def get_overview(db: AsyncSession = Depends(get_db)):
                 ).label("cost"),
             )
             .where(
-                InventoryItem.status.in_(_ACTIVE),
+                InventoryItem.status.in_(["in_steam", "rented_out"]),
                 or_(
                     InventoryItem.purchase_price.isnot(None),
                     InventoryItem.purchase_price_manual.isnot(None),
@@ -375,7 +372,7 @@ async def get_overview(db: AsyncSession = Depends(get_db)):
     pnl_cost_sum = 0.0
     pnl_count = 0
     for row in item_cost_rows:
-        mp = price_map.get(row[0])
+        mp = full_price_map.get(row[0])
         if mp is not None and row[1] is not None:
             pnl_market_sum += mp
             pnl_cost_sum += float(row[1])

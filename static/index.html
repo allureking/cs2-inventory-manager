@@ -579,7 +579,7 @@
       </div>
 
       <!-- Stat cards -->
-      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-5">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
 
         <!-- Total cost -->
         <div class="card stat-card p-5 relative overflow-hidden">
@@ -652,34 +652,12 @@
           </div>
         </div>
 
-        <!-- Quick actions -->
-        <div class="card stat-card p-5 flex flex-col gap-2">
-          <p class="text-[11px] text-slate-600 uppercase tracking-widest mb-1" x-text="t('quick_actions')"></p>
-          <button @click="activeTab='inventory'; filters.status=''; showSold=false; filters.pricedFilter='unpriced'; page=1; loadItems()"
-            class="w-full text-left px-3 py-2.5 rounded-xl text-xs transition-all duration-150"
-            style="background: rgba(239,68,68,0.07); border: 1px solid rgba(239,68,68,0.15); color: #fca5a5;"
-            @mouseenter="$el.style.background='rgba(239,68,68,0.13)'"
-            @mouseleave="$el.style.background='rgba(239,68,68,0.07)'">
-            → <span x-text="t('goto_unpriced')"></span> (<span x-text="overview.unpriced_count??0"></span>)
-          </button>
-          <button @click="activeTab='inventory'; filters.status='rented_out'; showSold=false; page=1; loadItems()"
-            class="w-full text-left px-3 py-2.5 rounded-xl text-xs transition-all duration-150"
-            style="background: rgba(34,197,94,0.07); border: 1px solid rgba(34,197,94,0.15); color: #86efac;"
-            @mouseenter="$el.style.background='rgba(34,197,94,0.13)'"
-            @mouseleave="$el.style.background='rgba(34,197,94,0.07)'">
-            → <span x-text="t('goto_rented')"></span> (<span x-text="overview.status_breakdown?.rented_out??0"></span>)
-          </button>
-          <button @click="activeTab='inventory'; filters.status=''; showSold=false; filters.pricedFilter=''; page=1; loadItems()"
-            class="w-full text-left px-3 py-2.5 rounded-xl text-xs transition-all duration-150"
-            style="background: rgba(71,85,105,0.15); border: 1px solid rgba(71,85,105,0.25); color: #94a3b8;"
-            @mouseenter="$el.style.background='rgba(71,85,105,0.25)'"
-            @mouseleave="$el.style.background='rgba(71,85,105,0.15)'">
-            → <span x-text="t('goto_all')"></span>
-          </button>
-        </div>
       </div>
 
       <!-- P&L row -->
+      <div class="col-span-full mt-2 mb-1">
+        <h3 class="text-xs text-slate-600 uppercase tracking-widest" x-text="t('market_value')"></h3>
+      </div>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
 
         <!-- Market Value -->
@@ -796,6 +774,9 @@
       </div>
 
       <!-- Portfolio Value Trend Chart -->
+      <div class="mt-4 mb-2">
+        <h3 class="text-xs text-slate-600 uppercase tracking-widest" x-text="nameLang==='cn'?'组合走势':'Portfolio Trend'"></h3>
+      </div>
       <div class="card p-5 mt-5">
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center gap-3">
@@ -2164,27 +2145,20 @@
         </span>
         <span class="text-slate-500/60 ml-auto">PT</span>
       </div>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-        <div class="card px-4 py-3">
-          <p class="text-[11px] text-slate-600 mb-0.5" x-text="t('mini_cost')"></p>
-          <p class="text-base font-bold text-white">¥<span x-text="fmt(overview.total_cost)">—</span></p>
-        </div>
-        <div class="card px-4 py-3">
-          <p class="text-[11px] text-slate-600 mb-0.5" x-text="t('mini_active')"></p>
-          <p class="text-base font-bold text-white" x-text="overview.total_active??'—'"></p>
-        </div>
-        <div class="card px-4 py-3">
-          <p class="text-[11px] text-slate-600 mb-0.5" x-text="t('mini_coverage')"></p>
-          <p class="text-base font-bold">
-            <span class="text-white" x-text="overview.priced_count??'—'"></span>
-            <span class="text-slate-700 text-sm"> / </span>
-            <span class="text-slate-500 text-sm" x-text="overview.total_active??'—'"></span>
-          </p>
-        </div>
-        <div class="card px-4 py-3">
-          <p class="text-[11px] text-slate-600 mb-0.5" x-text="t('mini_manual')"></p>
-          <p class="text-base font-bold text-yellow-300" x-text="overview.manual_price_count??'—'"></p>
-        </div>
+      <!-- Quick filter chips -->
+      <div class="flex flex-wrap items-center gap-2 mb-3">
+        <button @click="filters.pricedFilter='unpriced'; filters.status=''; page=1; loadItems()"
+          class="px-2.5 py-1 rounded-full text-[11px] font-medium transition-all"
+          :class="filters.pricedFilter==='unpriced' ? 'bg-amber-500/20 text-amber-400 ring-1 ring-amber-500/30' : 'text-slate-500 hover:text-slate-300 bg-slate-800/50'"
+          x-text="t('btn_unpriced')"></button>
+        <button @click="filters.status='rented_out'; filters.pricedFilter=''; page=1; loadItems()"
+          class="px-2.5 py-1 rounded-full text-[11px] font-medium transition-all"
+          :class="filters.status==='rented_out' ? 'bg-green-500/20 text-green-400 ring-1 ring-green-500/30' : 'text-slate-500 hover:text-slate-300 bg-slate-800/50'"
+          x-text="t('status_rented')"></button>
+        <button @click="filters.status=''; filters.pricedFilter=''; page=1; loadItems()"
+          class="px-2.5 py-1 rounded-full text-[11px] font-medium transition-all"
+          :class="!filters.status && !filters.pricedFilter ? 'bg-blue-500/20 text-blue-400 ring-1 ring-blue-500/30' : 'text-slate-500 hover:text-slate-300 bg-slate-800/50'"
+          x-text="t('all_status')"></button>
       </div>
 
       <!-- Filter bar -->

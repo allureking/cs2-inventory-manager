@@ -14,7 +14,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -416,7 +416,7 @@ async def snapshot_portfolio() -> None:
 
     try:
         async with AsyncSessionLocal() as db:
-            _ACTIVE = ["in_steam", "rented_out", "in_storage"]
+            _ACTIVE = ["in_steam", "rented_out"]
 
             # ── Count by status ──
             status_rows = (
@@ -473,37 +473,9 @@ async def snapshot_portfolio() -> None:
             for r in name_status_rows:
                 name_to_count[r[0]] = name_to_count.get(r[0], 0) + r[2]
 
-            # Get latest prices
-            if all_names:
-                latest_subq = (
-                    select(
-                        PriceSnapshot.market_hash_name,
-                        func.max(PriceSnapshot.snapshot_minute).label("latest_minute"),
-                    )
-                    .where(PriceSnapshot.market_hash_name.in_(all_names))
-                    .group_by(PriceSnapshot.market_hash_name)
-                    .subquery()
-                )
-                price_rows = (
-                    await db.execute(
-                        select(
-                            PriceSnapshot.market_hash_name,
-                            func.min(PriceSnapshot.sell_price).label("cp"),
-                        )
-                        .join(
-                            latest_subq,
-                            and_(
-                                PriceSnapshot.market_hash_name == latest_subq.c.market_hash_name,
-                                PriceSnapshot.snapshot_minute == latest_subq.c.latest_minute,
-                            ),
-                        )
-                        .where(PriceSnapshot.sell_price.isnot(None), PriceSnapshot.sell_price > 0)
-                        .group_by(PriceSnapshot.market_hash_name)
-                    )
-                ).all()
-                price_map = {r[0]: r[1] for r in price_rows}
-            else:
-                price_map = {}
+            # Get latest prices (shared function)
+            from app.services.pricing import get_latest_prices
+            price_map = await get_latest_prices(all_names, db)
 
             market_value = 0.0
             in_steam_value = 0.0
