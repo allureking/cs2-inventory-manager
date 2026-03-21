@@ -9,3 +9,4 @@ pycryptodome==3.21.0
 aiofiles==24.1.0
 apscheduler==3.10.4
 openpyxl
+python-multipart
