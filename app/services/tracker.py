@@ -134,34 +134,36 @@ async def snapshot_daily(is_vip: bool = True) -> dict:
 
     # 2) 库存数据
     async with AsyncSessionLocal() as db:
-        # 总活跃件数
+        # 总活跃件数（in_steam + rented_out）
         total_inv = (await db.execute(
             select(func.count(InventoryItem.id))
             .where(InventoryItem.status.in_(_ACTIVE))
         )).scalar() or 0
 
-        # 库存市值：按 market_hash_name 聚合 × 最新价格
-        name_count_rows = (await db.execute(
+        # in_steam 物品市值：按 market_hash_name 聚合 × 最新价格
+        steam_name_rows = (await db.execute(
             select(
                 InventoryItem.market_hash_name,
                 func.count(InventoryItem.id).label("cnt"),
             )
-            .where(InventoryItem.status.in_(_ACTIVE))
+            .where(InventoryItem.status == "in_steam")
             .group_by(InventoryItem.market_hash_name)
         )).all()
 
-        # 获取每个饰品的最新价格（取 YOUPIN 平台优先，其次 STEAMDT）
-        all_names = [r[0] for r in name_count_rows]
-        price_map = await _get_latest_prices(all_names, db)
+        steam_names = [r[0] for r in steam_name_rows]
+        price_map = await _get_latest_prices(steam_names, db)
 
-        inv_value = 0.0
-        for name, cnt in name_count_rows:
+        in_steam_value = 0.0
+        for name, cnt in steam_name_rows:
             p = price_map.get(name)
             if p:
-                inv_value += p * cnt
+                in_steam_value += p * cnt
+
+        # 库存总价值 = 悠悠 API 返回的出租价值 + in_steam 物品价值
+        # 直接用 API 返回的 rented_value，避免与 price_snapshot 缓存价格不一致
+        inv_value = rental["value"] + in_steam_value
 
         # 3) 涨跌：(当日市值 - 成本基准) / 成本基准
-        # 成本基准从 tracker_config 读取，用户可手动设置（充值-提现）
         cost_basis = await _get_cost_basis(db)
         price_change = (inv_value - cost_basis) / cost_basis if cost_basis > 0 else 0.0
 
