@@ -799,29 +799,8 @@
             <p class="text-slate-600 text-sm" x-text="t('portfolio_no_data')"></p>
           </div>
         </div>
-        <!-- Chart legend checkboxes -->
-        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-xs text-slate-500">
-          <label class="flex items-center gap-1 cursor-pointer select-none hover:text-slate-300 transition-colors">
-            <input type="checkbox" x-model="portfolioLines.market_value" @change="togglePortfolioLine()" class="accent-emerald-500 w-3 h-3">
-            <span class="text-emerald-400">━</span> <span x-text="t('market_value')"></span>
-          </label>
-          <label class="flex items-center gap-1 cursor-pointer select-none hover:text-slate-300 transition-colors">
-            <input type="checkbox" x-model="portfolioLines.in_steam_value" @change="togglePortfolioLine()" class="accent-cyan-500 w-3 h-3">
-            <span class="text-cyan-400">━</span> <span x-text="t('in_steam_value')"></span>
-          </label>
-          <label class="flex items-center gap-1 cursor-pointer select-none hover:text-slate-300 transition-colors">
-            <input type="checkbox" x-model="portfolioLines.rented_out_value" @change="togglePortfolioLine()" class="accent-pink-500 w-3 h-3">
-            <span class="text-pink-400">━</span> <span x-text="t('rented_out_value')"></span>
-          </label>
-          <label class="flex items-center gap-1 cursor-pointer select-none hover:text-slate-300 transition-colors">
-            <input type="checkbox" x-model="portfolioLines.total_cost" @change="togglePortfolioLine()" class="accent-blue-500 w-3 h-3">
-            <span class="text-blue-400">━</span> <span x-text="t('total_cost')"></span>
-          </label>
-          <label class="flex items-center gap-1 cursor-pointer select-none hover:text-slate-300 transition-colors">
-            <input type="checkbox" x-model="portfolioLines.pnl" @change="togglePortfolioLine()" class="accent-amber-500 w-3 h-3">
-            <span class="text-amber-400">╌</span> <span x-text="t('pnl_amount')"></span>
-          </label>
-          <span class="ml-auto text-[10px] text-slate-700" x-show="portfolioData.length">
+        <div class="flex items-center mt-2 text-xs text-slate-700">
+          <span class="ml-auto text-[10px]" x-show="portfolioData.length">
             <span x-text="portfolioData.length"></span> <span x-text="t('data_points')"></span>
           </span>
         </div>
@@ -2185,7 +2164,6 @@
             <option value="rented_out" x-text="t('status_rented')"></option>
             <option value="in_steam" x-text="t('status_steam')"></option>
             <option value="in_storage" x-text="t('status_storage')"></option>
-            <option value="unknown" x-text="t('status_unknown')"></option>
           </select>
 
           <!-- Category filter -->
@@ -2914,7 +2892,6 @@
         portfolioRange: 'all',
         portfolioData: [],
         _portfolioChart: null,
-        portfolioLines: { market_value: true, in_steam_value: true, rented_out_value: true, total_cost: true, pnl: true },
         monitorStatus: {},
 
         // 涨跌色模式：'cn'=红涨绿跌（默认） 'us'=绿涨红跌
@@ -3013,7 +2990,6 @@
           status_rented: ['出租中', 'Rented'],
           status_steam: ['Steam中', 'In Steam'],
           status_storage: ['收藏', 'Storage'],
-          status_unknown: ['待确认', 'Unknown'],
           status_sold: ['已售', 'Sold'],
           inv_value: ['库存市值', 'Inventory Value'],
           rented_value: ['出租市值', 'Rented Value'],
@@ -3615,7 +3591,6 @@
                   pointRadius: data.length > 50 ? 0 : 2,
                   pointHoverRadius: 4,
                   borderWidth: 2,
-                  hidden: !this.portfolioLines.market_value,
                 },
                 {
                   label: this.t('in_steam_value'),
@@ -3627,7 +3602,6 @@
                   pointRadius: data.length > 50 ? 0 : 2,
                   pointHoverRadius: 4,
                   borderWidth: 1.5,
-                  hidden: !this.portfolioLines.in_steam_value,
                 },
                 {
                   label: this.t('rented_out_value'),
@@ -3639,7 +3613,6 @@
                   pointRadius: data.length > 50 ? 0 : 2,
                   pointHoverRadius: 4,
                   borderWidth: 1.5,
-                  hidden: !this.portfolioLines.rented_out_value,
                 },
                 {
                   label: this.t('total_cost'),
@@ -3651,7 +3624,6 @@
                   pointRadius: data.length > 50 ? 0 : 2,
                   pointHoverRadius: 4,
                   borderWidth: 2,
-                  hidden: !this.portfolioLines.total_cost,
                 },
                 {
                   label: this.t('pnl_amount'),
@@ -3663,7 +3635,6 @@
                   pointHoverRadius: 4,
                   borderWidth: 1.5,
                   borderDash: [4, 2],
-                  hidden: !this.portfolioLines.pnl,
                 },
               ],
             },
@@ -3672,7 +3643,7 @@
               maintainAspectRatio: false,
               interaction: { mode: 'index', intersect: false },
               plugins: {
-                legend: { display: false },
+                legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12, color: '#94a3b8' } },
                 tooltip: {
                   backgroundColor: isDark ? 'rgba(15,23,42,0.95)' : 'rgba(255,255,255,0.95)',
                   titleColor: isDark ? '#e2e8f0' : '#1e293b',
@@ -3720,15 +3691,6 @@
               },
             },
           });
-        },
-
-        togglePortfolioLine() {
-          if (!this._portfolioChart) return;
-          const keys = ['market_value', 'in_steam_value', 'rented_out_value', 'total_cost', 'pnl'];
-          keys.forEach((k, i) => {
-            this._portfolioChart.setDatasetVisibility(i, this.portfolioLines[k]);
-          });
-          this._portfolioChart.update();
         },
 
         // ── System Monitor ─────────────────────────────────────────────
@@ -4687,7 +4649,6 @@
             in_steam: this.t('status_steam'),
             rented_out: this.t('status_rented'),
             in_storage: this.t('status_storage'),
-            unknown: this.t('status_unknown'),
             sold: this.t('status_sold'),
           };
           return map[s] || s || '—';

@@ -39,7 +39,7 @@ from app.services import steamdt as steamdt_svc
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-VALID_STATUSES = {"in_steam", "in_storage", "rented_out", "sold", "unknown"}
+VALID_STATUSES = {"in_steam", "in_storage", "rented_out", "sold"}
 
 
 # ──────────────────────────────────────────────────────────────────── #
