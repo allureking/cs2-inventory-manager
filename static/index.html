@@ -2617,7 +2617,7 @@
         // 出租大会员等级 (由 header select 控制)
         memberLevel: parseInt(localStorage.getItem('memberLevel') || '3'),
         // 悠悠大会员开关：开启后租金年化按310天计算，默认188天
-        youpinMembership: localStorage.getItem('youpinMembership') === 'true',
+        youpinMembership: localStorage.getItem('youpinMembership') !== 'false',
 
         // ── 量化分析 tab ──
         analysisTab: 'overview',
