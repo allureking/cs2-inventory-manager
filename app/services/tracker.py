@@ -119,7 +119,7 @@ async def snapshot_daily(is_vip: bool = True) -> dict:
     from app.core.database import AsyncSessionLocal
     from app.services.youpin import fetch_lease_records, get_active_token
 
-    today = date.today().isoformat()
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     # 1) 租赁统计
     rental = {"count": 0, "value": 0.0, "income": 0.0}
@@ -503,8 +503,17 @@ async def export_to_excel(db: AsyncSession, start: Optional[str] = None, end: Op
 # ══════════════════════════════════════════════════════════════
 
 def _row_to_dict(r: DailyTracker) -> dict:
+    # created_at 格式化为 ISO8601 UTC 字符串
+    created_at_str = None
+    if r.created_at:
+        if r.created_at.tzinfo is None:
+            created_at_str = r.created_at.replace(tzinfo=timezone.utc).isoformat()
+        else:
+            created_at_str = r.created_at.isoformat()
+
     return {
         "date": r.date,
+        "created_at": created_at_str,
         "rented_count": r.rented_count,
         "rented_value": r.rented_value,
         "daily_income": r.daily_income,

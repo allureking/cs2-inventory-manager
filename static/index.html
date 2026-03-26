@@ -1913,7 +1913,7 @@
                 x-text="nameLang==='cn' ? ct.cn : ct.en"></button>
             </template>
           </div>
-          <canvas id="trackerChart"></canvas>
+          <div style="height:220px"><canvas id="trackerChart"></canvas></div>
         </div>
 
         <!-- Monthly Summary -->
@@ -1982,8 +1982,10 @@
               <tbody>
                 <template x-for="row in trackerData" :key="row.date">
                   <tr class="border-b border-slate-700/30 hover:bg-slate-700/20">
-                    <!-- 日期 (只读) -->
-                    <td class="py-1.5 px-2 text-slate-300 sticky left-0 bg-slate-900/80 font-mono" x-text="row.date"></td>
+                    <!-- 日期 (只读, hover 显示完整 UTC 时间戳) -->
+                    <td class="py-1.5 px-2 text-slate-300 sticky left-0 bg-slate-900/80 font-mono"
+                      :title="row.created_at ? new Intl.DateTimeFormat(nameLang==='cn'?'zh-CN':'en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZoneName:'short',timeZone:'America/Los_Angeles'}).format(new Date(row.created_at)) : ''"
+                      x-text="row.date"></td>
 
                     <!-- 出租件数 (可编辑) -->
                     <td class="py-1.5 px-2 text-right text-white cursor-default"
@@ -3609,7 +3611,7 @@
             },
             options: {
               responsive: true,
-              aspectRatio: 4,
+              maintainAspectRatio: false,
               plugins: { legend: { display: false } },
               scales: {
                 x: { ticks: { color: '#64748b', maxTicksLimit: 12, font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.3)' } },
