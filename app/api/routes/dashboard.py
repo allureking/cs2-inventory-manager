@@ -12,6 +12,7 @@ Endpoints:
 from __future__ import annotations
 
 import asyncio
+import time
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -28,6 +29,32 @@ from app.services.pricing import get_latest_prices as _get_latest_prices
 router = APIRouter()
 
 _ACTIVE = ["in_steam", "rented_out"]
+
+# 悠悠租赁价值缓存（避免 overview 每次请求都调外部 API）
+_rented_value_cache: dict = {"value": 0.0, "ts": 0.0}
+_CACHE_TTL = 300  # 5 分钟
+
+
+async def _get_cached_rented_value() -> float:
+    """获取缓存的租赁价值，过期时重新拉取"""
+    now = time.monotonic()
+    if now - _rented_value_cache["ts"] < _CACHE_TTL and _rented_value_cache["value"] > 0:
+        return _rented_value_cache["value"]
+
+    from app.services.youpin import fetch_lease_records, get_active_token
+    from app.services.tracker import _parse_stats_desc
+
+    if not get_active_token():
+        return _rented_value_cache["value"]  # 无 token 返回旧值
+
+    try:
+        _, _, stats_desc = await fetch_lease_records(page=1, page_size=1)
+        rental_stats = _parse_stats_desc(stats_desc)
+        _rented_value_cache["value"] = rental_stats["value"]
+        _rented_value_cache["ts"] = now
+        return rental_stats["value"]
+    except Exception:
+        return _rented_value_cache["value"]
 
 # CS2 物品分类（参考悠悠有品筛选）
 _CATEGORY_PATTERNS: dict[str, list[str]] = {
@@ -277,77 +304,50 @@ async def get_overview(db: AsyncSession = Depends(get_db)):
 
     # --- 市值计算 ---
     # rented_out 价值直接从悠悠 API 获取（最权威），in_steam 从 price_snapshot 计算
-    from app.services.youpin import fetch_lease_records, get_active_token
-    from app.services.tracker import _parse_stats_desc
+    # 使用缓存避免每次请求都调外部 API（TTL 5 分钟）
+    market_value_rented = await _get_cached_rented_value()
 
-    market_value_rented = 0.0
-    if get_active_token():
-        try:
-            _, _, stats_desc = await fetch_lease_records(page=1, page_size=1)
-            rental_stats = _parse_stats_desc(stats_desc)
-            market_value_rented = rental_stats["value"]
-        except Exception:
-            pass  # fallback: rented_value = 0, will be added from price_snapshot below
-
-    # in_steam 物品市值：按 market_hash_name 聚合 × 最新价格
-    steam_name_rows = (
+    # 一次性获取所有 active 物品的 name → count 映射
+    active_name_rows = (
         await db.execute(
             select(
                 InventoryItem.market_hash_name,
+                InventoryItem.status,
                 func.count(InventoryItem.id).label("cnt"),
             )
-            .where(InventoryItem.status == "in_steam")
-            .group_by(InventoryItem.market_hash_name)
+            .where(InventoryItem.status.in_(_ACTIVE))
+            .group_by(InventoryItem.market_hash_name, InventoryItem.status)
         )
     ).all()
 
-    steam_names = [r[0] for r in steam_name_rows]
-    price_map = await _get_latest_prices(steam_names, db)
+    steam_name_counts = {r[0]: r[2] for r in active_name_rows if r[1] == "in_steam"}
+    rented_name_counts = {r[0]: r[2] for r in active_name_rows if r[1] == "rented_out"}
+    all_names = list(set(r[0] for r in active_name_rows))
 
+    # 单次批量获取所有价格（合并原来 3 次调用为 1 次）
+    full_price_map = await _get_latest_prices(all_names, db)
+
+    # in_steam 市值
     market_value_steam = 0.0
     market_priced_count = 0
-    for n, c in steam_name_rows:
-        mp = price_map.get(n)
+    for n, c in steam_name_counts.items():
+        mp = full_price_map.get(n)
         if mp is not None:
             market_value_steam += mp * c
             market_priced_count += c
 
-    # 如果悠悠 API 不可用，fallback 从 price_snapshot 计算 rented 价值
+    # rented_out 市值
     if market_value_rented == 0.0:
-        rented_name_rows = (
-            await db.execute(
-                select(
-                    InventoryItem.market_hash_name,
-                    func.count(InventoryItem.id).label("cnt"),
-                )
-                .where(InventoryItem.status == "rented_out")
-                .group_by(InventoryItem.market_hash_name)
-            )
-        ).all()
-        rented_names = [r[0] for r in rented_name_rows]
-        rented_price_map = await _get_latest_prices(rented_names, db)
-        for n, c in rented_name_rows:
-            mp = rented_price_map.get(n)
+        # 悠悠 API 不可用，fallback 从 price_snapshot
+        for n, c in rented_name_counts.items():
+            mp = full_price_map.get(n)
             if mp is not None:
                 market_value_rented += mp * c
                 market_priced_count += c
     else:
-        # API 返回了 rented_value，但 priced_count 需要加上 rented 件数
-        rented_item_count = status_counts.get("rented_out", 0)
-        market_priced_count += rented_item_count
+        market_priced_count += status_counts.get("rented_out", 0)
 
     market_value = market_value_steam + market_value_rented
-
-    # P&L：仅对同时有【购入价】AND【市价】的物品精确逐件对比
-    # 需要完整 price_map（in_steam + rented_out）用于逐件比较
-    all_active_names = list({r[0] for r in steam_name_rows})
-    rented_names_for_pnl = (await db.execute(
-        select(InventoryItem.market_hash_name)
-        .where(InventoryItem.status == "rented_out")
-        .distinct()
-    )).scalars().all()
-    all_pnl_names = list(set(all_active_names + list(rented_names_for_pnl)))
-    full_price_map = await _get_latest_prices(all_pnl_names, db)
 
     item_cost_rows = (
         await db.execute(
