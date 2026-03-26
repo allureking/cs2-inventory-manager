@@ -2061,13 +2061,15 @@
                         @keydown.enter="$event.target.blur()" @keydown.escape="row._edit=''">
                     </td>
 
-                    <!-- 大盘指数 -->
-                    <td class="py-1.5 px-2 text-right font-mono text-slate-400">
-                      <input type="number" step="0.01"
+                    <!-- 大盘指数 (双击编辑) -->
+                    <td class="py-1.5 px-2 text-right font-mono text-slate-400 cursor-default"
+                      :title="nameLang==='cn'?'双击修改':'Dbl-click to edit'"
+                      @dblclick="row._edit='steamdt_index'; $nextTick(()=>$el.querySelector('input')?.focus())">
+                      <span x-show="row._edit!=='steamdt_index'" x-text="row.steamdt_index!=null?Number(row.steamdt_index).toFixed(2):'—'"></span>
+                      <input x-show="row._edit==='steamdt_index'" class="w-16 bg-slate-700 rounded text-right text-xs font-mono text-white border border-slate-500 outline-none px-1 py-0.5"
                         :value="row.steamdt_index??''"
-                        :placeholder="'—'"
-                        @change="trackerEditField(row.date, 'steamdt_index', parseFloat($event.target.value) || null)"
-                        class="w-16 bg-transparent text-right text-xs font-mono text-slate-400 border-none outline-none p-0 hover:text-white focus:text-white placeholder-slate-600">
+                        @blur="row._edit=''; trackerEditField(row.date,'steamdt_index',$event.target.value)"
+                        @keydown.enter="$event.target.blur()" @keydown.escape="row._edit=''">
                     </td>
                   </tr>
                 </template>
@@ -3316,7 +3318,7 @@
               if (this.trackerData.length === 0) {
                 this.loadTracker();
               } else {
-                this.$nextTick(() => this.renderTrackerChart());
+                this._scheduleChartRender();
               }
             }
           });
@@ -3503,7 +3505,7 @@
             ]);
             if (dailyR.ok) this.trackerData = await dailyR.json();
             if (monthlyR.ok) this.trackerMonthly = await monthlyR.json();
-            this.$nextTick(() => this.renderTrackerChart());
+            this._scheduleChartRender();
           } catch (e) {
             this.showToast(e.message || 'Failed to load tracker data', 'error');
           } finally {
@@ -3581,9 +3583,18 @@
           ev.target.value = '';
         },
 
+        _scheduleChartRender() {
+          // 等 Alpine DOM 更新 + 浏览器渲染完成（canvas 可见且有尺寸）后再渲染图表
+          this.$nextTick(() => {
+            setTimeout(() => this.renderTrackerChart(), 50);
+          });
+        },
+
         renderTrackerChart() {
           const el = document.getElementById('trackerChart');
           if (!el || !this.trackerData?.length) return;
+          // canvas 不可见时（x-show 过渡中）跳过，等下次调度
+          if (el.offsetWidth === 0) return;
           if (this._trackerChart) { this._trackerChart.destroy(); this._trackerChart = null; }
 
           const data = [...this.trackerData].reverse();
