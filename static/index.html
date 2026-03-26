@@ -1913,7 +1913,7 @@
                 x-text="nameLang==='cn' ? ct.cn : ct.en"></button>
             </template>
           </div>
-          <canvas id="trackerChart"></canvas>
+          <div style="position:relative; width:100%;"><canvas id="trackerChart"></canvas></div>
         </div>
 
         <!-- Monthly Summary -->
@@ -3298,19 +3298,27 @@
           this._loadAuthState();
           // 检查 token 状态
           this._checkToken();
-          // 如果服务器上已有刷新任务在跑，接续轮询
-          const r = await fetch('/api/youpin/market/status');
-          if (r.ok) {
-            const s = await r.json();
-            if (s.status === 'running') {
+          // 并行加载初始状态（market status + alerts），不阻塞主加载
+          Promise.all([
+            fetch('/api/youpin/market/status').then(r => r.ok ? r.json() : null).catch(() => null),
+            fetch('/api/analysis/alerts?page_size=1&unread_only=true').then(r => r.ok ? r.json() : null).catch(() => null),
+          ]).then(([marketStatus, alertData]) => {
+            if (marketStatus?.status === 'running') {
               this.refreshing = true;
-              this.refreshProgress = s.progress;
+              this.refreshProgress = marketStatus.progress;
               this._startRefreshPoll();
             }
-          }
-          // Lazy-load tracker data when tab is selected
+            if (alertData) this.unreadAlertCount = alertData.total || 0;
+          });
+          // Lazy-load tracker; re-render chart on every tab switch (canvas needs visible DOM)
           this.$watch('activeTab', (tab) => {
-            if (tab === 'tracker' && this.trackerData.length === 0) this.loadTracker();
+            if (tab === 'tracker') {
+              if (this.trackerData.length === 0) {
+                this.loadTracker();
+              } else {
+                this.$nextTick(() => this.renderTrackerChart());
+              }
+            }
           });
           // 持久化用户偏好到 localStorage
           this.$watch('nameLang', v => localStorage.setItem('nameLang', v));
@@ -3318,11 +3326,6 @@
           this.$watch('youpinMembership', v => localStorage.setItem('youpinMembership', v));
           // Apply saved theme
           if (this.theme === 'light') document.documentElement.classList.add('light');
-          // 初始获取未读预警数（用于 tab badge）
-          try {
-            const ar = await fetch('/api/analysis/alerts?page_size=1&unread_only=true');
-            if (ar.ok) { const ad = await ar.json(); this.unreadAlertCount = ad.total || 0; }
-          } catch (e) { console.warn('Failed to load unread alerts:', e.message); }
         },
 
         async _checkToken() {
@@ -3522,7 +3525,11 @@
         },
 
         async trackerEditField(date, field, rawValue) {
-          const value = (typeof rawValue === 'string') ? this.parseFormula(rawValue) : rawValue;
+          // 空字符串 → null（清除字段），否则解析公式
+          const trimmed = (typeof rawValue === 'string') ? rawValue.trim() : rawValue;
+          const value = (trimmed === '' || trimmed === null || trimmed === undefined)
+            ? null
+            : (typeof trimmed === 'string') ? this.parseFormula(trimmed) : trimmed;
           if (value !== null && isNaN(value)) {
             this.showToast('公式错误 / Invalid formula', 'error'); return;
           }
