@@ -1913,7 +1913,7 @@
                 x-text="nameLang==='cn' ? ct.cn : ct.en"></button>
             </template>
           </div>
-          <div style="position:relative; width:100%;"><canvas id="trackerChart"></canvas></div>
+          <div style="position:relative; height:160px;"><canvas id="trackerChart"></canvas></div>
         </div>
 
         <!-- Monthly Summary -->
@@ -3624,7 +3624,7 @@
             },
             options: {
               responsive: true,
-              aspectRatio: 4,
+              maintainAspectRatio: false,
               plugins: { legend: { display: false } },
               scales: {
                 x: { ticks: { color: '#64748b', maxTicksLimit: 12, font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.3)' } },
