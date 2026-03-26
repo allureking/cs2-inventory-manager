@@ -1913,7 +1913,7 @@
                 x-text="nameLang==='cn' ? ct.cn : ct.en"></button>
             </template>
           </div>
-          <div style="position:relative; height:160px;"><canvas id="trackerChart"></canvas></div>
+          <canvas id="trackerChart"></canvas>
         </div>
 
         <!-- Monthly Summary -->
@@ -3314,13 +3314,7 @@
           });
           // Lazy-load tracker; re-render chart on every tab switch (canvas needs visible DOM)
           this.$watch('activeTab', (tab) => {
-            if (tab === 'tracker') {
-              if (this.trackerData.length === 0) {
-                this.loadTracker();
-              } else {
-                this._scheduleChartRender();
-              }
-            }
+            if (tab === 'tracker' && this.trackerData.length === 0) this.loadTracker();
           });
           // 持久化用户偏好到 localStorage
           this.$watch('nameLang', v => localStorage.setItem('nameLang', v));
@@ -3505,7 +3499,7 @@
             ]);
             if (dailyR.ok) this.trackerData = await dailyR.json();
             if (monthlyR.ok) this.trackerMonthly = await monthlyR.json();
-            this._scheduleChartRender();
+            this.$nextTick(() => this.renderTrackerChart());
           } catch (e) {
             this.showToast(e.message || 'Failed to load tracker data', 'error');
           } finally {
@@ -3583,18 +3577,9 @@
           ev.target.value = '';
         },
 
-        _scheduleChartRender() {
-          // 等 fade-up 动画完成（220ms）后再渲染图表
-          // 动画期间渲染会因 canvas 尺寸变化导致图表被清空
-          this.$nextTick(() => {
-            setTimeout(() => this.renderTrackerChart(), 300);
-          });
-        },
-
         renderTrackerChart() {
           const el = document.getElementById('trackerChart');
           if (!el || !this.trackerData?.length) return;
-          if (el.offsetParent === null) return;  // 不可见时跳过
           if (this._trackerChart) { this._trackerChart.destroy(); this._trackerChart = null; }
 
           const data = [...this.trackerData].reverse();
@@ -3624,7 +3609,7 @@
             },
             options: {
               responsive: true,
-              maintainAspectRatio: false,
+              aspectRatio: 4,
               plugins: { legend: { display: false } },
               scales: {
                 x: { ticks: { color: '#64748b', maxTicksLimit: 12, font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.3)' } },
