@@ -280,7 +280,7 @@ async def get_daily_records(
 
 
 async def get_monthly_summary(db: AsyncSession, year: int, month: int) -> dict:
-    """动态聚合月度汇总"""
+    """动态聚合月度汇总，缺失天数按平均值填充预估"""
     days_in_month = monthrange(year, month)[1]
     start = f"{year:04d}-{month:02d}-01"
     end = f"{year:04d}-{month:02d}-{days_in_month:02d}"
@@ -294,10 +294,34 @@ async def get_monthly_summary(db: AsyncSession, year: int, month: int) -> dict:
     if not rows:
         return {"year": year, "month": month, "days": 0}
 
+    recorded_days = len(rows)
     incomes = [r.daily_income for r in rows if r.daily_income is not None]
     total_income = sum(incomes)
-    service_fee = round(total_income * _FEE_RATE, 2)
-    net_rental = round(total_income * _NET_RATE, 2)
+
+    # 按每天的 is_vip 动态计算服务费（VIP=10%, 非VIP=20%）
+    service_fee = 0.0
+    net_rental = 0.0
+    for r in rows:
+        if r.daily_income is not None:
+            rate = _VIP_FEE_RATE if r.is_vip else _FEE_RATE
+            service_fee += r.daily_income * rate
+            net_rental += r.daily_income * (1 - rate)
+    service_fee = round(service_fee, 2)
+    net_rental = round(net_rental, 2)
+
+    # 缺失天数预估：用已有数据的日均值填充
+    is_estimated = recorded_days < days_in_month
+    if is_estimated and recorded_days > 0:
+        avg_daily_income = total_income / recorded_days
+        avg_daily_net = net_rental / recorded_days
+        avg_daily_fee = service_fee / recorded_days
+        est_total_income = round(avg_daily_income * days_in_month, 2)
+        est_service_fee = round(avg_daily_fee * days_in_month, 2)
+        est_net_rental = round(avg_daily_net * days_in_month, 2)
+    else:
+        est_total_income = round(total_income, 2)
+        est_service_fee = service_fee
+        est_net_rental = net_rental
 
     # 月末库存价值（取最后一天有值的记录）
     last_val = None
@@ -306,7 +330,7 @@ async def get_monthly_summary(db: AsyncSession, year: int, month: int) -> dict:
             last_val = r.inventory_value
             break
 
-    net_annual = round(net_rental * 12 / last_val, 6) if last_val else None
+    net_annual = round(est_net_rental * 12 / last_val, 6) if last_val else None
 
     # 综合年化平均值
     annuals = [r.combined_annual for r in rows if r.combined_annual is not None]
@@ -315,10 +339,15 @@ async def get_monthly_summary(db: AsyncSession, year: int, month: int) -> dict:
     return {
         "year": year,
         "month": month,
-        "days": len(rows),
+        "days": recorded_days,
+        "days_in_month": days_in_month,
+        "is_estimated": is_estimated,
         "total_income": round(total_income, 2),
         "service_fee": service_fee,
         "net_rental": net_rental,
+        "est_total_income": est_total_income,
+        "est_service_fee": est_service_fee,
+        "est_net_rental": est_net_rental,
         "net_rental_annual": net_annual,
         "avg_combined_annual": avg_annual,
         "last_inventory_value": last_val,
