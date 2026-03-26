@@ -60,3 +60,10 @@ async def init_db() -> None:
                 _logger.info("migration: %s", sql)
             except Exception:
                 pass  # 列已存在则忽略
+
+        # 性能索引
+        _indexes = [
+            "CREATE INDEX IF NOT EXISTS ix_ps_name_minute ON price_snapshot (market_hash_name, snapshot_minute)",
+        ]
+        for sql in _indexes:
+            await conn.execute(text(sql))
