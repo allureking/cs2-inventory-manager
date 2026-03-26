@@ -9,6 +9,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
   <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <style>
     /* ── Base ────────────────────────────────────────────────────────── */
@@ -1913,7 +1914,7 @@
                 x-text="nameLang==='cn' ? ct.cn : ct.en"></button>
             </template>
           </div>
-          <div style="height:220px"><canvas id="trackerChart"></canvas></div>
+          <div id="trackerChart"></div>
         </div>
 
         <!-- Monthly Summary -->
@@ -3585,47 +3586,51 @@
           if (this._trackerChart) { this._trackerChart.destroy(); this._trackerChart = null; }
 
           const data = [...this.trackerData].reverse();
-          const labels = data.map(d => d.date);
           const key = this.trackerChartType;
-          const values = data.map(d => {
-            const v = d[key];
-            return v != null ? (key === 'combined_annual' || key === 'short_lease_annual' || key === 'long_lease_annual' || key === 'price_change' ? v * 100 : v) : null;
-          });
-
           const isPct = ['combined_annual','short_lease_annual','long_lease_annual','price_change'].includes(key);
           const isMoney = ['daily_income','inventory_value','rented_value'].includes(key);
 
-          this._trackerChart = new Chart(el, {
-            type: 'line',
-            data: {
-              labels,
-              datasets: [{
-                data: values,
-                borderColor: '#3b82f6',
-                backgroundColor: 'rgba(59,130,246,0.1)',
-                fill: true,
-                tension: 0.3,
-                pointRadius: 1,
-                borderWidth: 2,
-              }],
+          const series = data.map(d => {
+            const v = d[key];
+            return { x: d.date, y: v != null ? (isPct ? +(v * 100).toFixed(2) : +Number(v).toFixed(2)) : null };
+          });
+
+          this._trackerChart = new ApexCharts(el, {
+            chart: {
+              type: 'area',
+              height: 200,
+              background: 'transparent',
+              toolbar: { show: false },
+              zoom: { enabled: false },
+              fontFamily: 'ui-monospace, monospace',
             },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              plugins: { legend: { display: false } },
-              scales: {
-                x: { ticks: { color: '#64748b', maxTicksLimit: 12, font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.3)' } },
-                y: {
-                  ticks: {
-                    color: '#64748b',
-                    font: { size: 10 },
-                    callback: v => isPct ? v.toFixed(1) + '%' : isMoney ? (v >= 10000 ? '¥' + (v/10000).toFixed(1) + 'w' : '¥' + v.toFixed(0)) : v,
-                  },
-                  grid: { color: 'rgba(51,65,85,0.3)' },
-                },
+            series: [{ name: key, data: series }],
+            stroke: { curve: 'smooth', width: 2 },
+            fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.3, opacityTo: 0.05 } },
+            colors: ['#3b82f6'],
+            dataLabels: { enabled: false },
+            xaxis: {
+              type: 'category',
+              labels: { style: { colors: '#64748b', fontSize: '10px' }, rotate: -45, maxHeight: 60, show: true },
+              tickAmount: 12,
+              axisBorder: { show: false },
+              axisTicks: { show: false },
+            },
+            yaxis: {
+              labels: {
+                style: { colors: '#64748b', fontSize: '10px' },
+                formatter: v => v == null ? '' : isPct ? v.toFixed(1) + '%' : isMoney ? (v >= 10000 ? '¥' + (v/10000).toFixed(1) + 'w' : '¥' + v.toFixed(0)) : v,
               },
             },
+            grid: { borderColor: 'rgba(51,65,85,0.3)', strokeDashArray: 3 },
+            tooltip: {
+              theme: 'dark',
+              x: { show: true },
+              y: { formatter: v => v == null ? '—' : isPct ? v.toFixed(2) + '%' : isMoney ? '¥' + Number(v).toLocaleString() : v },
+            },
+            theme: { mode: 'dark' },
           });
+          this._trackerChart.render();
         },
 
         async loadOverview() {
