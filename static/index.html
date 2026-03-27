@@ -3314,6 +3314,9 @@
           // Lazy-load tracker; re-render chart on every tab switch (canvas needs visible DOM)
           this.$watch('activeTab', (tab) => {
             if (tab === 'tracker' && this.trackerData.length === 0) this.loadTracker();
+            // ApexCharts 在 display:none 容器中渲染宽度为0，切换到对应 tab 时重绘
+            if (tab === 'overview' && this.portfolioData.length) this.$nextTick(() => this.renderPortfolioChart());
+            if (tab === 'tracker' && this.trackerData.length > 0) this.$nextTick(() => this.renderTrackerChart());
           });
           // 持久化用户偏好到 localStorage
           this.$watch('nameLang', v => localStorage.setItem('nameLang', v));
