@@ -5,10 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CS2 库存管理系统 — CS2 Inventory Manager</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
   <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <style>
@@ -795,7 +791,7 @@
           </div>
         </div>
         <div class="relative" style="height: 320px;">
-          <canvas id="portfolioChart"></canvas>
+          <div id="portfolioChart"></div>
           <div x-show="!portfolioData.length" class="absolute inset-0 flex items-center justify-center">
             <p class="text-slate-600 text-sm" x-text="t('portfolio_no_data')"></p>
           </div>
@@ -1540,7 +1536,7 @@
                 </div>
               </div>
               <div class="relative" style="height:280px">
-                <canvas id="priceChart"></canvas>
+                <div id="priceChart"></div>
               </div>
             </div>
 
@@ -3589,45 +3585,25 @@
           const key = this.trackerChartType;
           const isPct = ['combined_annual','short_lease_annual','long_lease_annual','price_change'].includes(key);
           const isMoney = ['daily_income','inventory_value','rented_value'].includes(key);
+          const nameMap = { combined_annual:'综合年化', daily_income:'日租金', inventory_value:'库存价值', price_change:'涨跌', short_lease_annual:'短租年化', long_lease_annual:'长租年化', rented_value:'出租价值' };
+          const label = this.nameLang === 'cn' ? (nameMap[key] || key) : key.replace(/_/g,' ');
 
           const series = data.map(d => {
             const v = d[key];
-            return { x: d.date, y: v != null ? (isPct ? +(v * 100).toFixed(2) : +Number(v).toFixed(2)) : null };
+            return { x: d.date.slice(5), y: v != null ? (isPct ? +(v * 100).toFixed(2) : +Number(v).toFixed(2)) : null };
           });
 
           this._trackerChart = new ApexCharts(el, {
-            chart: {
-              type: 'area',
-              height: 200,
-              background: 'transparent',
-              toolbar: { show: false },
-              zoom: { enabled: false },
-              fontFamily: 'ui-monospace, monospace',
-            },
-            series: [{ name: key, data: series }],
+            chart: { type: 'area', height: 200, background: 'transparent', toolbar: { show: false }, zoom: { enabled: false }, fontFamily: 'ui-monospace, monospace' },
+            series: [{ name: label, data: series }],
             stroke: { curve: 'smooth', width: 2 },
-            fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.3, opacityTo: 0.05 } },
+            fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.25, opacityTo: 0.02 } },
             colors: ['#3b82f6'],
             dataLabels: { enabled: false },
-            xaxis: {
-              type: 'category',
-              labels: { style: { colors: '#64748b', fontSize: '10px' }, rotate: -45, maxHeight: 60, show: true },
-              tickAmount: 12,
-              axisBorder: { show: false },
-              axisTicks: { show: false },
-            },
-            yaxis: {
-              labels: {
-                style: { colors: '#64748b', fontSize: '10px' },
-                formatter: v => v == null ? '' : isPct ? v.toFixed(1) + '%' : isMoney ? (v >= 10000 ? '¥' + (v/10000).toFixed(1) + 'w' : '¥' + v.toFixed(0)) : v,
-              },
-            },
-            grid: { borderColor: 'rgba(51,65,85,0.3)', strokeDashArray: 3 },
-            tooltip: {
-              theme: 'dark',
-              x: { show: true },
-              y: { formatter: v => v == null ? '—' : isPct ? v.toFixed(2) + '%' : isMoney ? '¥' + Number(v).toLocaleString() : v },
-            },
+            xaxis: { type: 'category', labels: { style: { colors: '#64748b', fontSize: '10px' }, rotate: 0, hideOverlappingLabels: true }, tickAmount: 10, axisBorder: { show: false }, axisTicks: { show: false } },
+            yaxis: { labels: { style: { colors: '#64748b', fontSize: '10px' }, formatter: v => v == null ? '' : isPct ? v.toFixed(1)+'%' : isMoney ? (v>=10000?'¥'+(v/10000).toFixed(1)+'w':'¥'+v.toFixed(0)) : v } },
+            grid: { borderColor: 'rgba(51,65,85,0.2)', strokeDashArray: 3, padding: { left: 5, right: 5 } },
+            tooltip: { theme: 'dark', y: { formatter: v => v == null ? '—' : isPct ? v.toFixed(2)+'%' : isMoney ? '¥'+Number(v).toLocaleString() : v } },
             theme: { mode: 'dark' },
           });
           this._trackerChart.render();
@@ -3654,143 +3630,46 @@
         renderPortfolioChart() {
           const el = document.getElementById('portfolioChart');
           if (!el) return;
-
-          if (this._portfolioChart) {
-            this._portfolioChart.destroy();
-            this._portfolioChart = null;
-          }
+          if (this._portfolioChart) { this._portfolioChart.destroy(); this._portfolioChart = null; }
 
           const data = this.portfolioData;
-          // Convert UTC timestamps to Pacific time strings for Chart.js
-          const labels = data.map(d => new Date(d.timestamp).toLocaleString('sv-SE', { timeZone: 'America/Los_Angeles' }));
+          if (!data.length) return;
           const isDark = !document.documentElement.classList.contains('light');
-          const gridColor = isDark ? 'rgba(51,65,85,0.3)' : 'rgba(186,214,235,0.4)';
           const textColor = isDark ? '#64748b' : '#475569';
+          const gridColor = isDark ? 'rgba(51,65,85,0.2)' : 'rgba(186,214,235,0.3)';
 
-          // Calculate x-axis min/max based on selected range
-          let xMin, xMax;
+          // 时间范围过滤
+          let filtered = data;
           if (this.portfolioRange !== 'all') {
-            const ptNow = new Date(new Date().toLocaleString('sv-SE', { timeZone: 'America/Los_Angeles' }));
-            xMax = ptNow;
-            const ms = { '24h': 86400e3, '7d': 7*86400e3, '30d': 30*86400e3, '90d': 90*86400e3 };
-            xMin = new Date(ptNow.getTime() - (ms[this.portfolioRange] || 7*86400e3));
+            const msMap = { '24h': 86400e3, '7d': 7*86400e3, '30d': 30*86400e3, '90d': 90*86400e3 };
+            const cutoff = Date.now() - (msMap[this.portfolioRange] || 7*86400e3);
+            filtered = data.filter(d => new Date(d.timestamp).getTime() >= cutoff);
           }
 
-          this._portfolioChart = new Chart(el, {
-            type: 'line',
-            data: {
-              labels,
-              datasets: [
-                {
-                  label: this.t('market_value'),
-                  data: data.map(d => d.market_value),
-                  borderColor: '#10b981',
-                  backgroundColor: 'rgba(16,185,129,0.08)',
-                  fill: true,
-                  tension: 0.3,
-                  pointRadius: data.length > 50 ? 0 : 2,
-                  pointHoverRadius: 4,
-                  borderWidth: 2,
-                },
-                {
-                  label: this.t('in_steam_value'),
-                  data: data.map(d => d.in_steam_value),
-                  borderColor: '#06b6d4',
-                  backgroundColor: 'rgba(6,182,212,0.06)',
-                  fill: true,
-                  tension: 0.3,
-                  pointRadius: data.length > 50 ? 0 : 2,
-                  pointHoverRadius: 4,
-                  borderWidth: 1.5,
-                },
-                {
-                  label: this.t('rented_out_value'),
-                  data: data.map(d => d.rented_out_value),
-                  borderColor: '#ec4899',
-                  backgroundColor: 'rgba(236,72,153,0.06)',
-                  fill: true,
-                  tension: 0.3,
-                  pointRadius: data.length > 50 ? 0 : 2,
-                  pointHoverRadius: 4,
-                  borderWidth: 1.5,
-                },
-                {
-                  label: this.t('total_cost'),
-                  data: data.map(d => d.total_cost),
-                  borderColor: '#3b82f6',
-                  backgroundColor: 'rgba(59,130,246,0.05)',
-                  fill: true,
-                  tension: 0.3,
-                  pointRadius: data.length > 50 ? 0 : 2,
-                  pointHoverRadius: 4,
-                  borderWidth: 2,
-                },
-                {
-                  label: this.t('pnl_amount'),
-                  data: data.map(d => d.pnl),
-                  borderColor: '#f59e0b',
-                  backgroundColor: 'transparent',
-                  tension: 0.3,
-                  pointRadius: 0,
-                  pointHoverRadius: 4,
-                  borderWidth: 1.5,
-                  borderDash: [4, 2],
-                },
-              ],
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              interaction: { mode: 'index', intersect: false },
-              plugins: {
-                legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12, color: '#94a3b8' } },
-                tooltip: {
-                  backgroundColor: isDark ? 'rgba(15,23,42,0.95)' : 'rgba(255,255,255,0.95)',
-                  titleColor: isDark ? '#e2e8f0' : '#1e293b',
-                  bodyColor: isDark ? '#94a3b8' : '#475569',
-                  borderColor: isDark ? 'rgba(51,65,85,0.5)' : 'rgba(186,214,235,0.5)',
-                  borderWidth: 1,
-                  padding: 10,
-                  callbacks: {
-                    title: (ctx) => {
-                      const d = new Date(ctx[0].label);
-                      return d.toLocaleString('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) + ' PT';
-                    },
-                    label: (ctx) => `${ctx.dataset.label}: ¥${ctx.parsed.y?.toLocaleString() ?? '—'}`,
-                  },
-                },
-                zoom: {
-                  pan: { enabled: true, mode: 'x' },
-                  zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
-                },
-              },
-              scales: {
-                x: {
-                  type: 'time',
-                  min: xMin,
-                  max: xMax,
-                  time: {
-                    tooltipFormat: 'yyyy-MM-dd HH:mm',
-                    displayFormats: {
-                      hour: 'HH:mm',
-                      day: 'MM/dd',
-                      week: 'MM/dd',
-                    },
-                  },
-                  grid: { color: gridColor },
-                  ticks: { color: textColor, maxTicksLimit: 8, font: { size: 10 } },
-                },
-                y: {
-                  grid: { color: gridColor },
-                  ticks: {
-                    color: textColor,
-                    font: { size: 10 },
-                    callback: (v) => '¥' + (v >= 10000 ? (v / 10000).toFixed(1) + 'w' : v.toLocaleString()),
-                  },
-                },
-              },
-            },
+          const cats = filtered.map(d => new Date(d.timestamp).toLocaleString('sv-SE', { timeZone: 'America/Los_Angeles' }).slice(0,16));
+          const mkSeries = (name, arr, key) => ({ name, data: arr.map(d => d[key] ?? null) });
+
+          this._portfolioChart = new ApexCharts(el, {
+            chart: { type: 'line', height: 320, background: 'transparent', toolbar: { show: false }, zoom: { enabled: true }, fontFamily: 'ui-monospace, monospace' },
+            series: [
+              mkSeries(this.t('market_value'), filtered, 'market_value'),
+              mkSeries(this.t('in_steam_value'), filtered, 'in_steam_value'),
+              mkSeries(this.t('rented_out_value'), filtered, 'rented_out_value'),
+              mkSeries(this.t('total_cost'), filtered, 'total_cost'),
+              mkSeries(this.t('pnl_amount'), filtered, 'pnl'),
+            ],
+            stroke: { curve: 'smooth', width: [2, 1.5, 1.5, 2, 1.5], dashArray: [0, 0, 0, 0, 4] },
+            colors: ['#10b981', '#06b6d4', '#ec4899', '#3b82f6', '#f59e0b'],
+            fill: { type: ['gradient','gradient','gradient','gradient','solid'], gradient: { shadeIntensity: 1, opacityFrom: 0.08, opacityTo: 0.01 }, opacity: [1,1,1,1,0] },
+            dataLabels: { enabled: false },
+            xaxis: { categories: cats, labels: { style: { colors: textColor, fontSize: '10px' }, rotate: 0, hideOverlappingLabels: true }, tickAmount: 8, axisBorder: { show: false }, axisTicks: { show: false } },
+            yaxis: { labels: { style: { colors: textColor, fontSize: '10px' }, formatter: v => v == null ? '' : '¥' + (v >= 10000 ? (v/10000).toFixed(1)+'w' : v.toLocaleString()) } },
+            grid: { borderColor: gridColor, strokeDashArray: 3 },
+            legend: { position: 'bottom', labels: { colors: '#94a3b8' }, fontSize: '11px', markers: { width: 10, height: 10 } },
+            tooltip: { theme: isDark ? 'dark' : 'light', shared: true, intersect: false, y: { formatter: v => v == null ? '—' : '¥' + Number(v).toLocaleString() } },
+            theme: { mode: isDark ? 'dark' : 'light' },
           });
+          this._portfolioChart.render();
         },
 
         // ── System Monitor ─────────────────────────────────────────────
@@ -4413,67 +4292,41 @@
           const el = document.getElementById('priceChart');
           if (!el || !this.itemSignals?.chart_data?.length) return;
 
-          const data = this.itemSignals.chart_data;
-          const labels = data.map(d => {
-            const s = d.date;
-            return s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8);
-          });
-          const closes = data.map(d => d.close);
-          const ma7 = data.map(d => d.ma7);
-          const ma30 = data.map(d => d.ma30);
-          const bbUp = data.map(d => d.bb_upper);
-          const bbLow = data.map(d => d.bb_lower);
-
-          // Calculate x-axis min/max based on chartDays (0 = all)
-          let xMin, xMax;
-          if (this.chartDays > 0) {
-            const ptNow = new Date(new Date().toLocaleString('sv-SE', { timeZone: 'America/Los_Angeles' }));
-            xMax = ptNow;
-            xMin = new Date(ptNow.getTime() - this.chartDays * 86400e3);
-          }
-
+          const raw = this.itemSignals.chart_data;
           const isDark = !document.documentElement.classList.contains('light');
+          const textColor = isDark ? '#64748b' : '#475569';
           const gridColor = isDark ? 'rgba(51,65,85,0.2)' : 'rgba(186,214,235,0.3)';
-          const textColor = isDark ? '#475569' : '#64748b';
 
-          this._priceChart = new Chart(el.getContext('2d'), {
-            type: 'line',
-            data: {
-              labels,
-              datasets: [
-                { label: this.nameLang==='cn'?'收盘价':'Close', data: closes, borderColor: '#3b82f6', borderWidth: 2, pointRadius: 0, fill: false, tension: 0.1 },
-                { label: 'MA7', data: ma7, borderColor: '#f59e0b', borderWidth: 1, borderDash: [5,3], pointRadius: 0, fill: false },
-                { label: 'MA30', data: ma30, borderColor: '#8b5cf6', borderWidth: 1, borderDash: [8,4], pointRadius: 0, fill: false },
-                { label: 'BB Upper', data: bbUp, borderColor: 'rgba(100,116,139,0.4)', borderWidth: 1, pointRadius: 0, fill: false },
-                { label: 'BB Lower', data: bbLow, borderColor: 'rgba(100,116,139,0.4)', borderWidth: 1, pointRadius: 0, fill: '-1',
-                  backgroundColor: 'rgba(100,116,139,0.05)' },
-              ]
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              interaction: { mode: 'index', intersect: false },
-              plugins: {
-                legend: { labels: { color: '#94a3b8', boxWidth: 12, font: { size: 10 } } },
-                tooltip: { titleFont: { size: 11 }, bodyFont: { size: 11 } },
-                zoom: {
-                  pan: { enabled: true, mode: 'x' },
-                  zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
-                },
-              },
-              scales: {
-                x: {
-                  type: 'time',
-                  min: xMin,
-                  max: xMax,
-                  time: { displayFormats: { day: 'MM/dd', week: 'MM/dd' } },
-                  ticks: { color: textColor, maxTicksLimit: 10, font: { size: 9 } },
-                  grid: { color: gridColor },
-                },
-                y: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor } },
-              }
-            }
+          // 时间范围过滤
+          let data = raw;
+          if (this.chartDays > 0) {
+            const cutoff = Date.now() - this.chartDays * 86400e3;
+            data = raw.filter(d => { const s=d.date; return new Date(s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8)).getTime() >= cutoff; });
+          }
+          const cats = data.map(d => { const s=d.date; return s.slice(4,6)+'/'+s.slice(6,8); });
+          const mkS = (name, key, color, w, dash) => ({ name, data: data.map(d => d[key] ?? null), color, strokeWidth: w, dashArray: dash || 0 });
+
+          this._priceChart = new ApexCharts(el, {
+            chart: { type: 'line', height: 280, background: 'transparent', toolbar: { show: false }, zoom: { enabled: true }, fontFamily: 'ui-monospace, monospace' },
+            series: [
+              { name: this.nameLang==='cn'?'收盘价':'Close', data: data.map(d=>d.close) },
+              { name: 'MA7', data: data.map(d=>d.ma7) },
+              { name: 'MA30', data: data.map(d=>d.ma30) },
+              { name: 'BB Upper', data: data.map(d=>d.bb_upper) },
+              { name: 'BB Lower', data: data.map(d=>d.bb_lower) },
+            ],
+            stroke: { curve: 'straight', width: [2, 1, 1, 1, 1], dashArray: [0, 4, 6, 3, 3] },
+            colors: ['#3b82f6', '#f59e0b', '#8b5cf6', 'rgba(100,116,139,0.4)', 'rgba(100,116,139,0.4)'],
+            fill: { opacity: [1, 0, 0, 0, 0] },
+            dataLabels: { enabled: false },
+            xaxis: { categories: cats, labels: { style: { colors: textColor, fontSize: '9px' }, rotate: 0, hideOverlappingLabels: true }, tickAmount: 10, axisBorder: { show: false }, axisTicks: { show: false } },
+            yaxis: { labels: { style: { colors: textColor, fontSize: '10px' }, formatter: v => v != null ? '¥'+Number(v).toLocaleString() : '' } },
+            grid: { borderColor: gridColor, strokeDashArray: 3 },
+            legend: { labels: { colors: '#94a3b8' }, fontSize: '10px', markers: { width: 10, height: 10 } },
+            tooltip: { theme: isDark ? 'dark' : 'light', shared: true, intersect: false },
+            theme: { mode: isDark ? 'dark' : 'light' },
           });
+          this._priceChart.render();
         },
 
         async triggerBackfill() {
