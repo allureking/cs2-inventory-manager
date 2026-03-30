@@ -790,11 +790,9 @@
             </template>
           </div>
         </div>
-        <div class="relative" style="height: 320px;">
-          <div id="portfolioChart"></div>
-          <div x-show="!portfolioData.length" class="absolute inset-0 flex items-center justify-center">
-            <p class="text-slate-600 text-sm" x-text="t('portfolio_no_data')"></p>
-          </div>
+        <div id="portfolioChart"></div>
+        <div x-show="!portfolioData.length" class="flex items-center justify-center py-12">
+          <p class="text-slate-600 text-sm" x-text="t('portfolio_no_data')"></p>
         </div>
         <div class="flex items-center mt-2 text-xs text-slate-700">
           <span class="ml-auto text-[10px]" x-show="portfolioData.length">
@@ -3657,43 +3655,60 @@
           const el = document.getElementById('portfolioChart');
           if (!el) return;
           if (this._portfolioChart) { this._portfolioChart.destroy(); this._portfolioChart = null; }
-
           const data = this.portfolioData;
           if (!data.length) return;
+
           const isDark = !document.documentElement.classList.contains('light');
-          const textColor = isDark ? '#64748b' : '#475569';
-          const gridColor = isDark ? 'rgba(51,65,85,0.2)' : 'rgba(186,214,235,0.3)';
+          const txtC = isDark ? '#64748b' : '#475569';
+          const gridC = isDark ? 'rgba(51,65,85,0.15)' : 'rgba(186,214,235,0.3)';
+          const fmtY = v => { if (v == null) return ''; const a = Math.abs(v); const s = v < 0 ? '-' : ''; return s + '¥' + (a >= 1e4 ? (a/1e4).toFixed(1)+'万' : a.toLocaleString()); };
 
-          // 时间范围过滤
-          let filtered = data;
-          if (this.portfolioRange !== 'all') {
-            const msMap = { '24h': 86400e3, '7d': 7*86400e3, '30d': 30*86400e3, '90d': 90*86400e3 };
-            const cutoff = Date.now() - (msMap[this.portfolioRange] || 7*86400e3);
-            filtered = data.filter(d => new Date(d.timestamp).getTime() >= cutoff);
-          }
+          // X 轴：根据范围选择不同的时间格式
+          const is24h = this.portfolioRange === '24h';
+          const cats = data.map(d => {
+            const dt = new Date(d.timestamp);
+            return is24h
+              ? dt.toLocaleTimeString('en-US', { timeZone:'America/Los_Angeles', hour:'2-digit', minute:'2-digit', hour12:false })
+              : dt.toLocaleDateString('en-US', { timeZone:'America/Los_Angeles', month:'numeric', day:'numeric' });
+          });
 
-          const cats = filtered.map(d => new Date(d.timestamp).toLocaleString('sv-SE', { timeZone: 'America/Los_Angeles' }).slice(0,16));
-          const mkSeries = (name, arr, key) => ({ name, data: arr.map(d => d[key] ?? null) });
+          const mk = (name, key) => ({ name, data: data.map(d => d[key] ?? null) });
 
           this._portfolioChart = new ApexCharts(el, {
-            chart: { type: 'line', height: 320, background: 'transparent', toolbar: { show: false }, zoom: { enabled: true }, fontFamily: 'ui-monospace, monospace' },
+            chart: {
+              type: 'line', height: 300, background: 'transparent', fontFamily: 'ui-monospace, monospace',
+              toolbar: { show: true, offsetY: -5, tools: { download: false, selection: false, zoom: true, zoomin: true, zoomout: true, pan: true, reset: true } },
+              zoom: { enabled: true, type: 'x', autoScaleYaxis: true },
+            },
             series: [
-              mkSeries(this.t('market_value'), filtered, 'market_value'),
-              mkSeries(this.t('in_steam_value'), filtered, 'in_steam_value'),
-              mkSeries(this.t('rented_out_value'), filtered, 'rented_out_value'),
-              mkSeries(this.t('total_cost'), filtered, 'total_cost'),
-              mkSeries(this.t('pnl_amount'), filtered, 'pnl'),
+              mk(this.t('market_value'), 'market_value'),
+              mk(this.t('total_cost'), 'total_cost'),
+              mk(this.t('pnl_amount'), 'pnl'),
             ],
-            stroke: { curve: 'smooth', width: [2, 1.5, 1.5, 2, 1.5], dashArray: [0, 0, 0, 0, 4] },
-            colors: ['#10b981', '#06b6d4', '#ec4899', '#3b82f6', '#f59e0b'],
-            fill: { type: ['gradient','gradient','gradient','gradient','solid'], gradient: { shadeIntensity: 1, opacityFrom: 0.08, opacityTo: 0.01 }, opacity: [1,1,1,1,0] },
+            stroke: { curve: 'smooth', width: [2.5, 2, 1.5], dashArray: [0, 5, 3] },
+            colors: ['#10b981', '#3b82f6', '#f59e0b'],
+            fill: { type: ['gradient', 'solid', 'solid'], gradient: { shadeIntensity: 1, opacityFrom: 0.15, opacityTo: 0.01 }, opacity: [1, 0, 0] },
             dataLabels: { enabled: false },
-            xaxis: { categories: cats, labels: { style: { colors: textColor, fontSize: '10px' }, rotate: 0, hideOverlappingLabels: true }, tickAmount: 8, axisBorder: { show: false }, axisTicks: { show: false } },
-            yaxis: { labels: { style: { colors: textColor, fontSize: '10px' }, formatter: v => v == null ? '' : '¥' + (v >= 10000 ? (v/10000).toFixed(1)+'w' : v.toLocaleString()) } },
-            grid: { borderColor: gridColor, strokeDashArray: 3 },
-            legend: { position: 'bottom', labels: { colors: '#94a3b8' }, fontSize: '11px', markers: { width: 10, height: 10 } },
-            tooltip: { theme: isDark ? 'dark' : 'light', shared: true, intersect: false, y: { formatter: v => v == null ? '—' : '¥' + Number(v).toLocaleString() } },
-            theme: { mode: isDark ? 'dark' : 'light' },
+            xaxis: {
+              categories: cats,
+              labels: { style: { colors: txtC, fontSize: '10px' }, rotate: 0, hideOverlappingLabels: true },
+              tickAmount: is24h ? 12 : 8,
+              axisBorder: { show: false }, axisTicks: { show: false },
+            },
+            yaxis: { labels: { style: { colors: txtC, fontSize: '10px' }, formatter: fmtY } },
+            grid: { borderColor: gridC, strokeDashArray: 3, padding: { left: 10, right: 10 } },
+            legend: {
+              position: 'top', horizontalAlign: 'left', offsetY: -5,
+              labels: { colors: '#94a3b8' }, fontSize: '11px',
+              markers: { width: 8, height: 8, radius: 2 },
+              itemMargin: { horizontal: 12 },
+            },
+            tooltip: {
+              theme: 'dark', shared: true, intersect: false,
+              x: { show: true },
+              y: { formatter: v => v == null ? '—' : fmtY(v) },
+            },
+            theme: { mode: 'dark' },
           });
           this._portfolioChart.render();
         },
