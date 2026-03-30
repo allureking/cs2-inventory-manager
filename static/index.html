@@ -3597,7 +3597,11 @@
           });
 
           this._trackerChart = new ApexCharts(el, {
-            chart: { type: 'area', height: 200, background: 'transparent', toolbar: { show: false }, zoom: { enabled: false }, fontFamily: 'ui-monospace, monospace' },
+            chart: { type: 'area', height: 200, background: 'transparent',
+              toolbar: { show: true, offsetY: -5, tools: { download: false, selection: false, zoom: true, zoomin: true, zoomout: true, pan: true, reset: true } },
+              zoom: { enabled: true, type: 'x', autoScaleYaxis: true },
+              fontFamily: 'ui-monospace, monospace',
+            },
             series: [{ name: label, data: series }],
             stroke: { curve: 'smooth', width: 2 },
             fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.25, opacityTo: 0.02 } },
@@ -3610,6 +3614,25 @@
             theme: { mode: 'dark' },
           });
           this._trackerChart.render();
+
+          // 滚轮缩放 X 轴
+          this.$nextTick(() => {
+            const chartEl = el.querySelector('.apexcharts-canvas');
+            if (!chartEl) return;
+            chartEl.addEventListener('wheel', (e) => {
+              e.preventDefault();
+              const g = this._trackerChart.w.globals;
+              const min = g.minX, max = g.maxX, total = g.dataPoints;
+              const range = max - min;
+              if (range <= 0) return;
+              const factor = e.deltaY > 0 ? 0.15 : -0.15;
+              let newMin = Math.round(min + range * factor);
+              let newMax = Math.round(max - range * factor);
+              newMin = Math.max(0, newMin);
+              newMax = Math.min(total - 1, newMax);
+              if (newMax - newMin >= 5) this._trackerChart.zoomX(newMin, newMax);
+            }, { passive: false });
+          });
         },
 
         async loadOverview() {
