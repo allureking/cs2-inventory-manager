@@ -141,27 +141,30 @@ async def snapshot_daily(is_vip: bool = True) -> dict:
             .where(InventoryItem.status.in_(_ACTIVE))
         )).scalar() or 0
 
-        # in_steam 物品市值：按 market_hash_name 聚合 × 最新价格
-        steam_name_rows = (await db.execute(
-            select(
-                InventoryItem.market_hash_name,
-                func.count(InventoryItem.id).label("cnt"),
-            )
-            .where(InventoryItem.status == "in_steam")
-            .group_by(InventoryItem.market_hash_name)
-        )).all()
-
-        steam_names = [r[0] for r in steam_name_rows]
-        price_map = await get_latest_prices(steam_names, db)
-
+        # in_steam 物品市值：直接使用悠悠 API 估值（与同步拉取一致）
         in_steam_value = 0.0
-        for name, cnt in steam_name_rows:
-            p = price_map.get(name)
-            if p:
-                in_steam_value += p * cnt
+        if token:
+            try:
+                from app.services.youpin import fetch_stock_records
+                _, _, stock_valuation = await fetch_stock_records(page=1, page_size=1)
+                in_steam_value = float(str(stock_valuation).replace(",", "")) if stock_valuation else 0.0
+            except Exception as e:
+                logger.warning("tracker snapshot_daily: 获取库存估值失败: %s", e)
 
-        # 库存总价值 = 悠悠 API 返回的出租价值 + in_steam 物品价值
-        # 直接用 API 返回的 rented_value，避免与 price_snapshot 缓存价格不一致
+        # fallback: 如果悠悠 API 不可用，从 price_snapshot 计算
+        if in_steam_value == 0.0:
+            steam_name_rows = (await db.execute(
+                select(InventoryItem.market_hash_name, func.count(InventoryItem.id).label("cnt"))
+                .where(InventoryItem.status == "in_steam")
+                .group_by(InventoryItem.market_hash_name)
+            )).all()
+            price_map = await get_latest_prices([r[0] for r in steam_name_rows], db)
+            for name, cnt in steam_name_rows:
+                p = price_map.get(name)
+                if p:
+                    in_steam_value += p * cnt
+
+        # 库存总价值 = 悠悠 API 出租价值 + 悠悠 API 库存估值
         inv_value = rental["value"] + in_steam_value
 
         # 3) 涨跌：(当日市值 - 成本基准) / 成本基准
