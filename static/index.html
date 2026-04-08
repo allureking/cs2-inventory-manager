@@ -3696,13 +3696,12 @@
           const fmtY = v => { if (v == null) return ''; const a = Math.abs(v); const s = v < 0 ? '-' : ''; return s + '¥' + (a >= 1e4 ? (a/1e4).toFixed(1)+'万' : a.toLocaleString()); };
           const is24h = this.portfolioRange === '24h';
 
+          // x 标签必须唯一（同一天有多条30分钟记录），始终带时间
           const mkS = (name, key) => ({
             name,
             data: data.map(d => {
               const dt = new Date(d.timestamp);
-              const lbl = is24h
-                ? dt.toLocaleTimeString('en-US', { timeZone:'America/Los_Angeles', hour:'2-digit', minute:'2-digit', hour12:false })
-                : dt.toLocaleDateString('en-US', { timeZone:'America/Los_Angeles', month:'numeric', day:'numeric' });
+              const lbl = dt.toLocaleString('en-US', { timeZone:'America/Los_Angeles', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit', hour12:false });
               return { x: lbl, y: d[key] ?? null };
             }),
           });
