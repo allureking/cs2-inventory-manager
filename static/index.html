@@ -6,6 +6,7 @@
   <title>CS2 库存管理系统 — CS2 Inventory Manager</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <style>
     /* ── Base ────────────────────────────────────────────────────────── */
@@ -799,7 +800,7 @@
             </template>
           </div>
         </div>
-        <div id="portfolioChart"></div>
+        <div style="position:relative; height:280px;"><canvas id="portfolioChart"></canvas></div>
         <div x-show="portfolioCategory==='value' && !portfolioData.length" class="flex items-center justify-center py-12">
           <p class="text-slate-600 text-sm" x-text="t('portfolio_no_data')"></p>
         </div>
@@ -3717,90 +3718,86 @@
         },
 
         renderPortfolioChart() {
-          const el = document.getElementById('portfolioChart');
+          const canvas = document.getElementById('portfolioChart');
           if (this._portfolioChart) { this._portfolioChart.destroy(); this._portfolioChart = null; }
-          if (!el) return;
+          if (!canvas) return;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
 
           const fmtMoney = v => { if (v == null) return ''; const a = Math.abs(v); const s = v < 0 ? '-' : ''; return s + '¥' + (a >= 1e4 ? (a/1e4).toFixed(1)+'万' : a.toLocaleString()); };
           const fmtPct = v => v == null ? '' : v.toFixed(2) + '%';
-          const commonChart = {
-            type: 'line', height: 280, background: 'transparent',
-            toolbar: { show: true, offsetY: -5, tools: { download: false, selection: false, zoom: true, zoomin: true, zoomout: true, pan: true, reset: true } },
-            zoom: { enabled: true, type: 'x', autoScaleYaxis: true },
-            fontFamily: 'ui-monospace, monospace',
-          };
-          const commonGrid = { borderColor: 'rgba(51,65,85,0.2)', strokeDashArray: 3, padding: { left: 5, right: 5 } };
-          const commonLegend = { position: 'top', horizontalAlign: 'left', offsetY: -5, labels: { colors: '#94a3b8' }, fontSize: '11px', markers: { width: 8, height: 8, radius: 2 }, itemMargin: { horizontal: 12 } };
+          const gridColor = 'rgba(51,65,85,0.2)';
+          const tickColor = '#64748b';
 
           if (this.portfolioCategory === 'value') {
-            // ── 组合价值模式 ──
-            // 左Y轴: 市值/成本/盈亏(金额共用)，右Y轴: 涨跌比(%)
+            // ── 组合价值：左Y金额，右Y百分比 ──
             const data = this.portfolioData;
             if (!data.length) return;
-            const is24h = this.portfolioRange === '24h';
-            const categories = data.map(d => {
+            const labels = data.map(d => {
               const dt = new Date(d.timestamp);
               return dt.toLocaleString('en-US', { timeZone:'America/Los_Angeles', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit', hour12:false });
             });
-            // 用变量存名字，确保 series.name 和 yaxis.seriesName 完全匹配
-            const N = { mv: this.t('market_value'), tc: this.t('total_cost'), pnl: this.t('pnl_amount'), pct: this.t('chart_pnl_pct') };
-            this._portfolioChart = new ApexCharts(el, {
-              chart: commonChart,
-              series: [
-                { name: N.mv, data: data.map(d => d.market_value ?? null) },
-                { name: N.tc, data: data.map(d => d.total_cost ?? null) },
-                { name: N.pnl, data: data.map(d => d.pnl ?? null) },
-                { name: N.pct, data: data.map(d => d.pnl_pct ?? null) },
-              ],
-              stroke: { curve: 'smooth', width: [2.5, 2, 1.5, 1.5], dashArray: [0, 5, 3, 0] },
-              colors: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'],
-              fill: { type: 'solid', opacity: [0.08, 0, 0, 0] },
-              dataLabels: { enabled: false },
-              xaxis: { categories, type: 'category', labels: { style: { colors: '#64748b', fontSize: '10px' }, rotate: 0, hideOverlappingLabels: true }, tickAmount: is24h ? 12 : 8, axisBorder: { show: false }, axisTicks: { show: false } },
-              yaxis: [
-                { seriesName: N.mv,  labels: { style: { colors: '#64748b', fontSize: '10px' }, formatter: fmtMoney } },
-                { seriesName: N.mv,  show: false },
-                { seriesName: N.mv,  show: false },
-                { seriesName: N.pct, opposite: true, labels: { style: { colors: '#ef4444', fontSize: '10px' }, formatter: fmtPct } },
-              ],
-              grid: commonGrid,
-              legend: commonLegend,
-              tooltip: { theme: 'dark', shared: true, intersect: false, y: { formatter: (v, { seriesIndex }) => v == null ? '—' : seriesIndex === 3 ? fmtPct(v) : fmtMoney(v) } },
-              theme: { mode: 'dark' },
+            this._portfolioChart = new Chart(ctx, {
+              type: 'line',
+              data: {
+                labels,
+                datasets: [
+                  { label: this.t('market_value'), data: data.map(d => d.market_value), yAxisID: 'yMoney', borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)', fill: true, borderWidth: 2.5, pointRadius: 0, tension: 0.3, order: 1 },
+                  { label: this.t('total_cost'), data: data.map(d => d.total_cost), yAxisID: 'yMoney', borderColor: '#3b82f6', borderDash: [6,3], borderWidth: 2, pointRadius: 0, tension: 0.3, fill: false, order: 2 },
+                  { label: this.t('pnl_amount'), data: data.map(d => d.pnl), yAxisID: 'yMoney', borderColor: '#f59e0b', borderDash: [4,2], borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false, order: 3 },
+                  { label: this.t('chart_pnl_pct'), data: data.map(d => d.pnl_pct), yAxisID: 'yPct', borderColor: '#ef4444', borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false, order: 4 },
+                ],
+              },
+              options: {
+                responsive: true, maintainAspectRatio: false, animation: { duration: 400 },
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                  legend: { position: 'top', align: 'start', labels: { color: '#94a3b8', font: { size: 11, family: 'ui-monospace, monospace' }, usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 8, padding: 12 } },
+                  tooltip: { backgroundColor: 'rgba(15,23,42,0.95)', titleColor: '#e2e8f0', bodyColor: '#cbd5e1', borderColor: 'rgba(51,65,85,0.5)', borderWidth: 1, padding: 10, bodyFont: { family: 'ui-monospace, monospace', size: 11 },
+                    callbacks: { label: ctx => { const v = ctx.raw; return ctx.dataset.label + ': ' + (ctx.datasetIndex === 3 ? fmtPct(v) : fmtMoney(v)); } },
+                  },
+                },
+                scales: {
+                  x: { ticks: { color: tickColor, font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 }, grid: { color: gridColor, drawBorder: false } },
+                  yMoney: { position: 'left', ticks: { color: tickColor, font: { size: 10 }, callback: fmtMoney }, grid: { color: gridColor, drawBorder: false } },
+                  yPct: { position: 'right', ticks: { color: '#ef4444', font: { size: 10 }, callback: v => fmtPct(v) }, grid: { drawOnChartArea: false } },
+                },
+              },
             });
           } else {
-            // ── 租赁走势模式 ──
-            // 左Y轴: 综合年化(%)，右Y轴: 日租金/件数/价值(金额共用)
+            // ── 租赁走势：左Y百分比，右Y金额 ──
             const data = [...this.trackerData].reverse();
             if (!data.length) return;
-            const categories = data.map(d => d.date);
-            const N = { ca: this.t('tracker_col_combined'), di: this.t('tracker_col_income'), rc: this.t('tracker_col_rented'), rv: this.t('chart_rented_value') };
-            this._portfolioChart = new ApexCharts(el, {
-              chart: commonChart,
-              series: [
-                { name: N.ca, data: data.map(d => d.combined_annual != null ? +(d.combined_annual * 100).toFixed(2) : null) },
-                { name: N.di, data: data.map(d => d.daily_income ?? null) },
-                { name: N.rc, data: data.map(d => d.rented_count ?? null) },
-                { name: N.rv, data: data.map(d => d.rented_value ?? null) },
-              ],
-              stroke: { curve: 'smooth', width: [2.5, 2, 1.5, 1.5], dashArray: [0, 0, 0, 5] },
-              colors: ['#10b981', '#f59e0b', '#3b82f6', '#ec4899'],
-              fill: { type: 'solid', opacity: [0.08, 0, 0, 0] },
-              dataLabels: { enabled: false },
-              xaxis: { categories, type: 'category', labels: { style: { colors: '#64748b', fontSize: '10px' }, rotate: 0, hideOverlappingLabels: true }, tickAmount: 8, axisBorder: { show: false }, axisTicks: { show: false } },
-              yaxis: [
-                { seriesName: N.ca, labels: { style: { colors: '#10b981', fontSize: '10px' }, formatter: fmtPct } },
-                { seriesName: N.di, opposite: true, labels: { style: { colors: '#f59e0b', fontSize: '10px' }, formatter: fmtMoney } },
-                { seriesName: N.di, opposite: true, show: false },
-                { seriesName: N.di, opposite: true, show: false },
-              ],
-              grid: commonGrid,
-              legend: commonLegend,
-              tooltip: { theme: 'dark', shared: true, intersect: false, y: { formatter: (v, { seriesIndex }) => v == null ? '—' : seriesIndex === 0 ? fmtPct(v) : seriesIndex === 2 ? (v ?? 0) + ' 件' : fmtMoney(v) } },
-              theme: { mode: 'dark' },
+            const labels = data.map(d => d.date);
+            this._portfolioChart = new Chart(ctx, {
+              type: 'line',
+              data: {
+                labels,
+                datasets: [
+                  { label: this.t('tracker_col_combined'), data: data.map(d => d.combined_annual != null ? +(d.combined_annual * 100).toFixed(2) : null), yAxisID: 'yPct', borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)', fill: true, borderWidth: 2.5, pointRadius: 0, tension: 0.3, order: 1 },
+                  { label: this.t('tracker_col_income'), data: data.map(d => d.daily_income), yAxisID: 'yRight', borderColor: '#f59e0b', borderWidth: 2, pointRadius: 0, tension: 0.3, fill: false, order: 2 },
+                  { label: this.t('tracker_col_rented'), data: data.map(d => d.rented_count), yAxisID: 'yRight', borderColor: '#3b82f6', borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false, order: 3 },
+                  { label: this.t('chart_rented_value'), data: data.map(d => d.rented_value), yAxisID: 'yValue', borderColor: '#ec4899', borderDash: [6,3], borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false, order: 4 },
+                ],
+              },
+              options: {
+                responsive: true, maintainAspectRatio: false, animation: { duration: 400 },
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                  legend: { position: 'top', align: 'start', labels: { color: '#94a3b8', font: { size: 11, family: 'ui-monospace, monospace' }, usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 8, padding: 12 } },
+                  tooltip: { backgroundColor: 'rgba(15,23,42,0.95)', titleColor: '#e2e8f0', bodyColor: '#cbd5e1', borderColor: 'rgba(51,65,85,0.5)', borderWidth: 1, padding: 10, bodyFont: { family: 'ui-monospace, monospace', size: 11 },
+                    callbacks: { label: ctx => { const v = ctx.raw; const i = ctx.datasetIndex; return ctx.dataset.label + ': ' + (i === 0 ? fmtPct(v) : i === 2 ? (v??0)+' 件' : fmtMoney(v)); } },
+                  },
+                },
+                scales: {
+                  x: { ticks: { color: tickColor, font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 }, grid: { color: gridColor, drawBorder: false } },
+                  yPct: { position: 'left', ticks: { color: '#10b981', font: { size: 10 }, callback: v => fmtPct(v) }, grid: { color: gridColor, drawBorder: false } },
+                  yRight: { position: 'right', ticks: { color: '#f59e0b', font: { size: 10 }, callback: fmtMoney }, grid: { drawOnChartArea: false } },
+                  yValue: { display: false },
+                },
+              },
             });
           }
-          this._portfolioChart.render();
         },
 
         // ── System Monitor ─────────────────────────────────────────────
