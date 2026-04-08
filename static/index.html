@@ -768,16 +768,29 @@
 
       <!-- Portfolio Value Trend Chart -->
       <div class="mt-4 mb-2">
-        <h3 class="text-xs text-slate-600 uppercase tracking-widest" x-text="nameLang==='cn'?'组合走势':'Portfolio Trend'"></h3>
+        <h3 class="text-xs text-slate-600 uppercase tracking-widest" x-text="nameLang==='cn'?'走势图表':'Trend Charts'"></h3>
       </div>
       <div class="card p-5 mt-5">
-        <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
           <div class="flex items-center gap-3">
-            <p class="text-[11px] text-slate-600 uppercase tracking-widest" x-text="t('portfolio_trend')"></p>
-            <span x-show="portfolioData.length" class="text-[9px] text-slate-700 font-mono"
+            <!-- 大类切换 -->
+            <div class="flex gap-0.5 p-0.5 rounded-lg" style="background: rgba(20,30,48,0.7); border: 1px solid rgba(51,65,85,0.3)">
+              <button @click="portfolioCategory='value'; $nextTick(() => renderPortfolioChart())"
+                class="px-2.5 py-1 rounded-md text-[10px] font-medium transition-all"
+                :class="portfolioCategory==='value' ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:text-slate-300'"
+                x-text="t('chart_cat_value')"></button>
+              <button @click="portfolioCategory='rental'; if(!trackerData.length) loadTracker(); else $nextTick(() => renderPortfolioChart())"
+                class="px-2.5 py-1 rounded-md text-[10px] font-medium transition-all"
+                :class="portfolioCategory==='rental' ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:text-slate-300'"
+                x-text="t('chart_cat_rental')"></button>
+            </div>
+            <span x-show="portfolioCategory==='value' && portfolioData.length" class="text-[9px] text-slate-700 font-mono"
               x-text="t('ts_latest') + ': ' + (portfolioData.length ? fmtMinute(portfolioData[portfolioData.length-1]?.snapshot_minute) : '')"></span>
+            <span x-show="portfolioCategory==='rental' && trackerData.length" class="text-[9px] text-slate-700 font-mono"
+              x-text="t('ts_latest') + ': ' + (trackerData[0]?.date || '')"></span>
           </div>
-          <div class="flex gap-0.5 p-0.5 rounded-lg" style="background: rgba(20,30,48,0.7); border: 1px solid rgba(51,65,85,0.3)">
+          <!-- 时间范围：仅组合价值模式 -->
+          <div x-show="portfolioCategory==='value'" class="flex gap-0.5 p-0.5 rounded-lg" style="background: rgba(20,30,48,0.7); border: 1px solid rgba(51,65,85,0.3)">
             <template x-for="r in ['24h','7d','30d','90d','all']">
               <button @click="portfolioRange=r; loadPortfolioHistory()"
                 class="px-2.5 py-1 rounded-md text-[10px] font-medium transition-all"
@@ -787,12 +800,18 @@
           </div>
         </div>
         <div id="portfolioChart"></div>
-        <div x-show="!portfolioData.length" class="flex items-center justify-center py-12">
+        <div x-show="portfolioCategory==='value' && !portfolioData.length" class="flex items-center justify-center py-12">
+          <p class="text-slate-600 text-sm" x-text="t('portfolio_no_data')"></p>
+        </div>
+        <div x-show="portfolioCategory==='rental' && !trackerData.length" class="flex items-center justify-center py-12">
           <p class="text-slate-600 text-sm" x-text="t('portfolio_no_data')"></p>
         </div>
         <div class="flex items-center mt-2 text-xs text-slate-700">
-          <span class="ml-auto text-[10px]" x-show="portfolioData.length">
+          <span class="ml-auto text-[10px]" x-show="portfolioCategory==='value' && portfolioData.length">
             <span x-text="portfolioData.length"></span> <span x-text="t('data_points')"></span>
+          </span>
+          <span class="ml-auto text-[10px]" x-show="portfolioCategory==='rental' && trackerData.length">
+            <span x-text="trackerData.length"></span> <span x-text="t('data_points')"></span>
           </span>
         </div>
       </div>
@@ -2972,6 +2991,7 @@
 
         // Portfolio trend chart
         portfolioRange: 'all',
+        portfolioCategory: 'value',  // 'value' | 'rental'
         portfolioData: [],
         _portfolioChart: null,
         monitorStatus: {},
@@ -3046,8 +3066,12 @@
           wait_refresh: ['待市价刷新后计算', 'Pending price refresh'],
           status_distribution: ['持仓状态分布', 'Status Distribution'],
           portfolio_trend: ['组合价值走势', 'Portfolio Value Trend'],
-          portfolio_no_data: ['暂无组合快照数据，系统将每30分钟自动记录', 'No portfolio data yet. Snapshots are recorded every 30 minutes.'],
+          portfolio_no_data: ['暂无数据', 'No data available'],
           data_points: ['个数据点', 'data points'],
+          chart_cat_value: ['组合价值', 'Portfolio Value'],
+          chart_cat_rental: ['租赁走势', 'Rental Trend'],
+          chart_pnl_pct: ['涨跌比', 'P&L %'],
+          chart_rented_value: ['出租价值', 'Rented Value'],
           system_monitor: ['系统监控', 'System Monitor'],
           sys_status: ['运行状态', 'Status'],
           sys_uptime: ['运行时间', 'Uptime'],
@@ -3326,7 +3350,7 @@
           this.$watch('activeTab', (tab) => {
             if (tab === 'tracker' && this.trackerData.length === 0) this.loadTracker();
             // ApexCharts 在 display:none 容器中渲染宽度为0，切换 tab 后延迟重绘
-            if (tab === 'overview' && this.portfolioData.length) setTimeout(() => { try { this.renderPortfolioChart(); } catch(e) { console.warn('Portfolio chart error:', e); } }, 50);
+            if (tab === 'overview') setTimeout(() => { try { this.renderPortfolioChart(); } catch(e) { console.warn('Portfolio chart error:', e); } }, 50);
             if (tab === 'tracker' && this.trackerData.length > 0) setTimeout(() => { try { this.renderTrackerChart(); } catch(e) { console.warn('Tracker chart error:', e); } }, 50);
           });
           // 持久化用户偏好到 localStorage
@@ -3512,7 +3536,13 @@
             ]);
             if (dailyR.ok) this.trackerData = await dailyR.json();
             if (monthlyR.ok) this.trackerMonthly = await monthlyR.json();
-            this.$nextTick(() => { try { this.renderTrackerChart(); } catch(e) { console.warn('Chart render error:', e); } });
+            this.$nextTick(() => {
+              try { this.renderTrackerChart(); } catch(e) { console.warn('Chart render error:', e); }
+              // 如果在概览页且选了租赁走势，也重绘
+              if (this.activeTab === 'overview' && this.portfolioCategory === 'rental') {
+                try { this.renderPortfolioChart(); } catch(e) { console.warn('Portfolio chart error:', e); }
+              }
+            });
           } catch (e) {
             this.showToast(e.message || 'Failed to load tracker data', 'error');
           } finally {
@@ -3690,44 +3720,83 @@
           const el = document.getElementById('portfolioChart');
           if (this._portfolioChart) { this._portfolioChart.destroy(); this._portfolioChart = null; }
           if (!el) return;
-          const data = this.portfolioData;
-          if (!data.length) return;
 
-          const fmtY = v => { if (v == null) return ''; const a = Math.abs(v); const s = v < 0 ? '-' : ''; return s + '¥' + (a >= 1e4 ? (a/1e4).toFixed(1)+'万' : a.toLocaleString()); };
-          const is24h = this.portfolioRange === '24h';
-
-          // x 标签必须唯一（同一天有多条30分钟记录），始终带时间
-          const mkS = (name, key) => ({
-            name,
-            data: data.map(d => {
-              const dt = new Date(d.timestamp);
-              const lbl = dt.toLocaleString('en-US', { timeZone:'America/Los_Angeles', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit', hour12:false });
-              return { x: lbl, y: d[key] ?? null };
-            }),
-          });
-
-          this._portfolioChart = new ApexCharts(el, {
-            chart: { type: 'area', height: 260, background: 'transparent',
+          const fmtMoney = v => { if (v == null) return ''; const a = Math.abs(v); const s = v < 0 ? '-' : ''; return s + '¥' + (a >= 1e4 ? (a/1e4).toFixed(1)+'万' : a.toLocaleString()); };
+          const fmtPct = v => v == null ? '' : v.toFixed(2) + '%';
+          const chartBase = {
+            chart: { type: 'line', height: 280, background: 'transparent',
               toolbar: { show: true, offsetY: -5, tools: { download: false, selection: false, zoom: true, zoomin: true, zoomout: true, pan: true, reset: true } },
               zoom: { enabled: true, type: 'x', autoScaleYaxis: true },
               fontFamily: 'ui-monospace, monospace',
             },
-            series: [
-              mkS(this.t('market_value'), 'market_value'),
-              mkS(this.t('total_cost'), 'total_cost'),
-              mkS(this.t('pnl_amount'), 'pnl'),
-            ],
-            stroke: { curve: 'smooth', width: [2.5, 2, 1.5], dashArray: [0, 5, 3] },
-            colors: ['#10b981', '#3b82f6', '#f59e0b'],
-            fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.15, opacityTo: 0.02 } },
             dataLabels: { enabled: false },
-            xaxis: { type: 'category', labels: { style: { colors: '#64748b', fontSize: '10px' }, rotate: 0, hideOverlappingLabels: true }, tickAmount: is24h ? 12 : 8, axisBorder: { show: false }, axisTicks: { show: false } },
-            yaxis: { labels: { style: { colors: '#64748b', fontSize: '10px' }, formatter: fmtY } },
             grid: { borderColor: 'rgba(51,65,85,0.2)', strokeDashArray: 3, padding: { left: 5, right: 5 } },
             legend: { position: 'top', horizontalAlign: 'left', offsetY: -5, labels: { colors: '#94a3b8' }, fontSize: '11px', markers: { width: 8, height: 8, radius: 2 }, itemMargin: { horizontal: 12 } },
-            tooltip: { theme: 'dark', shared: true, intersect: false, y: { formatter: v => v == null ? '—' : fmtY(v) } },
             theme: { mode: 'dark' },
-          });
+          };
+
+          if (this.portfolioCategory === 'value') {
+            // ── 组合价值模式 ──
+            const data = this.portfolioData;
+            if (!data.length) return;
+            const is24h = this.portfolioRange === '24h';
+            const mkS = (name, key) => ({
+              name,
+              data: data.map(d => {
+                const dt = new Date(d.timestamp);
+                const lbl = dt.toLocaleString('en-US', { timeZone:'America/Los_Angeles', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit', hour12:false });
+                return { x: lbl, y: d[key] ?? null };
+              }),
+            });
+            this._portfolioChart = new ApexCharts(el, {
+              ...chartBase,
+              series: [
+                mkS(this.t('market_value'), 'market_value'),
+                mkS(this.t('total_cost'), 'total_cost'),
+                mkS(this.t('pnl_amount'), 'pnl'),
+                mkS(this.t('chart_pnl_pct'), 'pnl_pct'),
+              ],
+              stroke: { curve: 'smooth', width: [2.5, 2, 1.5, 1.5], dashArray: [0, 5, 3, 0] },
+              colors: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'],
+              fill: { type: ['gradient','gradient','gradient','none'], gradient: { shadeIntensity: 1, opacityFrom: 0.12, opacityTo: 0.01 } },
+              xaxis: { type: 'category', labels: { style: { colors: '#64748b', fontSize: '10px' }, rotate: 0, hideOverlappingLabels: true }, tickAmount: is24h ? 12 : 8, axisBorder: { show: false }, axisTicks: { show: false } },
+              yaxis: [
+                { seriesName: this.t('market_value'), labels: { style: { colors: '#64748b', fontSize: '10px' }, formatter: fmtMoney }, title: { text: '' } },
+                { seriesName: this.t('total_cost'), show: false },
+                { seriesName: this.t('pnl_amount'), show: false },
+                { opposite: true, seriesName: this.t('chart_pnl_pct'), labels: { style: { colors: '#ef4444', fontSize: '10px' }, formatter: fmtPct }, title: { text: '' } },
+              ],
+              tooltip: { theme: 'dark', shared: true, intersect: false, y: { formatter: (v, { seriesIndex }) => v == null ? '—' : seriesIndex === 3 ? fmtPct(v) : fmtMoney(v) } },
+            });
+          } else {
+            // ── 租赁走势模式 ──
+            const data = [...this.trackerData].reverse();
+            if (!data.length) return;
+            const mkS = (name, key) => ({
+              name,
+              data: data.map(d => ({ x: d.date, y: d[key] ?? null })),
+            });
+            this._portfolioChart = new ApexCharts(el, {
+              ...chartBase,
+              series: [
+                mkS(this.t('tracker_col_combined'), 'combined_annual'),
+                mkS(this.t('tracker_col_income'), 'daily_income'),
+                mkS(this.t('tracker_col_rented'), 'rented_count'),
+                mkS(this.t('chart_rented_value'), 'rented_value'),
+              ],
+              stroke: { curve: 'smooth', width: [2.5, 2, 1.5, 1.5], dashArray: [0, 0, 0, 5] },
+              colors: ['#10b981', '#f59e0b', '#3b82f6', '#ec4899'],
+              fill: { type: ['gradient','none','none','none'], gradient: { shadeIntensity: 1, opacityFrom: 0.12, opacityTo: 0.01 } },
+              xaxis: { type: 'category', labels: { style: { colors: '#64748b', fontSize: '10px' }, rotate: 0, hideOverlappingLabels: true }, tickAmount: 8, axisBorder: { show: false }, axisTicks: { show: false } },
+              yaxis: [
+                { seriesName: this.t('tracker_col_combined'), labels: { style: { colors: '#10b981', fontSize: '10px' }, formatter: fmtPct }, title: { text: '' } },
+                { opposite: true, seriesName: this.t('tracker_col_income'), labels: { style: { colors: '#f59e0b', fontSize: '10px' }, formatter: fmtMoney }, title: { text: '' } },
+                { opposite: true, seriesName: this.t('tracker_col_rented'), show: false },
+                { opposite: true, seriesName: this.t('chart_rented_value'), show: false },
+              ],
+              tooltip: { theme: 'dark', shared: true, intersect: false, y: { formatter: (v, { seriesIndex }) => v == null ? '—' : seriesIndex === 0 ? fmtPct(v) : seriesIndex === 3 ? fmtMoney(v) : seriesIndex === 2 ? (v ?? 0) + ' 件' : fmtMoney(v) } },
+            });
+          }
           this._portfolioChart.render();
         },
 
