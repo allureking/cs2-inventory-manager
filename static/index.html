@@ -797,37 +797,6 @@
         </div>
       </div>
 
-      <!-- System Monitoring Status -->
-      <div class="card p-5 mt-5">
-        <div class="flex items-center justify-between mb-4">
-          <p class="text-[11px] text-slate-600 uppercase tracking-widest" x-text="t('system_monitor')"></p>
-          <button @click="loadMonitorStatus()" class="text-[10px] text-slate-600 hover:text-slate-400 transition-colors">
-            ↻ <span x-text="t('btn_refresh')"></span>
-          </button>
-        </div>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div class="p-3 rounded-xl" style="background: rgba(15,23,42,0.5); border: 1px solid rgba(51,65,85,0.2)">
-            <p class="text-[10px] text-slate-600 mb-1" x-text="t('sys_status')"></p>
-            <p class="text-sm font-semibold"
-              :class="monitorStatus.status==='healthy' ? 'text-emerald-400' : 'text-amber-400'"
-              x-text="monitorStatus.status || '—'"></p>
-          </div>
-          <div class="p-3 rounded-xl" style="background: rgba(15,23,42,0.5); border: 1px solid rgba(51,65,85,0.2)">
-            <p class="text-[10px] text-slate-600 mb-1" x-text="t('sys_uptime')"></p>
-            <p class="text-sm font-semibold text-slate-300" x-text="monitorStatus.uptime_human || '—'"></p>
-          </div>
-          <div class="p-3 rounded-xl" style="background: rgba(15,23,42,0.5); border: 1px solid rgba(51,65,85,0.2)">
-            <p class="text-[10px] text-slate-600 mb-1" x-text="t('sys_db_size')"></p>
-            <p class="text-sm font-semibold text-slate-300" x-text="monitorStatus.database?.size_mb ? monitorStatus.database.size_mb + ' MB' : '—'"></p>
-          </div>
-          <div class="p-3 rounded-xl" style="background: rgba(15,23,42,0.5); border: 1px solid rgba(51,65,85,0.2)">
-            <p class="text-[10px] text-slate-600 mb-1" x-text="t('sys_collector')"></p>
-            <p class="text-sm font-semibold"
-              :class="monitorStatus.collector?.status==='running' ? 'text-blue-400' : 'text-slate-400'"
-              x-text="monitorStatus.collector?.status || 'idle'"></p>
-          </div>
-        </div>
-      </div>
     </div>
 
     <!-- ════════════ LISTING TAB ════════════ -->
@@ -2516,6 +2485,40 @@
         </div>
       </div>
     </div>
+
+    <!-- ════════════ SYSTEM MONITORING (bottom of overview) ════════════ -->
+    <div x-show="activeTab==='overview'" class="mt-6">
+      <div class="card p-5">
+        <div class="flex items-center justify-between mb-4">
+          <p class="text-[11px] text-slate-600 uppercase tracking-widest" x-text="t('system_monitor')"></p>
+          <button @click="loadMonitorStatus()" class="text-[10px] text-slate-600 hover:text-slate-400 transition-colors">
+            ↻ <span x-text="t('btn_refresh')"></span>
+          </button>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div class="p-3 rounded-xl" style="background: rgba(15,23,42,0.5); border: 1px solid rgba(51,65,85,0.2)">
+            <p class="text-[10px] text-slate-600 mb-1" x-text="t('sys_status')"></p>
+            <p class="text-sm font-semibold"
+              :class="monitorStatus.status==='healthy' ? 'text-emerald-400' : 'text-amber-400'"
+              x-text="monitorStatus.status || '—'"></p>
+          </div>
+          <div class="p-3 rounded-xl" style="background: rgba(15,23,42,0.5); border: 1px solid rgba(51,65,85,0.2)">
+            <p class="text-[10px] text-slate-600 mb-1" x-text="t('sys_uptime')"></p>
+            <p class="text-sm font-semibold text-slate-300" x-text="monitorStatus.uptime_human || '—'"></p>
+          </div>
+          <div class="p-3 rounded-xl" style="background: rgba(15,23,42,0.5); border: 1px solid rgba(51,65,85,0.2)">
+            <p class="text-[10px] text-slate-600 mb-1" x-text="t('sys_db_size')"></p>
+            <p class="text-sm font-semibold text-slate-300" x-text="monitorStatus.database?.size_mb ? monitorStatus.database.size_mb + ' MB' : '—'"></p>
+          </div>
+          <div class="p-3 rounded-xl" style="background: rgba(15,23,42,0.5); border: 1px solid rgba(51,65,85,0.2)">
+            <p class="text-[10px] text-slate-600 mb-1" x-text="t('sys_collector')"></p>
+            <p class="text-sm font-semibold"
+              :class="monitorStatus.collector?.status==='running' ? 'text-blue-400' : 'text-slate-400'"
+              x-text="monitorStatus.collector?.status || 'idle'"></p>
+          </div>
+        </div>
+      </div>
+    </div>
   </main>
 
   <!-- ── Detail Side Panel ─────────────────────────────────────────────── -->
@@ -2980,7 +2983,7 @@
         _i18n: {
           // Navbar tabs
           tab_inventory: ['持仓列表', 'Inventory'],
-          tab_overview: ['资产概览', 'Overview'],
+          tab_overview: ['概览', 'Overview'],
           tab_listing: ['上架管理', 'Listing'],
           tab_analysis: ['量化分析', 'Analysis'],
           tab_tracker: ['收益追踪', 'Income Tracker'],
