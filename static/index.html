@@ -3723,78 +3723,77 @@
 
           const fmtMoney = v => { if (v == null) return ''; const a = Math.abs(v); const s = v < 0 ? '-' : ''; return s + '¥' + (a >= 1e4 ? (a/1e4).toFixed(1)+'万' : a.toLocaleString()); };
           const fmtPct = v => v == null ? '' : v.toFixed(2) + '%';
-          const chartBase = {
-            chart: { type: 'line', height: 280, background: 'transparent',
-              toolbar: { show: true, offsetY: -5, tools: { download: false, selection: false, zoom: true, zoomin: true, zoomout: true, pan: true, reset: true } },
-              zoom: { enabled: true, type: 'x', autoScaleYaxis: true },
-              fontFamily: 'ui-monospace, monospace',
-            },
-            dataLabels: { enabled: false },
-            grid: { borderColor: 'rgba(51,65,85,0.2)', strokeDashArray: 3, padding: { left: 5, right: 5 } },
-            legend: { position: 'top', horizontalAlign: 'left', offsetY: -5, labels: { colors: '#94a3b8' }, fontSize: '11px', markers: { width: 8, height: 8, radius: 2 }, itemMargin: { horizontal: 12 } },
-            theme: { mode: 'dark' },
-          };
 
           if (this.portfolioCategory === 'value') {
-            // ── 组合价值模式 ──
+            // ── 组合价值模式：4条线，左Y轴金额，右Y轴百分比 ──
             const data = this.portfolioData;
             if (!data.length) return;
             const is24h = this.portfolioRange === '24h';
-            const mkS = (name, key) => ({
-              name,
-              data: data.map(d => {
-                const dt = new Date(d.timestamp);
-                const lbl = dt.toLocaleString('en-US', { timeZone:'America/Los_Angeles', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit', hour12:false });
-                return { x: lbl, y: d[key] ?? null };
-              }),
-            });
+            const mkLabel = d => {
+              const dt = new Date(d.timestamp);
+              return dt.toLocaleString('en-US', { timeZone:'America/Los_Angeles', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit', hour12:false });
+            };
+            const categories = data.map(mkLabel);
             this._portfolioChart = new ApexCharts(el, {
-              ...chartBase,
+              chart: { type: 'line', height: 280, background: 'transparent',
+                toolbar: { show: true, offsetY: -5, tools: { download: false, selection: false, zoom: true, zoomin: true, zoomout: true, pan: true, reset: true } },
+                zoom: { enabled: true, type: 'x', autoScaleYaxis: true },
+                fontFamily: 'ui-monospace, monospace',
+              },
               series: [
-                mkS(this.t('market_value'), 'market_value'),
-                mkS(this.t('total_cost'), 'total_cost'),
-                mkS(this.t('pnl_amount'), 'pnl'),
-                mkS(this.t('chart_pnl_pct'), 'pnl_pct'),
+                { name: this.t('market_value'), data: data.map(d => d.market_value ?? null) },
+                { name: this.t('total_cost'), data: data.map(d => d.total_cost ?? null) },
+                { name: this.t('pnl_amount'), data: data.map(d => d.pnl ?? null) },
+                { name: this.t('chart_pnl_pct'), data: data.map(d => d.pnl_pct ?? null) },
               ],
               stroke: { curve: 'smooth', width: [2.5, 2, 1.5, 1.5], dashArray: [0, 5, 3, 0] },
               colors: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'],
-              fill: { type: ['gradient','gradient','gradient','none'], gradient: { shadeIntensity: 1, opacityFrom: 0.12, opacityTo: 0.01 } },
-              xaxis: { type: 'category', labels: { style: { colors: '#64748b', fontSize: '10px' }, rotate: 0, hideOverlappingLabels: true }, tickAmount: is24h ? 12 : 8, axisBorder: { show: false }, axisTicks: { show: false } },
+              fill: { type: 'solid', opacity: [0.08, 0, 0, 0] },
+              dataLabels: { enabled: false },
+              xaxis: { categories, type: 'category', labels: { style: { colors: '#64748b', fontSize: '10px' }, rotate: 0, hideOverlappingLabels: true }, tickAmount: is24h ? 12 : 8, axisBorder: { show: false }, axisTicks: { show: false } },
               yaxis: [
-                { seriesName: this.t('market_value'), labels: { style: { colors: '#64748b', fontSize: '10px' }, formatter: fmtMoney }, title: { text: '' } },
-                { seriesName: this.t('total_cost'), show: false },
-                { seriesName: this.t('pnl_amount'), show: false },
-                { opposite: true, seriesName: this.t('chart_pnl_pct'), labels: { style: { colors: '#ef4444', fontSize: '10px' }, formatter: fmtPct }, title: { text: '' } },
+                { labels: { style: { colors: '#64748b', fontSize: '10px' }, formatter: fmtMoney } },
+                { show: false, labels: { formatter: fmtMoney } },
+                { show: false, labels: { formatter: fmtMoney } },
+                { opposite: true, labels: { style: { colors: '#ef4444', fontSize: '10px' }, formatter: fmtPct } },
               ],
+              grid: { borderColor: 'rgba(51,65,85,0.2)', strokeDashArray: 3, padding: { left: 5, right: 5 } },
+              legend: { position: 'top', horizontalAlign: 'left', offsetY: -5, labels: { colors: '#94a3b8' }, fontSize: '11px', markers: { width: 8, height: 8, radius: 2 }, itemMargin: { horizontal: 12 } },
               tooltip: { theme: 'dark', shared: true, intersect: false, y: { formatter: (v, { seriesIndex }) => v == null ? '—' : seriesIndex === 3 ? fmtPct(v) : fmtMoney(v) } },
+              theme: { mode: 'dark' },
             });
           } else {
-            // ── 租赁走势模式 ──
+            // ── 租赁走势模式：4条线，左Y轴百分比，右Y轴金额 ──
             const data = [...this.trackerData].reverse();
             if (!data.length) return;
-            const mkS = (name, key) => ({
-              name,
-              data: data.map(d => ({ x: d.date, y: d[key] ?? null })),
-            });
+            const categories = data.map(d => d.date);
             this._portfolioChart = new ApexCharts(el, {
-              ...chartBase,
+              chart: { type: 'line', height: 280, background: 'transparent',
+                toolbar: { show: true, offsetY: -5, tools: { download: false, selection: false, zoom: true, zoomin: true, zoomout: true, pan: true, reset: true } },
+                zoom: { enabled: true, type: 'x', autoScaleYaxis: true },
+                fontFamily: 'ui-monospace, monospace',
+              },
               series: [
-                mkS(this.t('tracker_col_combined'), 'combined_annual'),
-                mkS(this.t('tracker_col_income'), 'daily_income'),
-                mkS(this.t('tracker_col_rented'), 'rented_count'),
-                mkS(this.t('chart_rented_value'), 'rented_value'),
+                { name: this.t('tracker_col_combined'), data: data.map(d => d.combined_annual != null ? +(d.combined_annual * 100).toFixed(2) : null) },
+                { name: this.t('tracker_col_income'), data: data.map(d => d.daily_income ?? null) },
+                { name: this.t('tracker_col_rented'), data: data.map(d => d.rented_count ?? null) },
+                { name: this.t('chart_rented_value'), data: data.map(d => d.rented_value ?? null) },
               ],
               stroke: { curve: 'smooth', width: [2.5, 2, 1.5, 1.5], dashArray: [0, 0, 0, 5] },
               colors: ['#10b981', '#f59e0b', '#3b82f6', '#ec4899'],
-              fill: { type: ['gradient','none','none','none'], gradient: { shadeIntensity: 1, opacityFrom: 0.12, opacityTo: 0.01 } },
-              xaxis: { type: 'category', labels: { style: { colors: '#64748b', fontSize: '10px' }, rotate: 0, hideOverlappingLabels: true }, tickAmount: 8, axisBorder: { show: false }, axisTicks: { show: false } },
+              fill: { type: 'solid', opacity: [0.08, 0, 0, 0] },
+              dataLabels: { enabled: false },
+              xaxis: { categories, type: 'category', labels: { style: { colors: '#64748b', fontSize: '10px' }, rotate: 0, hideOverlappingLabels: true }, tickAmount: 8, axisBorder: { show: false }, axisTicks: { show: false } },
               yaxis: [
-                { seriesName: this.t('tracker_col_combined'), labels: { style: { colors: '#10b981', fontSize: '10px' }, formatter: fmtPct }, title: { text: '' } },
-                { opposite: true, seriesName: this.t('tracker_col_income'), labels: { style: { colors: '#f59e0b', fontSize: '10px' }, formatter: fmtMoney }, title: { text: '' } },
-                { opposite: true, seriesName: this.t('tracker_col_rented'), show: false },
-                { opposite: true, seriesName: this.t('chart_rented_value'), show: false },
+                { labels: { style: { colors: '#10b981', fontSize: '10px' }, formatter: fmtPct } },
+                { opposite: true, labels: { style: { colors: '#f59e0b', fontSize: '10px' }, formatter: fmtMoney } },
+                { opposite: true, show: false },
+                { opposite: true, show: false },
               ],
-              tooltip: { theme: 'dark', shared: true, intersect: false, y: { formatter: (v, { seriesIndex }) => v == null ? '—' : seriesIndex === 0 ? fmtPct(v) : seriesIndex === 3 ? fmtMoney(v) : seriesIndex === 2 ? (v ?? 0) + ' 件' : fmtMoney(v) } },
+              grid: { borderColor: 'rgba(51,65,85,0.2)', strokeDashArray: 3, padding: { left: 5, right: 5 } },
+              legend: { position: 'top', horizontalAlign: 'left', offsetY: -5, labels: { colors: '#94a3b8' }, fontSize: '11px', markers: { width: 8, height: 8, radius: 2 }, itemMargin: { horizontal: 12 } },
+              tooltip: { theme: 'dark', shared: true, intersect: false, y: { formatter: (v, { seriesIndex }) => v == null ? '—' : seriesIndex === 0 ? fmtPct(v) : seriesIndex === 2 ? (v ?? 0) + ' 件' : fmtMoney(v) } },
+              theme: { mode: 'dark' },
             });
           }
           this._portfolioChart.render();
