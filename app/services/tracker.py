@@ -18,6 +18,7 @@ import re
 from calendar import monthrange
 from datetime import date, datetime, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, select, func, or_
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -119,7 +120,7 @@ async def snapshot_daily(is_vip: bool = True) -> dict:
     from app.core.database import AsyncSessionLocal
     from app.services.youpin import fetch_lease_records, get_active_token
 
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d")
 
     # 1) 租赁统计
     rental = {"count": 0, "value": 0.0, "income": 0.0}

@@ -1907,6 +1907,13 @@
                 :class="trackerChartType===ct.key ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-slate-300'"
                 x-text="nameLang==='cn' ? ct.cn : ct.en"></button>
             </template>
+            <span class="text-slate-700 mx-1">|</span>
+            <template x-for="g in [{key:'daily',cn:'日',en:'D'},{key:'hourly',cn:'时',en:'H'}]">
+              <button @click="trackerGranularity=g.key; renderTrackerChart()"
+                class="px-1.5 py-1 rounded text-xs transition-all"
+                :class="trackerGranularity===g.key ? 'bg-slate-600 text-white' : 'text-slate-600 hover:text-slate-400'"
+                x-text="nameLang==='cn' ? g.cn : g.en"></button>
+            </template>
           </div>
           <div id="trackerChart"></div>
         </div>
@@ -2662,6 +2669,7 @@
         trackerSnapshotting: false,
         _trackerChart: null,
         trackerChartType: 'combined_annual',
+        trackerGranularity: 'daily',
         overview: {},
         items: [],
         total: 0,
@@ -3579,23 +3587,44 @@
 
         renderTrackerChart() {
           const el = document.getElementById('trackerChart');
-          if (!el || !this.trackerData?.length) return;
           if (this._trackerChart) { this._trackerChart.destroy(); this._trackerChart = null; }
+          if (!el) return;
 
-          const data = [...this.trackerData].reverse();
           const key = this.trackerChartType;
           const isPct = ['combined_annual','short_lease_annual','long_lease_annual','price_change'].includes(key);
-          const isMoney = ['daily_income','inventory_value','rented_value'].includes(key);
-          const nameMap = { combined_annual:'综合年化', daily_income:'日租金', inventory_value:'库存价值', price_change:'涨跌', short_lease_annual:'短租年化', long_lease_annual:'长租年化', rented_value:'出租价值' };
+          const isMoney = ['daily_income','inventory_value','rented_value','market_value'].includes(key);
+          const nameMap = { combined_annual:'综合年化', daily_income:'日租金', inventory_value:'库存价值', price_change:'涨跌', short_lease_annual:'短租年化', long_lease_annual:'长租年化', rented_value:'出租价值', market_value:'总市值' };
           const label = this.nameLang === 'cn' ? (nameMap[key] || key) : key.replace(/_/g,' ');
+          const fmtY = v => v == null ? '' : isPct ? v.toFixed(1)+'%' : isMoney ? (v>=1e4?'¥'+(v/1e4).toFixed(1)+'万':'¥'+v.toFixed(0)) : v;
+          const fmtTip = v => v == null ? '—' : isPct ? v.toFixed(2)+'%' : isMoney ? '¥'+Number(v).toLocaleString() : v;
 
-          const series = data.map(d => {
-            const v = d[key];
-            return { x: d.date.slice(5), y: v != null ? (isPct ? +(v * 100).toFixed(2) : +Number(v).toFixed(2)) : null };
-          });
+          let series, chartHeight = 200;
+
+          if (this.trackerGranularity === 'hourly' && this.portfolioData.length) {
+            // 时模式：用 portfolio_snapshot 数据（30分钟粒度）
+            // 映射 trackerChartType → portfolio_snapshot 字段
+            const fieldMap = { inventory_value: 'market_value', market_value: 'market_value', combined_annual: 'pnl_pct', price_change: 'pnl_pct', daily_income: 'pnl', rented_value: 'rented_out_value' };
+            const pKey = fieldMap[key] || 'market_value';
+            const pIsPct = ['pnl_pct'].includes(pKey);
+            series = this.portfolioData.map(d => {
+              const dt = new Date(d.timestamp);
+              const lbl = dt.toLocaleString('en-US', { timeZone:'America/Los_Angeles', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit', hour12:false });
+              const v = d[pKey];
+              return { x: lbl, y: v != null ? (pIsPct ? +Number(v).toFixed(2) : +Number(v).toFixed(2)) : null };
+            });
+            chartHeight = 240;
+          } else {
+            // 日模式：用 daily_tracker 数据
+            if (!this.trackerData?.length) return;
+            const data = [...this.trackerData].reverse();
+            series = data.map(d => {
+              const v = d[key];
+              return { x: d.date.slice(5), y: v != null ? (isPct ? +(v * 100).toFixed(2) : +Number(v).toFixed(2)) : null };
+            });
+          }
 
           this._trackerChart = new ApexCharts(el, {
-            chart: { type: 'area', height: 200, background: 'transparent',
+            chart: { type: 'area', height: chartHeight, background: 'transparent',
               toolbar: { show: true, offsetY: -5, tools: { download: false, selection: false, zoom: true, zoomin: true, zoomout: true, pan: true, reset: true } },
               zoom: { enabled: true, type: 'x', autoScaleYaxis: true },
               fontFamily: 'ui-monospace, monospace',
@@ -3606,9 +3635,9 @@
             colors: ['#3b82f6'],
             dataLabels: { enabled: false },
             xaxis: { type: 'category', labels: { style: { colors: '#64748b', fontSize: '10px' }, rotate: 0, hideOverlappingLabels: true }, tickAmount: 10, axisBorder: { show: false }, axisTicks: { show: false } },
-            yaxis: { labels: { style: { colors: '#64748b', fontSize: '10px' }, formatter: v => v == null ? '' : isPct ? v.toFixed(1)+'%' : isMoney ? (v>=10000?'¥'+(v/10000).toFixed(1)+'w':'¥'+v.toFixed(0)) : v } },
+            yaxis: { labels: { style: { colors: '#64748b', fontSize: '10px' }, formatter: fmtY } },
             grid: { borderColor: 'rgba(51,65,85,0.2)', strokeDashArray: 3, padding: { left: 5, right: 5 } },
-            tooltip: { theme: 'dark', y: { formatter: v => v == null ? '—' : isPct ? v.toFixed(2)+'%' : isMoney ? '¥'+Number(v).toLocaleString() : v } },
+            tooltip: { theme: 'dark', y: { formatter: fmtTip } },
             theme: { mode: 'dark' },
           });
           this._trackerChart.render();

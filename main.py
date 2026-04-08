@@ -61,27 +61,31 @@ async def startup():
     await init_db()
 
     # ── Background jobs ──
-    # Price collection: every 30 min, on :00/:30
+    _PDT = "America/Los_Angeles"  # 自动处理 PDT/PST 夏令时切换
+
+    # Price collection: every 30 min, on :00/:30 (UTC, 不受时区影响)
     scheduler.add_job(collect_prices, "cron", minute="0,30", id="price_collect",
                       misfire_grace_time=300, max_instances=1)
-    # Daily aggregation: 00:05 UTC
-    scheduler.add_job(aggregate_daily, "cron", hour=0, minute=5, id="daily_aggregate",
-                      misfire_grace_time=600)
-    # Signal computation: 00:10 UTC
-    scheduler.add_job(compute_signals, "cron", hour=0, minute=10, id="daily_signals",
-                      misfire_grace_time=600)
-    # Portfolio snapshot: every 30 min, on :15/:45 (offset from price collect for fresh data)
+    # Portfolio snapshot: every 30 min, on :15/:45 (UTC, 不受时区影响)
     scheduler.add_job(snapshot_portfolio, "cron", minute="15,45", id="portfolio_snapshot",
                       misfire_grace_time=300, max_instances=1)
-    # Cleanup old snapshots: 01:00 UTC
+    # Cleanup old snapshots: 01:00 PDT
     scheduler.add_job(cleanup_old_snapshots, "cron", hour=1, minute=0, id="cleanup_snapshots",
-                      misfire_grace_time=600)
-    # CSQAQ data sync: 00:02 UTC (before aggregate + signals)
+                      timezone=_PDT, misfire_grace_time=600)
+
+    # ── 每日任务：美西时间 00:00 起依次执行 ──
+    # Daily tracker snapshot: 00:00 PDT
+    scheduler.add_job(snapshot_daily, "cron", hour=0, minute=0, id="daily_tracker",
+                      timezone=_PDT, misfire_grace_time=600)
+    # CSQAQ data sync: 00:02 PDT
     scheduler.add_job(csqaq_daily_sync, "cron", hour=0, minute=2, id="csqaq_sync",
-                      misfire_grace_time=600)
-    # Daily tracker snapshot: 00:01 UTC
-    scheduler.add_job(snapshot_daily, "cron", hour=0, minute=1, id="daily_tracker",
-                      misfire_grace_time=600)
+                      timezone=_PDT, misfire_grace_time=600)
+    # Daily aggregation: 00:05 PDT
+    scheduler.add_job(aggregate_daily, "cron", hour=0, minute=5, id="daily_aggregate",
+                      timezone=_PDT, misfire_grace_time=600)
+    # Signal computation: 00:10 PDT
+    scheduler.add_job(compute_signals, "cron", hour=0, minute=10, id="daily_signals",
+                      timezone=_PDT, misfire_grace_time=600)
 
     scheduler.start()
     logger.info("APScheduler started with 7 background jobs")
