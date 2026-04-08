@@ -2994,7 +2994,7 @@
         portfolioRange: 'all',
         portfolioCategory: 'value',  // 'value' | 'rental'
         portfolioData: [],
-        _portfolioChart: null,
+        // _portfolioChart stored on canvas.__chart to avoid Alpine Proxy
         monitorStatus: {},
 
         // 涨跌色模式：'cn'=红涨绿跌（默认） 'us'=绿涨红跌
@@ -3719,7 +3719,8 @@
 
         renderPortfolioChart() {
           const canvas = document.getElementById('portfolioChart');
-          if (this._portfolioChart) { this._portfolioChart.destroy(); this._portfolioChart = null; }
+          // Chart 实例存在 DOM 元素上，避免被 Alpine Proxy 包装导致无限递归
+          if (canvas?.__chart) { canvas.__chart.destroy(); canvas.__chart = null; }
           if (!canvas) return;
           const ctx = canvas.getContext('2d');
           if (!ctx) return;
@@ -3737,7 +3738,7 @@
               const dt = new Date(d.timestamp);
               return dt.toLocaleString('en-US', { timeZone:'America/Los_Angeles', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit', hour12:false });
             });
-            this._portfolioChart = new Chart(ctx, {
+            canvas.__chart = new Chart(ctx, {
               type: 'line',
               data: {
                 labels,
@@ -3769,7 +3770,7 @@
             const data = [...this.trackerData].reverse();
             if (!data.length) return;
             const labels = data.map(d => d.date);
-            this._portfolioChart = new Chart(ctx, {
+            canvas.__chart = new Chart(ctx, {
               type: 'line',
               data: {
                 labels,
