@@ -279,14 +279,14 @@
 
       <!-- Tabs -->
       <nav class="flex gap-0.5 p-1 rounded-xl" style="background: rgba(20,30,48,0.7); border: 1px solid rgba(51,65,85,0.3)">
-        <button @click="activeTab='inventory'"
-          class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
-          :class="activeTab==='inventory' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'"
-          x-text="t('tab_inventory')"></button>
         <button @click="activeTab='overview'"
           class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
           :class="activeTab==='overview' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'"
           x-text="t('tab_overview')"></button>
+        <button @click="activeTab='tracker'"
+          class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
+          :class="activeTab==='tracker' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'"
+          x-text="t('tab_tracker')"></button>
         <button @click="activeTab='listing'; loadShelf()"
           class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
           :class="activeTab==='listing' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'"
@@ -299,10 +299,6 @@
             class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center font-bold"
             x-text="unreadAlertCount>9?'9+':unreadAlertCount"></span>
         </button>
-        <button @click="activeTab='tracker'"
-          class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
-          :class="activeTab==='tracker' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'"
-          x-text="t('tab_tracker')"></button>
         <button @click="activeTab='changelog'"
           class="px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
           :class="activeTab==='changelog' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'"
@@ -2188,8 +2184,8 @@
       </div>
     </div>
 
-    <!-- ════════════ INVENTORY TAB ════════════ -->
-    <div x-show="activeTab==='inventory'">
+    <!-- ════════════ INVENTORY (embedded in overview) ════════════ -->
+    <div x-show="activeTab==='overview'">
 
       <!-- Mini strip -->
       <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mb-2 px-1 text-[10px] text-slate-700">
@@ -2667,7 +2663,7 @@
   <script>
     function app() {
       return {
-        activeTab: 'inventory',
+        activeTab: 'overview',
         trackerData: [],
         trackerMonthly: [],
         trackerLoading: false,
@@ -3683,7 +3679,7 @@
             const d = await r.json();
             this.portfolioData = d.data || [];
             // 仅在 overview tab 可见时渲染，否则等 $watch 切 tab 时重绘
-            if (this.activeTab === 'overview') setTimeout(() => this.renderPortfolioChart(), 50);
+            setTimeout(() => { try { this.renderPortfolioChart(); } catch(e) { console.warn('Portfolio chart error:', e); } }, 50);
           } catch (e) { this.showToast(e.message || '加载持仓历史失败', 'error'); }
         },
 
