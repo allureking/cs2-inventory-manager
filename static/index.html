@@ -3321,8 +3321,8 @@
           this.$watch('activeTab', (tab) => {
             if (tab === 'tracker' && this.trackerData.length === 0) this.loadTracker();
             // ApexCharts 在 display:none 容器中渲染宽度为0，切换 tab 后延迟重绘
-            if (tab === 'overview' && this.portfolioData.length) setTimeout(() => this.renderPortfolioChart(), 50);
-            if (tab === 'tracker' && this.trackerData.length > 0) setTimeout(() => this.renderTrackerChart(), 50);
+            if (tab === 'overview' && this.portfolioData.length) setTimeout(() => { try { this.renderPortfolioChart(); } catch(e) { console.warn('Portfolio chart error:', e); } }, 50);
+            if (tab === 'tracker' && this.trackerData.length > 0) setTimeout(() => { try { this.renderTrackerChart(); } catch(e) { console.warn('Tracker chart error:', e); } }, 50);
           });
           // 持久化用户偏好到 localStorage
           this.$watch('nameLang', v => localStorage.setItem('nameLang', v));
@@ -3507,7 +3507,7 @@
             ]);
             if (dailyR.ok) this.trackerData = await dailyR.json();
             if (monthlyR.ok) this.trackerMonthly = await monthlyR.json();
-            this.$nextTick(() => this.renderTrackerChart());
+            this.$nextTick(() => { try { this.renderTrackerChart(); } catch(e) { console.warn('Chart render error:', e); } });
           } catch (e) {
             this.showToast(e.message || 'Failed to load tracker data', 'error');
           } finally {
