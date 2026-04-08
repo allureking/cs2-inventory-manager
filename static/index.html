@@ -1982,7 +1982,7 @@
                 </tr>
               </thead>
               <tbody>
-                <template x-for="row in trackerData" :key="row.date">
+                <template x-for="row in trackerData.slice(0, trackerShowAll ? 9999 : 30)" :key="row.date">
                   <tr class="border-b border-slate-700/30 hover:bg-slate-700/20">
                     <!-- 日期 (只读, hover 显示完整 UTC 时间戳) -->
                     <td class="py-1.5 px-2 text-slate-300 sticky left-0 bg-slate-900/80 font-mono"
@@ -2079,6 +2079,11 @@
                 </template>
               </tbody>
             </table>
+          </div>
+          <div class="text-center py-2" x-show="trackerData.length > 30 && !trackerShowAll">
+            <button @click="trackerShowAll=true" class="text-xs text-slate-500 hover:text-slate-300 transition-colors">
+              <span x-text="(nameLang==='cn'?'显示全部 ':'Show all ') + trackerData.length + (nameLang==='cn'?' 条记录':' records')"></span> ↓
+            </button>
           </div>
         </div>
 
@@ -2670,6 +2675,7 @@
         _trackerChart: null,
         trackerChartType: 'combined_annual',
         trackerGranularity: 'daily',
+        trackerShowAll: false,
         overview: {},
         items: [],
         total: 0,
@@ -3505,7 +3511,7 @@
               fetch('/api/tracker/daily'),
               fetch('/api/tracker/monthly?year=' + new Date().getFullYear()),
             ]);
-            if (dailyR.ok) { this.trackerData = await dailyR.json(); console.log('trackerData loaded:', this.trackerData.length, 'rows'); }
+            if (dailyR.ok) this.trackerData = await dailyR.json();
             if (monthlyR.ok) this.trackerMonthly = await monthlyR.json();
             this.$nextTick(() => { try { this.renderTrackerChart(); } catch(e) { console.warn('Chart render error:', e); } });
           } catch (e) {
