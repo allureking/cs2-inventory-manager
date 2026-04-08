@@ -3505,7 +3505,7 @@
               fetch('/api/tracker/daily'),
               fetch('/api/tracker/monthly?year=' + new Date().getFullYear()),
             ]);
-            if (dailyR.ok) this.trackerData = await dailyR.json();
+            if (dailyR.ok) { this.trackerData = await dailyR.json(); console.log('trackerData loaded:', this.trackerData.length, 'rows'); }
             if (monthlyR.ok) this.trackerMonthly = await monthlyR.json();
             this.$nextTick(() => { try { this.renderTrackerChart(); } catch(e) { console.warn('Chart render error:', e); } });
           } catch (e) {
