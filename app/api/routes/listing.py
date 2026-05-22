@@ -381,7 +381,7 @@ async def create_snapshot(body: SnapshotCreate):
         if not all_items:
             raise HTTPException(400, "货架为空，无数据可快照")
 
-        total_value = sum(float(i.get("price") or 0) for i in all_items)
+        total_value = sum(float(i.get("price") or 0) for i in all_items if i.get("price") not in (None, ""))
         snap_name = body.name or f"{'出售' if shelf_type == 'sell' else '出租'}快照 ({len(all_items)}件)"
 
         async with AsyncSessionLocal() as sess:
@@ -405,6 +405,22 @@ async def create_snapshot(body: SnapshotCreate):
             sess.add(snapshot)
             await sess.flush()
 
+            def _float(v):
+                if v is None or v == "":
+                    return None
+                try:
+                    return float(v)
+                except (ValueError, TypeError):
+                    return None
+
+            def _int(v):
+                if v is None or v == "":
+                    return None
+                try:
+                    return int(v)
+                except (ValueError, TypeError):
+                    return None
+
             for item in all_items:
                 asset_id = str(item.get("steamAssetId") or "")
                 sess.add(ListingSnapshotItem(
@@ -412,16 +428,16 @@ async def create_snapshot(body: SnapshotCreate):
                     commodity_hash_name=item.get("commodityHashName") or "",
                     name=item.get("name") or "",
                     img_url=item.get("imgUrl"),
-                    abrade=item.get("abrade"),
-                    template_id=item.get("templateId"),
-                    commodity_id=item.get("commodityId"),
+                    abrade=_float(item.get("abrade")),
+                    template_id=_int(item.get("templateId")),
+                    commodity_id=_int(item.get("commodityId")),
                     steam_asset_id=asset_id or None,
-                    sell_price=item.get("price"),
-                    lease_unit_price=item.get("leaseUnitPrice"),
-                    long_lease_price=item.get("longLeasePrice"),
-                    lease_deposit=item.get("leaseDeposit"),
-                    lease_max_days=item.get("leaseMaxDays"),
-                    open_sublet=item.get("openSublet"),
+                    sell_price=_float(item.get("price")),
+                    lease_unit_price=_float(item.get("leaseUnitPrice")),
+                    long_lease_price=_float(item.get("longLeasePrice")),
+                    lease_deposit=_float(item.get("leaseDeposit")),
+                    lease_max_days=_int(item.get("leaseMaxDays")),
+                    open_sublet=item.get("openSublet") if item.get("openSublet") not in (None, "") else None,
                     purchase_price=cost_map.get(asset_id),
                 ))
             await sess.commit()
