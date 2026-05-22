@@ -14,11 +14,15 @@ GET  /api/listing/preview          — 预览定价（仅查价不上架）
 
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import delete, select
 
+from app.core.database import AsyncSessionLocal
+from app.models.db_models import ListingSnapshot, ListingSnapshotItem, InventoryItem
 from app.services.youpin import TokenExpiredError
 from app.services.youpin_listing import (
     calc_lease_price,
@@ -343,3 +347,159 @@ async def delist_api(commodity_id: int):
         return await delist_item([commodity_id])
     except Exception as e:
         _handle_token_error(e)
+
+
+# ── 挂售快照 ──────────────────────────────────────────────────────────────────
+
+log = logging.getLogger(__name__)
+
+
+class SnapshotCreate(BaseModel):
+    name: str = ""
+    shelf_type: str = "sell"
+    notes: Optional[str] = None
+
+
+@router.post("/snapshot")
+async def create_snapshot(body: SnapshotCreate):
+    """拉取当前货架数据并保存为快照"""
+    try:
+        shelf_type = body.shelf_type
+        all_items: list[dict] = []
+        page = 1
+        while True:
+            if shelf_type == "lease":
+                result = await get_lease_shelf(page=page, page_size=100)
+            else:
+                result = await get_sell_shelf(page=page, page_size=100)
+            items = result.get("items", [])
+            all_items.extend(items)
+            if len(all_items) >= result.get("total", 0) or not items:
+                break
+            page += 1
+
+        if not all_items:
+            raise HTTPException(400, "货架为空，无数据可快照")
+
+        total_value = sum(float(i.get("price") or 0) for i in all_items)
+        snap_name = body.name or f"{'出售' if shelf_type == 'sell' else '出租'}快照 ({len(all_items)}件)"
+
+        async with AsyncSessionLocal() as sess:
+            # 查询本地成本数据用于关联
+            cost_map: dict[str, float] = {}
+            inv_rows = (await sess.execute(
+                select(InventoryItem.asset_id, InventoryItem.purchase_price, InventoryItem.purchase_price_manual)
+            )).all()
+            for row in inv_rows:
+                cost = row.purchase_price_manual or row.purchase_price
+                if cost and row.asset_id:
+                    cost_map[str(row.asset_id)] = cost
+
+            snapshot = ListingSnapshot(
+                name=snap_name,
+                shelf_type=shelf_type,
+                item_count=len(all_items),
+                total_value=round(total_value, 2),
+                notes=body.notes,
+            )
+            sess.add(snapshot)
+            await sess.flush()
+
+            for item in all_items:
+                asset_id = str(item.get("steamAssetId") or "")
+                sess.add(ListingSnapshotItem(
+                    snapshot_id=snapshot.id,
+                    commodity_hash_name=item.get("commodityHashName") or "",
+                    name=item.get("name") or "",
+                    img_url=item.get("imgUrl"),
+                    abrade=item.get("abrade"),
+                    template_id=item.get("templateId"),
+                    commodity_id=item.get("commodityId"),
+                    steam_asset_id=asset_id or None,
+                    sell_price=item.get("price"),
+                    lease_unit_price=item.get("leaseUnitPrice"),
+                    long_lease_price=item.get("longLeasePrice"),
+                    lease_deposit=item.get("leaseDeposit"),
+                    lease_max_days=item.get("leaseMaxDays"),
+                    open_sublet=item.get("openSublet"),
+                    purchase_price=cost_map.get(asset_id),
+                ))
+            await sess.commit()
+
+        return {"id": snapshot.id, "name": snap_name, "item_count": len(all_items), "total_value": round(total_value, 2)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        _handle_token_error(e)
+        raise HTTPException(500, str(e))
+
+
+@router.get("/snapshots")
+async def list_snapshots():
+    """列出所有快照"""
+    async with AsyncSessionLocal() as sess:
+        rows = (await sess.execute(
+            select(ListingSnapshot).order_by(ListingSnapshot.created_at.desc())
+        )).scalars().all()
+        return [
+            {
+                "id": s.id, "name": s.name, "shelf_type": s.shelf_type,
+                "item_count": s.item_count, "total_value": s.total_value,
+                "notes": s.notes,
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+            }
+            for s in rows
+        ]
+
+
+@router.get("/snapshot/{snapshot_id}")
+async def get_snapshot(snapshot_id: int):
+    """获取快照详情（含所有饰品）"""
+    async with AsyncSessionLocal() as sess:
+        snap = await sess.get(ListingSnapshot, snapshot_id)
+        if not snap:
+            raise HTTPException(404, "快照不存在")
+        items = (await sess.execute(
+            select(ListingSnapshotItem)
+            .where(ListingSnapshotItem.snapshot_id == snapshot_id)
+            .order_by(ListingSnapshotItem.sell_price.desc())
+        )).scalars().all()
+        return {
+            "id": snap.id, "name": snap.name, "shelf_type": snap.shelf_type,
+            "item_count": snap.item_count, "total_value": snap.total_value,
+            "notes": snap.notes,
+            "created_at": snap.created_at.isoformat() if snap.created_at else None,
+            "items": [
+                {
+                    "id": i.id,
+                    "commodity_hash_name": i.commodity_hash_name,
+                    "name": i.name,
+                    "img_url": i.img_url,
+                    "abrade": i.abrade,
+                    "template_id": i.template_id,
+                    "commodity_id": i.commodity_id,
+                    "steam_asset_id": i.steam_asset_id,
+                    "sell_price": i.sell_price,
+                    "lease_unit_price": i.lease_unit_price,
+                    "long_lease_price": i.long_lease_price,
+                    "lease_deposit": i.lease_deposit,
+                    "lease_max_days": i.lease_max_days,
+                    "open_sublet": i.open_sublet,
+                    "purchase_price": i.purchase_price,
+                }
+                for i in items
+            ],
+        }
+
+
+@router.delete("/snapshot/{snapshot_id}")
+async def delete_snapshot(snapshot_id: int):
+    """删除快照"""
+    async with AsyncSessionLocal() as sess:
+        snap = await sess.get(ListingSnapshot, snapshot_id)
+        if not snap:
+            raise HTTPException(404, "快照不存在")
+        await sess.execute(delete(ListingSnapshotItem).where(ListingSnapshotItem.snapshot_id == snapshot_id))
+        await sess.delete(snap)
+        await sess.commit()
+    return {"ok": True}

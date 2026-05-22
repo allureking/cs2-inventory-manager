@@ -7,6 +7,7 @@
   item_avg_price   — 各平台近 N 天均价（来自 /price/avg）
   inventory_item   — 我的全持仓（主动投资/租赁物品）
   storage_unit     — 储物柜状态追踪（通过 instance_id 变化检测存取事件）
+  listing_snapshot — 挂售快照（保存某时刻在售/在租货架数据，供下架后参考）
 
 status 状态机（inventory_item.status）：
   in_steam    → 当前在 Steam 可见库存（可交易/可租）
@@ -20,7 +21,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -345,3 +346,43 @@ class StorageUnit(Base):
 
     first_seen_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     last_synced_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class ListingSnapshot(Base):
+    """挂售快照：保存某时刻在售货架的完整数据，便于下架后参考重新上架。"""
+
+    __tablename__ = "listing_snapshot"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    shelf_type: Mapped[str] = mapped_column(String(16), nullable=False, default="sell")
+    item_count: Mapped[int] = mapped_column(Integer, default=0)
+    total_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class ListingSnapshotItem(Base):
+    """挂售快照明细：每件饰品的属性和挂售价格。"""
+
+    __tablename__ = "listing_snapshot_item"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    snapshot_id: Mapped[int] = mapped_column(Integer, ForeignKey("listing_snapshot.id", ondelete="CASCADE"), index=True, nullable=False)
+
+    commodity_hash_name: Mapped[str] = mapped_column(String, nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    img_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    abrade: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    template_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    commodity_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    steam_asset_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+    sell_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    lease_unit_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    long_lease_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    lease_deposit: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    lease_max_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    open_sublet: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+
+    purchase_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

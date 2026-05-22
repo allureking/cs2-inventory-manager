@@ -850,6 +850,11 @@
             :class="shelfTab==='unlisted' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'">
             <span x-text="t('shelf_unlisted')"></span> <span class="font-mono ml-1 text-blue-400" x-text="unlistedItems.total??'—'"></span>
           </button>
+          <button @click="shelfTab='snapshot'; loadSnapshots()"
+            class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+            :class="shelfTab==='snapshot' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300'">
+            <span x-text="nameLang==='cn'?'快照':'Snapshots'"></span>
+          </button>
         </div>
 
         <button @click="shelfTab==='rented'?loadRentedList(rentedPage):(shelfTab==='sublet'?loadSubletList(subletPage):(shelfTab==='unlisted'?loadUnlistedItems(unlistedPage):loadShelf()))"
@@ -1286,6 +1291,98 @@
       <!-- 提示：使用待上架 tab 快速上架 -->
       <div x-show="shelfTab==='sell' || shelfTab==='lease'" class="mt-3 px-4 py-2 text-[11px] text-slate-700 text-center" x-text="t('need_list_note')">
       </div>
+
+      <!-- ── 快照面板 ── -->
+      <div x-show="shelfTab==='snapshot'" class="mt-2">
+        <!-- 快照操作栏 -->
+        <div class="flex items-center gap-3 mb-4">
+          <button @click="createSnapshot('sell')" :disabled="snapshotLoading"
+            class="px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-all disabled:opacity-40">
+            <span x-text="snapshotLoading ? (nameLang==='cn'?'保存中...':'Saving...') : (nameLang==='cn'?'保存出售快照':'Save Sell Snapshot')"></span>
+          </button>
+          <button @click="createSnapshot('lease')" :disabled="snapshotLoading"
+            class="px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white transition-all disabled:opacity-40">
+            <span x-text="nameLang==='cn'?'保存出租快照':'Save Lease Snapshot'"></span>
+          </button>
+          <span class="text-[10px] text-slate-600" x-text="nameLang==='cn'?'将当前货架数据保存为快照，下架后仍可查看':'Save current shelf data as snapshot for future reference'"></span>
+        </div>
+
+        <!-- 快照列表 -->
+        <template x-if="!snapshotDetail">
+          <div>
+            <div x-show="!snapshots.length && !snapshotLoading" class="text-center py-8 text-slate-600 text-sm" x-text="nameLang==='cn'?'暂无快照':'No snapshots yet'"></div>
+            <div class="grid gap-2">
+              <template x-for="snap in snapshots" :key="snap.id">
+                <div class="card p-3 flex items-center justify-between cursor-pointer hover:border-slate-600 transition-all" @click="loadSnapshotDetail(snap.id)">
+                  <div class="flex items-center gap-3">
+                    <span class="px-2 py-0.5 rounded text-[10px] font-mono" :class="snap.shelf_type==='sell'?'bg-emerald-900/50 text-emerald-400':'bg-blue-900/50 text-blue-400'" x-text="snap.shelf_type==='sell'?(nameLang==='cn'?'出售':'Sell'):(nameLang==='cn'?'出租':'Lease')"></span>
+                    <div>
+                      <p class="text-sm text-slate-200 font-medium" x-text="snap.name"></p>
+                      <p class="text-[10px] text-slate-600 font-mono" x-text="snap.created_at?.replace('T',' ').slice(0,19)"></p>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-4 text-xs">
+                    <span class="text-slate-400 font-mono"><span x-text="snap.item_count"></span> <span x-text="nameLang==='cn'?'件':'items'"></span></span>
+                    <span class="text-emerald-400 font-mono">¥<span x-text="snap.total_value?.toLocaleString()"></span></span>
+                    <button @click.stop="deleteSnapshot(snap.id)" class="text-slate-600 hover:text-red-400 transition-colors p-1" title="删除">
+                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    </button>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- 快照详情 -->
+        <template x-if="snapshotDetail">
+          <div>
+            <div class="flex items-center gap-3 mb-3">
+              <button @click="snapshotDetail=null" class="text-slate-500 hover:text-white text-xs flex items-center gap-1">
+                ← <span x-text="nameLang==='cn'?'返回列表':'Back'"></span>
+              </button>
+              <h3 class="text-sm font-medium text-slate-200" x-text="snapshotDetail.name"></h3>
+              <span class="text-[10px] text-slate-600 font-mono" x-text="snapshotDetail.created_at?.replace('T',' ').slice(0,19)"></span>
+              <span class="text-xs text-emerald-400 font-mono ml-auto">¥<span x-text="snapshotDetail.total_value?.toLocaleString()"></span></span>
+            </div>
+            <div class="overflow-x-auto rounded-xl" style="border:1px solid rgba(51,65,85,0.3)">
+              <table class="w-full text-[11px]">
+                <thead>
+                  <tr class="text-slate-500 border-b border-slate-800">
+                    <th class="py-2 px-2 text-left">#</th>
+                    <th class="py-2 px-2 text-left" x-text="nameLang==='cn'?'饰品':'Item'"></th>
+                    <th class="py-2 px-2 text-right" x-text="nameLang==='cn'?'磨损':'Wear'"></th>
+                    <th class="py-2 px-2 text-right" x-text="nameLang==='cn'?'挂售价':'List Price'"></th>
+                    <th class="py-2 px-2 text-right" x-text="nameLang==='cn'?'成本':'Cost'"></th>
+                    <th class="py-2 px-2 text-right" x-text="nameLang==='cn'?'利润':'Profit'"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="(item, idx) in snapshotDetail.items" :key="item.id">
+                    <tr class="border-b border-slate-800/50 hover:bg-slate-800/30">
+                      <td class="py-1.5 px-2 text-slate-600" x-text="idx+1"></td>
+                      <td class="py-1.5 px-2">
+                        <div class="flex items-center gap-2">
+                          <img :src="item.img_url" class="w-8 h-6 object-contain rounded" x-show="item.img_url" loading="lazy" />
+                          <span class="text-slate-300 truncate max-w-[200px]" x-text="item.name"></span>
+                        </div>
+                      </td>
+                      <td class="py-1.5 px-2 text-right text-slate-500 font-mono" x-text="item.abrade!=null?item.abrade.toFixed(4):'—'"></td>
+                      <td class="py-1.5 px-2 text-right text-emerald-400 font-mono" x-text="item.sell_price?'¥'+item.sell_price.toLocaleString():'—'"></td>
+                      <td class="py-1.5 px-2 text-right text-blue-400 font-mono" x-text="item.purchase_price?'¥'+item.purchase_price.toLocaleString():'—'"></td>
+                      <td class="py-1.5 px-2 text-right font-mono"
+                        :class="(item.sell_price&&item.purchase_price) ? ((item.sell_price-item.purchase_price)>=0?'text-emerald-400':'text-red-400') : 'text-slate-600'"
+                        x-text="(item.sell_price&&item.purchase_price) ? ((item.sell_price-item.purchase_price>=0?'+':'')+'¥'+(item.sell_price-item.purchase_price).toLocaleString(undefined,{maximumFractionDigits:2})) : '—'">
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </template>
+      </div>
+
     </div>
 
     <!-- ════════════ ANALYSIS TAB ════════════ -->
@@ -2765,6 +2862,10 @@
         shelfLoading: false,
         sellShelf: { items: [], total: 0 },
         leaseShelf: { items: [], total: 0 },
+        // 挂售快照
+        snapshots: [],
+        snapshotDetail: null,
+        snapshotLoading: false,
         rentedList: { items: [], total: 0, stats: '', page_size: 50 },
         rentedLoading: false,
         rentedPage: 1,
@@ -3949,6 +4050,45 @@
         },
 
         // ── Listing tab ───────────────────────────────────────────────────
+        // ── 挂售快照 ──────────────────────────────────────────────────
+        async loadSnapshots() {
+          try {
+            const r = await fetch('/api/listing/snapshots');
+            if (r.ok) this.snapshots = await r.json();
+          } catch (e) { this.showToast(e.message || '加载快照失败', 'error'); }
+        },
+        async createSnapshot(shelfType) {
+          this.snapshotLoading = true;
+          try {
+            const r = await fetch('/api/listing/snapshot', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ shelf_type: shelfType }),
+            });
+            if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.detail || '保存失败'); }
+            const data = await r.json();
+            this.showToast(`快照已保存: ${data.item_count}件, ¥${data.total_value?.toLocaleString()}`, 'success');
+            await this.loadSnapshots();
+          } catch (e) { this.showToast(e.message || '保存快照失败', 'error'); }
+          finally { this.snapshotLoading = false; }
+        },
+        async loadSnapshotDetail(id) {
+          try {
+            const r = await fetch(`/api/listing/snapshot/${id}`);
+            if (r.ok) this.snapshotDetail = await r.json();
+          } catch (e) { this.showToast(e.message || '加载快照详情失败', 'error'); }
+        },
+        async deleteSnapshot(id) {
+          if (!confirm(this.nameLang === 'cn' ? '确定删除该快照？' : 'Delete this snapshot?')) return;
+          try {
+            const r = await fetch(`/api/listing/snapshot/${id}`, { method: 'DELETE' });
+            if (r.ok) {
+              this.snapshots = this.snapshots.filter(s => s.id !== id);
+              if (this.snapshotDetail?.id === id) this.snapshotDetail = null;
+              this.showToast('快照已删除', 'success');
+            }
+          } catch (e) { this.showToast(e.message || '删除失败', 'error'); }
+        },
+
         async loadShelf() {
           this.shelfLoading = true;
           try {
