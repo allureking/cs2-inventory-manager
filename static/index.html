@@ -1975,6 +1975,31 @@
           </template>
         </div>
 
+        <!-- 成本基准 + 加减仓 -->
+        <div class="flex items-center gap-3 mt-3 px-1" x-show="trackerData.length > 0">
+          <span class="text-[11px] text-slate-600" x-text="nameLang==='cn'?'当前成本基准':'Cost Basis'"></span>
+          <span class="text-xs font-mono text-slate-300">¥<span x-text="trackerData[0]?.cost_basis ? Number(trackerData[0].cost_basis).toLocaleString() : '—'"></span></span>
+          <template x-if="!_costAdjustOpen">
+            <button @click="_costAdjustOpen=true; _costAdjustVal=''"
+              class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-700 hover:bg-slate-600 text-slate-400 transition-all"
+              x-text="nameLang==='cn'?'加仓 / 减仓':'Adjust'">
+            </button>
+          </template>
+          <template x-if="_costAdjustOpen">
+            <div class="flex items-center gap-2">
+              <input type="text" x-ref="costAdjustInput" x-model="_costAdjustVal"
+                class="w-32 px-2 py-1 rounded-lg text-xs font-mono" placeholder="+100000 / -50000"
+                style="background:rgba(15,23,42,0.8); border:1px solid rgba(51,65,85,0.5); color:#e2e8f0"
+                @keydown.enter="applyCostAdjust()" @keydown.escape="_costAdjustOpen=false"
+                x-init="$nextTick(()=>$refs.costAdjustInput?.focus())" />
+              <button @click="applyCostAdjust()" class="px-2 py-1 rounded text-[10px] font-medium bg-emerald-600 hover:bg-emerald-500 text-white"
+                x-text="nameLang==='cn'?'确认':'Apply'"></button>
+              <button @click="_costAdjustOpen=false" class="px-2 py-1 rounded text-[10px] font-medium bg-slate-700 hover:bg-slate-600 text-slate-400"
+                x-text="nameLang==='cn'?'取消':'Cancel'"></button>
+            </div>
+          </template>
+        </div>
+
         <!-- Chart -->
         <div class="bg-slate-800/60 rounded-xl p-4 border border-slate-700/50">
           <div class="flex items-center gap-2 mb-3">
@@ -2862,6 +2887,9 @@
         shelfLoading: false,
         sellShelf: { items: [], total: 0 },
         leaseShelf: { items: [], total: 0 },
+        // 成本基准调整
+        _costAdjustOpen: false,
+        _costAdjustVal: '',
         // 挂售快照
         snapshots: [],
         snapshotDetail: null,
@@ -3688,6 +3716,27 @@
           } catch (e) {
             this.showToast(e.message, 'error');
           }
+        },
+
+        async applyCostAdjust() {
+          const raw = (this._costAdjustVal || '').trim();
+          if (!raw) return;
+          const delta = this.parseFormula(raw);
+          if (isNaN(delta) || delta === 0) {
+            this.showToast('请输入有效金额 / Invalid amount', 'error');
+            return;
+          }
+          const current = Number(this.trackerData[0]?.cost_basis) || 0;
+          const newBasis = current + delta;
+          if (newBasis < 0) {
+            this.showToast('成本不能为负 / Cost basis cannot be negative', 'error');
+            return;
+          }
+          await this.trackerEditField(this.trackerData[0].date, 'cost_basis', newBasis);
+          this._costAdjustOpen = false;
+          this._costAdjustVal = '';
+          const sign = delta > 0 ? '+' : '';
+          this.showToast(`成本基准已更新 ${sign}${delta.toLocaleString()} → ¥${newBasis.toLocaleString()}`, 'success');
         },
 
         async trackerSnapshot() {
