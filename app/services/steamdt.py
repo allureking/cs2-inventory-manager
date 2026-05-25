@@ -31,6 +31,15 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = settings.steamdt_base_url
 
+_steamdt_http: httpx.AsyncClient | None = None
+
+
+def _get_steamdt_http() -> httpx.AsyncClient:
+    global _steamdt_http
+    if _steamdt_http is None or _steamdt_http.is_closed:
+        _steamdt_http = httpx.AsyncClient(timeout=60)
+    return _steamdt_http
+
 
 def _auth_headers() -> dict[str, str]:
     return {
@@ -67,13 +76,13 @@ async def fetch_single_price(
     GET /open/cs2/v1/price/single
     查询单个饰品在所有平台的实时价格，并写入 price_snapshot。
     """
-    async with httpx.AsyncClient(timeout=15) as client:
-        r = await client.get(
-            f"{BASE_URL}/open/cs2/v1/price/single",
-            params={"marketHashName": market_hash_name},
-            headers=_auth_headers(),
-        )
-        r.raise_for_status()
+    client = _get_steamdt_http()
+    r = await client.get(
+        f"{BASE_URL}/open/cs2/v1/price/single",
+        params={"marketHashName": market_hash_name},
+        headers=_auth_headers(),
+    )
+    r.raise_for_status()
 
     resp = SteamDTResponse.model_validate(r.json())
     _check_response(resp)
@@ -101,13 +110,13 @@ async def fetch_batch_prices(
     if len(market_hash_names) > 100:
         raise ValueError("批量查询最多支持 100 个饰品")
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.post(
-            f"{BASE_URL}/open/cs2/v1/price/batch",
-            json={"marketHashNames": market_hash_names},
-            headers=_auth_headers(),
-        )
-        r.raise_for_status()
+    client = _get_steamdt_http()
+    r = await client.post(
+        f"{BASE_URL}/open/cs2/v1/price/batch",
+        json={"marketHashNames": market_hash_names},
+        headers=_auth_headers(),
+    )
+    r.raise_for_status()
 
     resp = SteamDTResponse.model_validate(r.json())
     _check_response(resp)
@@ -139,13 +148,13 @@ async def fetch_avg_price(
     if days != 7:
         params["days"] = days
 
-    async with httpx.AsyncClient(timeout=15) as client:
-        r = await client.get(
-            f"{BASE_URL}/open/cs2/v1/price/avg",
-            params=params,
-            headers=_auth_headers(),
-        )
-        r.raise_for_status()
+    client = _get_steamdt_http()
+    r = await client.get(
+        f"{BASE_URL}/open/cs2/v1/price/avg",
+        params=params,
+        headers=_auth_headers(),
+    )
+    r.raise_for_status()
 
     resp = SteamDTResponse.model_validate(r.json())
     _check_response(resp)
@@ -165,12 +174,12 @@ async def sync_base_info(db: AsyncSession) -> int:
     全量拉取所有 CS2 饰品基础信息，upsert 到 item 表。
     返回写入条数。
     """
-    async with httpx.AsyncClient(timeout=60) as client:
-        r = await client.get(
-            f"{BASE_URL}/open/cs2/v1/base",
-            headers=_auth_headers(),
-        )
-        r.raise_for_status()
+    client = _get_steamdt_http()
+    r = await client.get(
+        f"{BASE_URL}/open/cs2/v1/base",
+        headers=_auth_headers(),
+    )
+    r.raise_for_status()
 
     resp = SteamDTResponse.model_validate(r.json())
     _check_response(resp)

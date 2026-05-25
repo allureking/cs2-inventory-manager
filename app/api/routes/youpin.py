@@ -27,7 +27,26 @@ import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+class SmsRequest(BaseModel):
+    phone: str = Field(..., min_length=1, max_length=20)
+
+
+class SmsLoginRequest(BaseModel):
+    phone: str = Field(..., min_length=1, max_length=20)
+    code: str = Field(..., min_length=1, max_length=10)
+    session_id: str = Field(..., min_length=1)
+
+
+class ApplyTokenRequest(BaseModel):
+    token: str = Field(..., min_length=1)
+
+
+class ZeroCdRequest(BaseModel):
+    order_ids: list[str] = Field(..., min_length=1)
 
 from app.core.config import settings
 from app.core.database import get_db
@@ -79,27 +98,19 @@ async def auth_state():
 
 
 @router.post("/auth/send-sms")
-async def auth_send_sms(body: dict):
+async def auth_send_sms(body: SmsRequest):
     """发送短信验证码"""
-    phone = body.get("phone", "").strip()
-    if not phone:
-        raise HTTPException(status_code=400, detail="请输入手机号")
     try:
-        return await youpin_svc.send_sms_code(phone)
+        return await youpin_svc.send_sms_code(body.phone.strip())
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
 
 
 @router.post("/auth/login")
-async def auth_login(body: dict):
+async def auth_login(body: SmsLoginRequest):
     """短信验证码登录，获取 App 端 Token"""
-    phone = body.get("phone", "").strip()
-    code = body.get("code", "").strip()
-    session_id = body.get("session_id", "").strip()
-    if not phone or not code or not session_id:
-        raise HTTPException(status_code=400, detail="缺少必填字段")
     try:
-        return await youpin_svc.sms_login(phone, code, session_id)
+        return await youpin_svc.sms_login(body.phone.strip(), body.code.strip(), body.session_id.strip())
     except youpin_svc.TokenExpiredError as e:
         raise HTTPException(status_code=401, detail=str(e))
     except Exception as e:
@@ -107,11 +118,9 @@ async def auth_login(body: dict):
 
 
 @router.post("/auth/apply-token")
-async def auth_apply_token(body: dict):
+async def auth_apply_token(body: ApplyTokenRequest):
     """手动设置 Token（从浏览器/App 获取后粘贴）"""
-    token = body.get("token", "").strip()
-    if not token:
-        raise HTTPException(status_code=400, detail="请输入 Token")
+    token = body.token.strip()
     # 设置运行时 token
     youpin_svc._runtime_token = token
     # 验证是否有效
@@ -298,14 +307,11 @@ async def lease_sublet_list(
 
 
 @router.post("/lease/enable-zero-cd")
-async def enable_zero_cd_api(body: dict):
+async def enable_zero_cd_api(body: ZeroCdRequest):
     """批量开启 0CD 转租"""
     _require_token()
-    order_ids = body.get("order_ids", [])
-    if not order_ids:
-        raise HTTPException(status_code=400, detail="至少选择一个订单")
     try:
-        return await youpin_svc.enable_zero_cd(order_ids)
+        return await youpin_svc.enable_zero_cd(body.order_ids)
     except youpin_svc.TokenExpiredError as e:
         raise HTTPException(status_code=401, detail=str(e))
     except Exception as e:
@@ -313,14 +319,11 @@ async def enable_zero_cd_api(body: dict):
 
 
 @router.post("/lease/disable-zero-cd")
-async def disable_zero_cd_api(body: dict):
+async def disable_zero_cd_api(body: ZeroCdRequest):
     """批量取消 0CD 转租"""
     _require_token()
-    order_ids = body.get("order_ids", [])
-    if not order_ids:
-        raise HTTPException(status_code=400, detail="至少选择一个订单")
     try:
-        return await youpin_svc.disable_zero_cd(order_ids)
+        return await youpin_svc.disable_zero_cd(body.order_ids)
     except youpin_svc.TokenExpiredError as e:
         raise HTTPException(status_code=401, detail=str(e))
     except Exception as e:

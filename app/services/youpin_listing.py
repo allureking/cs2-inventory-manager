@@ -31,6 +31,7 @@ from app.services.youpin import (
     _check,
     _data,
     _device_id,
+    _get_http,
     _headers,
     fetch_market_lease_price,
     fetch_market_sell_price,
@@ -190,22 +191,22 @@ async def list_for_sell(
     asset_id: Steam asset_id（SellInventoryWithLeaseV2 用 AssetId）
     price: 出售价（元）
     """
-    async with httpx.AsyncClient(timeout=12) as client:
-        resp = await client.post(
-            f"{YOUPIN_API}/api/commodity/Inventory/SellInventoryWithLeaseV2",
-            headers=await _headers(),
-            json={
-                "GameId": "730",
-                "ItemInfos": [{
-                    "AssetId": asset_id,
-                    "IsCanLease": False,
-                    "IsCanSold": True,
-                    "Price": price,
-                    "Remark": "",
-                }],
-                "Sessionid": _device_id,
-            },
-        )
+    client = _get_http()
+    resp = await client.post(
+        f"{YOUPIN_API}/api/commodity/Inventory/SellInventoryWithLeaseV2",
+        headers=await _headers(),
+        json={
+            "GameId": "730",
+            "ItemInfos": [{
+                "AssetId": asset_id,
+                "IsCanLease": False,
+                "IsCanSold": True,
+                "Price": price,
+                "Remark": "",
+            }],
+            "Sessionid": _device_id,
+        },
+    )
     resp.raise_for_status()
     body = resp.json()
     _check(body, "list_for_sell")
@@ -234,12 +235,12 @@ async def list_for_lease(
     if max_days > 8:
         item_info["LongLeaseUnitPrice"] = long_lease_unit
 
-    async with httpx.AsyncClient(timeout=12) as client:
-        resp = await client.post(
-            f"{YOUPIN_API}/api/commodity/Inventory/SellInventoryWithLeaseV2",
-            headers=await _headers(),
-            json={"GameId": "730", "ItemInfos": [item_info], "Sessionid": _device_id},
-        )
+    client = _get_http()
+    resp = await client.post(
+        f"{YOUPIN_API}/api/commodity/Inventory/SellInventoryWithLeaseV2",
+        headers=await _headers(),
+        json={"GameId": "730", "ItemInfos": [item_info], "Sessionid": _device_id},
+    )
     resp.raise_for_status()
     body = resp.json()
     _check(body, "list_for_lease")
@@ -270,12 +271,12 @@ async def list_for_both(
     if max_days > 8:
         item_info["LongLeaseUnitPrice"] = long_lease_unit
 
-    async with httpx.AsyncClient(timeout=12) as client:
-        resp = await client.post(
-            f"{YOUPIN_API}/api/commodity/Inventory/SellInventoryWithLeaseV2",
-            headers=await _headers(),
-            json={"GameId": "730", "ItemInfos": [item_info], "Sessionid": _device_id},
-        )
+    client = _get_http()
+    resp = await client.post(
+        f"{YOUPIN_API}/api/commodity/Inventory/SellInventoryWithLeaseV2",
+        headers=await _headers(),
+        json={"GameId": "730", "ItemInfos": [item_info], "Sessionid": _device_id},
+    )
     resp.raise_for_status()
     body = resp.json()
     _check(body, "list_for_both")
@@ -285,17 +286,17 @@ async def list_for_both(
 
 async def _pre_init_change_price(commodity_ids: list) -> None:
     """改价前预初始化（出租改价需要先调用此接口）"""
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(
-            f"{YOUPIN_API}/api/youpin/bff/new/commodity/commodity/change/price/v3/init/info",
-            headers=await _headers(),
-            json={
-                "changePriceChannel": 0,
-                "commodityIdList": [str(cid) for cid in commodity_ids],
-                "gameId": "730",
-                "Sessionid": _device_id,
-            },
-        )
+    client = _get_http()
+    resp = await client.post(
+        f"{YOUPIN_API}/api/youpin/bff/new/commodity/commodity/change/price/v3/init/info",
+        headers=await _headers(),
+        json={
+            "changePriceChannel": 0,
+            "commodityIdList": [str(cid) for cid in commodity_ids],
+            "gameId": "730",
+            "Sessionid": _device_id,
+        },
+    )
     resp.raise_for_status()
     # 不检查返回值，仅为预热
 
@@ -334,12 +335,12 @@ async def change_price(
         if deposit is not None:
             commodity_info["LeaseDeposit"] = str(deposit)
 
-    async with httpx.AsyncClient(timeout=12) as client:
-        resp = await client.put(
-            f"{YOUPIN_API}/api/commodity/Commodity/PriceChangeWithLeaseV2",
-            headers=await _headers(),
-            json={"Commoditys": [commodity_info], "Sessionid": _device_id},
-        )
+    client = _get_http()
+    resp = await client.put(
+        f"{YOUPIN_API}/api/commodity/Commodity/PriceChangeWithLeaseV2",
+        headers=await _headers(),
+        json={"Commoditys": [commodity_info], "Sessionid": _device_id},
+    )
     resp.raise_for_status()
     body = resp.json()
     _check(body, "change_price")
@@ -350,16 +351,16 @@ async def delist_item(commodity_ids: list) -> dict:
     """下架物品（支持批量，出售和出租通用）"""
     if isinstance(commodity_ids, (int, str)):
         commodity_ids = [commodity_ids]
-    async with httpx.AsyncClient(timeout=12) as client:
-        resp = await client.put(
-            f"{YOUPIN_API}/api/commodity/Commodity/OffShelf",
-            headers=await _headers(),
-            json={
-                "Ids": ",".join(str(cid) for cid in commodity_ids),
-                "IsDeleteCommodityCache": 1,
-                "IsForceOffline": True,
-            },
-        )
+    client = _get_http()
+    resp = await client.put(
+        f"{YOUPIN_API}/api/commodity/Commodity/OffShelf",
+        headers=await _headers(),
+        json={
+            "Ids": ",".join(str(cid) for cid in commodity_ids),
+            "IsDeleteCommodityCache": 1,
+            "IsForceOffline": True,
+        },
+    )
     resp.raise_for_status()
     body = resp.json()
     _check(body, "delist_item")
@@ -402,12 +403,12 @@ def _normalize_shelf_item(item: dict) -> dict:
 
 async def get_sell_shelf(page: int = 1, page_size: int = 50) -> dict:
     """获取当前出售货架列表"""
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            f"{YOUPIN_API}/api/youpin/bff/new/commodity/v1/commodity/list/sell",
-            headers=await _headers(),
-            json={"pageIndex": page, "pageSize": page_size, "gameId": "730"},
-        )
+    client = _get_http()
+    resp = await client.post(
+        f"{YOUPIN_API}/api/youpin/bff/new/commodity/v1/commodity/list/sell",
+        headers=await _headers(),
+        json={"pageIndex": page, "pageSize": page_size, "gameId": "730"},
+    )
     resp.raise_for_status()
     body = resp.json()
     _check(body, "sell_shelf")
@@ -423,12 +424,12 @@ async def get_sell_shelf(page: int = 1, page_size: int = 50) -> dict:
 
 async def get_lease_shelf(page: int = 1, page_size: int = 50) -> dict:
     """获取当前出租货架列表"""
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            f"{YOUPIN_API}/api/youpin/bff/new/commodity/v1/commodity/list/lease",
-            headers=await _headers(),
-            json={"pageIndex": page, "pageSize": page_size, "gameId": "730"},
-        )
+    client = _get_http()
+    resp = await client.post(
+        f"{YOUPIN_API}/api/youpin/bff/new/commodity/v1/commodity/list/lease",
+        headers=await _headers(),
+        json={"pageIndex": page, "pageSize": page_size, "gameId": "730"},
+    )
     resp.raise_for_status()
     body = resp.json()
     _check(body, "lease_shelf")

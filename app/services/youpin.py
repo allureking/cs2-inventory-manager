@@ -41,6 +41,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import httpx
+from httpx import AsyncClient as _AC
 from Crypto.Cipher import AES, PKCS1_v1_5
 from Crypto.PublicKey import RSA
 from Crypto.Util.Padding import pad, unpad
@@ -54,6 +55,14 @@ from app.models.db_models import InventoryItem, PriceSnapshot
 logger = logging.getLogger(__name__)
 
 YOUPIN_API = "https://api.youpin898.com"
+
+_http: _AC | None = None
+
+def _get_http() -> _AC:
+    global _http
+    if _http is None or _http.is_closed:
+        _http = _AC(timeout=20)
+    return _http
 
 _RSA_PUBLIC_KEY = (
     "-----BEGIN PUBLIC KEY-----\n"
@@ -159,11 +168,11 @@ async def _get_real_uk() -> str:
     pub = RSA.import_key(_RSA_PUBLIC_KEY)
     enc_key = base64.b64encode(PKCS1_v1_5.new(pub).encrypt(aes_key)).decode()
 
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(
-            f"{YOUPIN_API}/api/deviceW2",
-            json={"encryptedData": enc_data, "encryptedAesKey": enc_key},
-        )
+    client = _get_http()
+    resp = await client.post(
+        f"{YOUPIN_API}/api/deviceW2",
+        json={"encryptedData": enc_data, "encryptedAesKey": enc_key},
+    )
     resp.raise_for_status()
 
     cipher_aes2 = AES.new(aes_key, AES.MODE_ECB)
@@ -260,11 +269,11 @@ async def check_token_status() -> dict:
         return {"valid": False, "nickname": None, "error": "Token 未配置，请通过手机号登录或在 .env 中填写 YOUPIN_TOKEN"}
 
     try:
-        async with httpx.AsyncClient(timeout=8) as client:
-            resp = await client.get(
-                f"{YOUPIN_API}/api/user/Account/getUserInfo",
-                headers=await _headers(),
-            )
+        client = _get_http()
+        resp = await client.get(
+            f"{YOUPIN_API}/api/user/Account/getUserInfo",
+            headers=await _headers(),
+        )
         resp.raise_for_status()
         body = resp.json()
         _check(body, "getUserInfo")
@@ -287,12 +296,12 @@ async def check_token_status() -> dict:
 async def send_sms_code(phone: str) -> dict:
     """发送短信验证码（用于 App 端登录获取 Token）"""
     session_id = _rand_str(10)
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(
-            f"{YOUPIN_API}/api/user/Auth/SendSignInSmsCode",
-            headers=await _headers(),
-            json={"Area": 86, "Mobile": phone, "Sessionid": session_id, "Code": ""},
-        )
+    client = _get_http()
+    resp = await client.post(
+        f"{YOUPIN_API}/api/user/Auth/SendSignInSmsCode",
+        headers=await _headers(),
+        json={"Area": 86, "Mobile": phone, "Sessionid": session_id, "Code": ""},
+    )
     resp.raise_for_status()
     body = resp.json()
     _check(body, "send_sms_code")
@@ -302,18 +311,18 @@ async def send_sms_code(phone: str) -> dict:
 async def sms_login(phone: str, code: str, session_id: str) -> dict:
     """验证码登录，获取 App 端 Token"""
     global _runtime_token, _runtime_nickname
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.post(
-            f"{YOUPIN_API}/api/user/Auth/SmsSignIn",
-            headers=await _headers(),
-            json={
-                "Area": 86,
-                "Code": code,
-                "DeviceName": session_id,
-                "Sessionid": session_id,
-                "Mobile": phone,
-            },
-        )
+    client = _get_http()
+    resp = await client.post(
+        f"{YOUPIN_API}/api/user/Auth/SmsSignIn",
+        headers=await _headers(),
+        json={
+            "Area": 86,
+            "Code": code,
+            "DeviceName": session_id,
+            "Sessionid": session_id,
+            "Mobile": phone,
+        },
+    )
     resp.raise_for_status()
     body = resp.json()
     _check(body, "sms_login")
@@ -353,12 +362,12 @@ def get_login_state() -> dict:
 
 async def fetch_zero_cd_shelf(page: int = 1, page_size: int = 50) -> dict:
     """获取当前 0CD 转租货架列表（实际在转租中的饰品）"""
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            f"{YOUPIN_API}/api/youpin/bff/new/commodity/v1/commodity/list/zeroCDLease",
-            headers=await _headers(),
-            json={"pageIndex": page, "pageSize": page_size, "gameId": "730"},
-        )
+    client = _get_http()
+    resp = await client.post(
+        f"{YOUPIN_API}/api/youpin/bff/new/commodity/v1/commodity/list/zeroCDLease",
+        headers=await _headers(),
+        json={"pageIndex": page, "pageSize": page_size, "gameId": "730"},
+    )
     resp.raise_for_status()
     body = resp.json()
     _check(body, "zero_cd_shelf")
@@ -367,12 +376,12 @@ async def fetch_zero_cd_shelf(page: int = 1, page_size: int = 50) -> dict:
 
 async def fetch_zero_cd_eligible(page: int = 1, page_size: int = 50) -> tuple:
     """获取可以开启 0CD 但尚未开启的订单列表"""
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            f"{YOUPIN_API}/api/youpin/bff/trade/v1/order/lease/sublet/canEnable/list",
-            headers=await _headers(),
-            json={"pageIndex": page, "pageSize": page_size},
-        )
+    client = _get_http()
+    resp = await client.post(
+        f"{YOUPIN_API}/api/youpin/bff/trade/v1/order/lease/sublet/canEnable/list",
+        headers=await _headers(),
+        json={"pageIndex": page, "pageSize": page_size},
+    )
     resp.raise_for_status()
     body = resp.json()
     _check(body, "zero_cd_eligible")
@@ -384,19 +393,19 @@ async def fetch_zero_cd_eligible(page: int = 1, page_size: int = 50) -> tuple:
 
 async def enable_zero_cd(order_ids: list) -> dict:
     """批量开启 0CD 转租"""
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            f"{YOUPIN_API}/api/youpin/bff/order/sublet/open",
-            headers=await _headers(),
-            json={
-                "orderIdList": order_ids,
-                "subletConfig": {
-                    "subletSwitchFlag": 1,
-                    "subletPricingFlag": 1,
-                    "pricingMinPercent": "95",
-                },
+    client = _get_http()
+    resp = await client.post(
+        f"{YOUPIN_API}/api/youpin/bff/order/sublet/open",
+        headers=await _headers(),
+        json={
+            "orderIdList": order_ids,
+            "subletConfig": {
+                "subletSwitchFlag": 1,
+                "subletPricingFlag": 1,
+                "pricingMinPercent": "95",
             },
-        )
+        },
+    )
     resp.raise_for_status()
     body = resp.json()
     _check(body, "enable_zero_cd")
@@ -405,12 +414,12 @@ async def enable_zero_cd(order_ids: list) -> dict:
 
 async def disable_zero_cd(order_ids: list) -> dict:
     """批量取消 0CD 转租"""
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            f"{YOUPIN_API}/api/youpin/bff/order/sublet/close",
-            headers=await _headers(),
-            json={"orderIdList": order_ids},
-        )
+    client = _get_http()
+    resp = await client.post(
+        f"{YOUPIN_API}/api/youpin/bff/order/sublet/close",
+        headers=await _headers(),
+        json={"orderIdList": order_ids},
+    )
     resp.raise_for_status()
     body = resp.json()
     _check(body, "disable_zero_cd")
@@ -421,12 +430,12 @@ async def disable_zero_cd(order_ids: list) -> dict:
 
 
 async def fetch_lease_records(page: int = 1, page_size: int = 30) -> tuple:
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            f"{YOUPIN_API}/api/youpin/bff/trade/v1/order/lease/out/list",
-            headers=await _headers(),
-            json={"pageIndex": page, "pageSize": page_size, "gameId": 730},
-        )
+    client = _get_http()
+    resp = await client.post(
+        f"{YOUPIN_API}/api/youpin/bff/trade/v1/order/lease/out/list",
+        headers=await _headers(),
+        json={"pageIndex": page, "pageSize": page_size, "gameId": 730},
+    )
     resp.raise_for_status()
     body = resp.json()
     _check(body, "lease_records")
@@ -438,12 +447,12 @@ async def fetch_lease_records(page: int = 1, page_size: int = 30) -> tuple:
 
 
 async def fetch_buy_records(page: int = 1, page_size: int = 30) -> list:
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            f"{YOUPIN_API}/api/youpin/bff/trade/sale/v1/buy/list",
-            headers=await _headers(),
-            json={"pageIndex": page, "pageSize": page_size, "gameId": 730},
-        )
+    client = _get_http()
+    resp = await client.post(
+        f"{YOUPIN_API}/api/youpin/bff/trade/sale/v1/buy/list",
+        headers=await _headers(),
+        json={"pageIndex": page, "pageSize": page_size, "gameId": 730},
+    )
     resp.raise_for_status()
     body = resp.json()
     _check(body, "buy_records")
@@ -457,12 +466,12 @@ async def fetch_buy_records(page: int = 1, page_size: int = 30) -> list:
 
 
 async def fetch_sell_records(page: int = 1, page_size: int = 30) -> list:
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            f"{YOUPIN_API}/api/youpin/bff/trade/sale/v1/sell/list",
-            headers=await _headers(),
-            json={"pageIndex": page, "pageSize": page_size, "gameId": 730},
-        )
+    client = _get_http()
+    resp = await client.post(
+        f"{YOUPIN_API}/api/youpin/bff/trade/sale/v1/sell/list",
+        headers=await _headers(),
+        json={"pageIndex": page, "pageSize": page_size, "gameId": 730},
+    )
     resp.raise_for_status()
     body = resp.json()
     _check(body, "sell_records")
@@ -476,12 +485,12 @@ async def fetch_sell_records(page: int = 1, page_size: int = 30) -> list:
 
 
 async def fetch_stock_records(page: int = 1, page_size: int = 100) -> tuple:
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            f"{YOUPIN_API}/api/youpin/pc/inventory/list",
-            headers=await _headers(),
-            json={"pageIndex": page, "pageSize": page_size},
-        )
+    client = _get_http()
+    resp = await client.post(
+        f"{YOUPIN_API}/api/youpin/pc/inventory/list",
+        headers=await _headers(),
+        json={"pageIndex": page, "pageSize": page_size},
+    )
     resp.raise_for_status()
     body = resp.json()
     _check(body, "stock_records")
@@ -497,17 +506,17 @@ async def fetch_full_inventory(page: int = 1, page_size: int = 500) -> tuple:
     拉取悠悠完整库存（GetUserInventoryDataListV3），包含 templateId（ItemId）。
     用于同步 youpin_template_id 到 inventory_item。
     """
-    async with httpx.AsyncClient(timeout=20) as client:
-        resp = await client.post(
-            f"{YOUPIN_API}/api/commodity/Inventory/GetUserInventoryDataListV3",
-            headers=await _headers(),
-            json={
-                "pageIndex": page,
-                "pageSize": page_size,
-                "gameId": "730",
-                "appType": 4,
-            },
-        )
+    client = _get_http()
+    resp = await client.post(
+        f"{YOUPIN_API}/api/commodity/Inventory/GetUserInventoryDataListV3",
+        headers=await _headers(),
+        json={
+            "pageIndex": page,
+            "pageSize": page_size,
+            "gameId": "730",
+            "appType": 4,
+        },
+    )
     resp.raise_for_status()
     body = resp.json()
     _check(body, "full_inventory")
@@ -544,12 +553,12 @@ async def fetch_market_sell_price(
     if abrade is not None:
         payload["abrade"] = abrade
 
-    async with httpx.AsyncClient(timeout=12) as client:
-        resp = await client.post(
-            f"{YOUPIN_API}/api/homepage/pc/goods/market/queryOnSaleCommodityList",
-            headers=await _headers(pc_market=True),
-            json=payload,
-        )
+    client = _get_http()
+    resp = await client.post(
+        f"{YOUPIN_API}/api/homepage/pc/goods/market/queryOnSaleCommodityList",
+        headers=await _headers(pc_market=True),
+        json=payload,
+    )
     resp.raise_for_status()
     body = resp.json()
     _check(body, "market_sell_price")
@@ -569,18 +578,18 @@ async def fetch_market_lease_price(
     查询悠悠市场出租价格列表。
     返回最多 page_size 条挂租，按租金升序。
     """
-    async with httpx.AsyncClient(timeout=12) as client:
-        resp = await client.post(
-            f"{YOUPIN_API}/api/homepage/v3/detail/commodity/list/lease",
-            headers=await _headers(),
-            json={
-                "templateId": template_id,
-                "pageSize": page_size,
-                "status": "20",
-                "hasLease": "true",
-                "gameId": "730",
-            },
-        )
+    client = _get_http()
+    resp = await client.post(
+        f"{YOUPIN_API}/api/homepage/v3/detail/commodity/list/lease",
+        headers=await _headers(),
+        json={
+            "templateId": template_id,
+            "pageSize": page_size,
+            "status": "20",
+            "hasLease": "true",
+            "gameId": "730",
+        },
+    )
     resp.raise_for_status()
     body = resp.json()
     _check(body, "market_lease_price")
@@ -1148,7 +1157,34 @@ async def import_buy_records(db: AsyncSession) -> dict:
         page += 1
 
     logger.info("共拉取悠悠购买记录 %d 条", len(all_records))
-    updated, skipped, not_found = [], [], []
+
+    valid_statuses = {"in_steam", "rented_out", "in_storage"}
+    result = await db.execute(
+        select(InventoryItem).where(
+            InventoryItem.purchase_price.is_(None),
+            InventoryItem.status.in_(list(valid_statuses)),
+        )
+    )
+    all_items = list(result.scalars().all())
+
+    by_commodity: dict[int, list[InventoryItem]] = {}
+    by_asset: dict[str, list[InventoryItem]] = {}
+    by_name: dict[str, list[InventoryItem]] = {}
+    for it in all_items:
+        if it.youpin_commodity_id:
+            by_commodity.setdefault(it.youpin_commodity_id, []).append(it)
+        if it.asset_id:
+            by_asset.setdefault(it.asset_id, []).append(it)
+        by_name.setdefault(it.market_hash_name, []).append(it)
+
+    claimed: set[int] = set()
+    updated, not_found = [], []
+
+    def _pick_from(candidates: list[InventoryItem]) -> InventoryItem | None:
+        for c in candidates:
+            if c.id not in claimed:
+                return c
+        return None
 
     for rec in all_records:
         hash_name = _parse_hash_name(rec)
@@ -1166,58 +1202,32 @@ async def import_buy_records(db: AsyncSession) -> dict:
         for _ in range(qty):
             item = None
 
-            if buy_commodity_id:
-                result = await db.execute(
-                    select(InventoryItem)
-                    .where(
-                        InventoryItem.youpin_commodity_id == buy_commodity_id,
-                        InventoryItem.purchase_price.is_(None),
-                        InventoryItem.status.in_(["in_steam", "rented_out", "in_storage"]),
-                    ).limit(1)
-                )
-                item = result.scalar_one_or_none()
+            if buy_commodity_id and buy_commodity_id in by_commodity:
+                item = _pick_from(by_commodity[buy_commodity_id])
 
-            if not item and buy_asset_id:
-                result = await db.execute(
-                    select(InventoryItem)
-                    .where(
-                        InventoryItem.asset_id == buy_asset_id,
-                        InventoryItem.class_id == "STEAM_PROTECTED",
-                        InventoryItem.purchase_price.is_(None),
-                        InventoryItem.status.in_(["in_steam", "rented_out", "in_storage"]),
-                    ).limit(1)
-                )
-                item = result.scalar_one_or_none()
+            if not item and buy_asset_id and buy_asset_id in by_asset:
+                for c in by_asset[buy_asset_id]:
+                    if c.id not in claimed and c.class_id == "STEAM_PROTECTED":
+                        item = c
+                        break
 
-            if not item and buy_abrade is not None:
-                result = await db.execute(
-                    select(InventoryItem)
-                    .where(
-                        InventoryItem.market_hash_name == hash_name,
-                        InventoryItem.purchase_price.is_(None),
-                        InventoryItem.status.in_(["in_steam", "rented_out", "in_storage"]),
-                        InventoryItem.abrade.isnot(None),
-                        func.abs(InventoryItem.abrade - buy_abrade) < 0.0001,
-                    ).limit(1)
-                )
-                item = result.scalar_one_or_none()
+            if not item and buy_abrade is not None and hash_name in by_name:
+                for c in by_name[hash_name]:
+                    if c.id not in claimed and c.abrade is not None and abs(c.abrade - buy_abrade) < 0.0001:
+                        item = c
+                        break
 
-            if not item:
-                result = await db.execute(
-                    select(InventoryItem)
-                    .where(
-                        InventoryItem.market_hash_name == hash_name,
-                        InventoryItem.purchase_price.is_(None),
-                        InventoryItem.status.in_(["in_steam", "rented_out", "in_storage"]),
-                        InventoryItem.abrade.is_(None),
-                    ).limit(1)
-                )
-                item = result.scalar_one_or_none()
+            if not item and hash_name in by_name:
+                for c in by_name[hash_name]:
+                    if c.id not in claimed and c.abrade is None:
+                        item = c
+                        break
 
             if not item:
                 not_found.append(hash_name)
                 break
 
+            claimed.add(item.id)
             if per_item_price is not None:
                 item.purchase_price = per_item_price
             if date_str:
