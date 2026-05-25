@@ -33,5 +33,8 @@ __pycache__/
 # Virtual environment (alternate name)
 venv/
 
+# Node modules (tailwind build)
+node_modules/
+
 # Local dev notes (personal session notes, not for repo)
 DEV_NOTES.md

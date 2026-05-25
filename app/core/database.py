@@ -31,8 +31,8 @@ async def init_db() -> None:
     from app.models import db_models  # noqa: F401 — 触发模型注册
 
     async with engine.begin() as conn:
-        # Enable WAL mode for better concurrent read/write
         await conn.execute(text("PRAGMA journal_mode=WAL"))
+        await conn.execute(text("PRAGMA busy_timeout=5000"))
         await conn.run_sync(Base.metadata.create_all)
 
         # 对已存在的表补加新列（SQLite 不支持修改约束，只能 ADD COLUMN）
@@ -64,6 +64,9 @@ async def init_db() -> None:
         # 性能索引
         _indexes = [
             "CREATE INDEX IF NOT EXISTS ix_ps_name_minute ON price_snapshot (market_hash_name, snapshot_minute)",
+            "CREATE INDEX IF NOT EXISTS ix_ps_platform_name_minute ON price_snapshot (market_hash_name, platform, snapshot_minute)",
+            "CREATE INDEX IF NOT EXISTS ix_ps_snapshot_minute ON price_snapshot (snapshot_minute)",
         ]
         for sql in _indexes:
             await conn.execute(text(sql))
+        await conn.execute(text("ANALYZE"))

@@ -1,9 +1,10 @@
 import logging
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.config import settings
 from app.core.database import init_db
@@ -32,15 +33,26 @@ app = FastAPI(
     version="0.6.0",
 )
 
+class APIKeyMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if not settings.app_api_key:
+            return await call_next(request)
+        if request.method in ("GET", "HEAD", "OPTIONS"):
+            return await call_next(request)
+        if not request.url.path.startswith("/api/"):
+            return await call_next(request)
+        auth = request.headers.get("Authorization", "")
+        if auth == f"Bearer {settings.app_api_key}":
+            return await call_next(request)
+        return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+
+
+app.add_middleware(APIKeyMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://cs2.kingke.dev",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-    ],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=["https://cs2.kingke.dev"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 app.include_router(prices.router, prefix="/api/prices", tags=["prices"])

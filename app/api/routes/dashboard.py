@@ -246,89 +246,52 @@ async def get_refresh_status():
     return market_refresh_state
 
 
+_overview_cache: dict = {"data": None, "ts": 0.0}
+_OVERVIEW_TTL = 30
+
+
 @router.get("/overview")
 async def get_overview(db: AsyncSession = Depends(get_db)):
     """投资组合汇总统计：各状态数量、总成本、市值、P&L、定价覆盖率。"""
+    now = time.monotonic()
+    if _overview_cache["data"] and now - _overview_cache["ts"] < _OVERVIEW_TTL:
+        return _overview_cache["data"]
 
-    # --- 各状态数量 ---
-    status_rows = (
-        await db.execute(
-            select(InventoryItem.status, func.count(InventoryItem.id)).group_by(
-                InventoryItem.status
-            )
-        )
-    ).all()
-    status_counts: dict = dict(status_rows)
+    cost_expr = func.coalesce(InventoryItem.purchase_price_manual, InventoryItem.purchase_price)
+    is_active = InventoryItem.status.in_(_ACTIVE)
+    has_price = or_(InventoryItem.purchase_price.isnot(None), InventoryItem.purchase_price_manual.isnot(None))
+
+    combined_q = select(
+        InventoryItem.status,
+        func.count(InventoryItem.id).label("cnt"),
+        func.sum(cost_expr).label("cost"),
+        func.sum(case((has_price, 1), else_=0)).label("priced"),
+        func.sum(case((InventoryItem.purchase_price_manual.isnot(None), 1), else_=0)).label("manual"),
+    ).group_by(InventoryItem.status)
+
+    combined_rows, (market_value_rented, market_value_steam) = await asyncio.gather(
+        db.execute(combined_q),
+        asyncio.gather(_get_cached_rented_value(), _get_cached_steam_value()),
+    )
+    combined_rows = combined_rows.all()
+
+    status_counts = {}
+    total_cost = 0.0
+    rented_cost = 0.0
+    steam_cost = 0.0
+    priced_count = 0
+    manual_count = 0
+    for s, cnt, cost, priced, manual in combined_rows:
+        status_counts[s] = cnt
+        if s in _ACTIVE:
+            total_cost += cost or 0
+            priced_count += priced or 0
+            manual_count += manual or 0
+        if s == "rented_out":
+            rented_cost = cost or 0
+        elif s == "in_steam":
+            steam_cost = cost or 0
     active_count = sum(status_counts.get(s, 0) for s in _ACTIVE)
-
-    # --- 活跃持仓中已定价数量 ---
-    priced_count = (
-        await db.execute(
-            select(func.count(InventoryItem.id)).where(
-                InventoryItem.status.in_(_ACTIVE),
-                or_(
-                    InventoryItem.purchase_price.isnot(None),
-                    InventoryItem.purchase_price_manual.isnot(None),
-                ),
-            )
-        )
-    ).scalar() or 0
-
-    # --- 手动定价数量 ---
-    manual_count = (
-        await db.execute(
-            select(func.count(InventoryItem.id)).where(
-                InventoryItem.status.in_(_ACTIVE),
-                InventoryItem.purchase_price_manual.isnot(None),
-            )
-        )
-    ).scalar() or 0
-
-    # --- 总成本：COALESCE(manual, auto) ---
-    total_cost = (
-        await db.execute(
-            select(
-                func.sum(
-                    func.coalesce(
-                        InventoryItem.purchase_price_manual,
-                        InventoryItem.purchase_price,
-                    )
-                )
-            ).where(InventoryItem.status.in_(_ACTIVE))
-        )
-    ).scalar() or 0
-
-    # --- 各状态成本分解 ---
-    rented_cost = (
-        await db.execute(
-            select(
-                func.sum(
-                    func.coalesce(
-                        InventoryItem.purchase_price_manual,
-                        InventoryItem.purchase_price,
-                    )
-                )
-            ).where(InventoryItem.status == "rented_out")
-        )
-    ).scalar() or 0
-
-    steam_cost = (
-        await db.execute(
-            select(
-                func.sum(
-                    func.coalesce(
-                        InventoryItem.purchase_price_manual,
-                        InventoryItem.purchase_price,
-                    )
-                )
-            ).where(InventoryItem.status == "in_steam")
-        )
-    ).scalar() or 0
-
-    # --- 市值计算 ---
-    # 统一使用悠悠 API 估值（与同步拉取一致），缓存 5 分钟
-    market_value_rented = await _get_cached_rented_value()
-    market_value_steam = await _get_cached_steam_value()
 
     # P&L 计算仍需 price_snapshot 的逐件价格
     all_active_names = (await db.execute(
@@ -416,7 +379,7 @@ async def get_overview(db: AsyncSession = Depends(get_db)):
     price_refresh_status = market_refresh_state["status"]
     price_refresh_progress = market_refresh_state["progress"]
 
-    return {
+    result = {
         "total_active": active_count,
         "status_breakdown": {
             "in_steam": status_counts.get("in_steam", 0),
@@ -433,18 +396,20 @@ async def get_overview(db: AsyncSession = Depends(get_db)):
         "manual_price_count": manual_count,
         "total_cost": round(total_cost, 2),
         "coverage_pct": round(priced_count / active_count * 100, 1) if active_count > 0 else 0,
-        # 市值 & P&L
         "market_value": round(market_value, 2) if market_value else 0,
         "market_value_steam": round(market_value_steam, 2),
         "market_value_rented": round(market_value_rented, 2),
         "market_priced_count": market_priced_count,
         "pnl": round(pnl, 2) if pnl is not None else None,
         "pnl_pct": round(pnl_pct, 2) if pnl_pct is not None else None,
-        "pnl_covered_count": pnl_count,   # 同时有购入价+市价的件数
+        "pnl_covered_count": pnl_count,
         "price_updated_at": price_updated_at,
         "price_refresh_status": price_refresh_status,
         "price_refresh_progress": price_refresh_progress,
     }
+    _overview_cache["data"] = result
+    _overview_cache["ts"] = time.monotonic()
+    return result
 
 
 @router.get("/items")

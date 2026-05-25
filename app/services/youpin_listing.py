@@ -193,7 +193,7 @@ async def list_for_sell(
     async with httpx.AsyncClient(timeout=12) as client:
         resp = await client.post(
             f"{YOUPIN_API}/api/commodity/Inventory/SellInventoryWithLeaseV2",
-            headers=_headers(),
+            headers=await _headers(),
             json={
                 "GameId": "730",
                 "ItemInfos": [{
@@ -237,7 +237,7 @@ async def list_for_lease(
     async with httpx.AsyncClient(timeout=12) as client:
         resp = await client.post(
             f"{YOUPIN_API}/api/commodity/Inventory/SellInventoryWithLeaseV2",
-            headers=_headers(),
+            headers=await _headers(),
             json={"GameId": "730", "ItemInfos": [item_info], "Sessionid": _device_id},
         )
     resp.raise_for_status()
@@ -273,7 +273,7 @@ async def list_for_both(
     async with httpx.AsyncClient(timeout=12) as client:
         resp = await client.post(
             f"{YOUPIN_API}/api/commodity/Inventory/SellInventoryWithLeaseV2",
-            headers=_headers(),
+            headers=await _headers(),
             json={"GameId": "730", "ItemInfos": [item_info], "Sessionid": _device_id},
         )
     resp.raise_for_status()
@@ -288,7 +288,7 @@ async def _pre_init_change_price(commodity_ids: list) -> None:
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.post(
             f"{YOUPIN_API}/api/youpin/bff/new/commodity/commodity/change/price/v3/init/info",
-            headers=_headers(),
+            headers=await _headers(),
             json={
                 "changePriceChannel": 0,
                 "commodityIdList": [str(cid) for cid in commodity_ids],
@@ -337,7 +337,7 @@ async def change_price(
     async with httpx.AsyncClient(timeout=12) as client:
         resp = await client.put(
             f"{YOUPIN_API}/api/commodity/Commodity/PriceChangeWithLeaseV2",
-            headers=_headers(),
+            headers=await _headers(),
             json={"Commoditys": [commodity_info], "Sessionid": _device_id},
         )
     resp.raise_for_status()
@@ -353,7 +353,7 @@ async def delist_item(commodity_ids: list) -> dict:
     async with httpx.AsyncClient(timeout=12) as client:
         resp = await client.put(
             f"{YOUPIN_API}/api/commodity/Commodity/OffShelf",
-            headers=_headers(),
+            headers=await _headers(),
             json={
                 "Ids": ",".join(str(cid) for cid in commodity_ids),
                 "IsDeleteCommodityCache": 1,
@@ -405,7 +405,7 @@ async def get_sell_shelf(page: int = 1, page_size: int = 50) -> dict:
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(
             f"{YOUPIN_API}/api/youpin/bff/new/commodity/v1/commodity/list/sell",
-            headers=_headers(),
+            headers=await _headers(),
             json={"pageIndex": page, "pageSize": page_size, "gameId": "730"},
         )
     resp.raise_for_status()
@@ -426,7 +426,7 @@ async def get_lease_shelf(page: int = 1, page_size: int = 50) -> dict:
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(
             f"{YOUPIN_API}/api/youpin/bff/new/commodity/v1/commodity/list/lease",
-            headers=_headers(),
+            headers=await _headers(),
             json={"pageIndex": page, "pageSize": page_size, "gameId": "730"},
         )
     resp.raise_for_status()

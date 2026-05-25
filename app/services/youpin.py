@@ -139,11 +139,10 @@ def _rand_str(n: int) -> str:
     return "".join(random.choices(string.ascii_letters + string.digits, k=n))
 
 
-def _get_real_uk() -> str:
+async def _get_real_uk() -> str:
     """
     向 /api/deviceW2 获取真实 uk（RSA+AES 加密协议）。
     结果缓存 30 秒，避免频繁加密请求。
-    仅在需要 PC 端市场查询时使用，普通接口用随机字符串即可。
     """
     now = time.time()
     if _uk_cache["value"] and now < _uk_cache["expires_at"]:
@@ -160,11 +159,11 @@ def _get_real_uk() -> str:
     pub = RSA.import_key(_RSA_PUBLIC_KEY)
     enc_key = base64.b64encode(PKCS1_v1_5.new(pub).encrypt(aes_key)).decode()
 
-    resp = httpx.post(
-        f"{YOUPIN_API}/api/deviceW2",
-        json={"encryptedData": enc_data, "encryptedAesKey": enc_key},
-        timeout=10,
-    )
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            f"{YOUPIN_API}/api/deviceW2",
+            json={"encryptedData": enc_data, "encryptedAesKey": enc_key},
+        )
     resp.raise_for_status()
 
     cipher_aes2 = AES.new(aes_key, AES.MODE_ECB)
@@ -179,7 +178,7 @@ def _get_real_uk() -> str:
 
 # ── HTTP Headers ────────────────────────────────────────────────────────────
 
-def _headers(pc_market: bool = False) -> dict:
+async def _headers(pc_market: bool = False) -> dict:
     """
     构建悠悠 API 请求头（模拟 Android 客户端）。
 
@@ -190,7 +189,7 @@ def _headers(pc_market: bool = False) -> dict:
 
     if pc_market:
         try:
-            uk = _get_real_uk()
+            uk = await _get_real_uk()
         except Exception as e:
             logger.warning("获取真实 uk 失败，使用随机值: %s", e)
             uk = _rand_str(65)
@@ -264,7 +263,7 @@ async def check_token_status() -> dict:
         async with httpx.AsyncClient(timeout=8) as client:
             resp = await client.get(
                 f"{YOUPIN_API}/api/user/Account/getUserInfo",
-                headers=_headers(),
+                headers=await _headers(),
             )
         resp.raise_for_status()
         body = resp.json()
@@ -291,7 +290,7 @@ async def send_sms_code(phone: str) -> dict:
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.post(
             f"{YOUPIN_API}/api/user/Auth/SendSignInSmsCode",
-            headers=_headers(),
+            headers=await _headers(),
             json={"Area": 86, "Mobile": phone, "Sessionid": session_id, "Code": ""},
         )
     resp.raise_for_status()
@@ -306,7 +305,7 @@ async def sms_login(phone: str, code: str, session_id: str) -> dict:
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.post(
             f"{YOUPIN_API}/api/user/Auth/SmsSignIn",
-            headers=_headers(),
+            headers=await _headers(),
             json={
                 "Area": 86,
                 "Code": code,
@@ -357,7 +356,7 @@ async def fetch_zero_cd_shelf(page: int = 1, page_size: int = 50) -> dict:
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(
             f"{YOUPIN_API}/api/youpin/bff/new/commodity/v1/commodity/list/zeroCDLease",
-            headers=_headers(),
+            headers=await _headers(),
             json={"pageIndex": page, "pageSize": page_size, "gameId": "730"},
         )
     resp.raise_for_status()
@@ -371,7 +370,7 @@ async def fetch_zero_cd_eligible(page: int = 1, page_size: int = 50) -> tuple:
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(
             f"{YOUPIN_API}/api/youpin/bff/trade/v1/order/lease/sublet/canEnable/list",
-            headers=_headers(),
+            headers=await _headers(),
             json={"pageIndex": page, "pageSize": page_size},
         )
     resp.raise_for_status()
@@ -388,7 +387,7 @@ async def enable_zero_cd(order_ids: list) -> dict:
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(
             f"{YOUPIN_API}/api/youpin/bff/order/sublet/open",
-            headers=_headers(),
+            headers=await _headers(),
             json={
                 "orderIdList": order_ids,
                 "subletConfig": {
@@ -409,7 +408,7 @@ async def disable_zero_cd(order_ids: list) -> dict:
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(
             f"{YOUPIN_API}/api/youpin/bff/order/sublet/close",
-            headers=_headers(),
+            headers=await _headers(),
             json={"orderIdList": order_ids},
         )
     resp.raise_for_status()
@@ -425,7 +424,7 @@ async def fetch_lease_records(page: int = 1, page_size: int = 30) -> tuple:
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(
             f"{YOUPIN_API}/api/youpin/bff/trade/v1/order/lease/out/list",
-            headers=_headers(),
+            headers=await _headers(),
             json={"pageIndex": page, "pageSize": page_size, "gameId": 730},
         )
     resp.raise_for_status()
@@ -442,7 +441,7 @@ async def fetch_buy_records(page: int = 1, page_size: int = 30) -> list:
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(
             f"{YOUPIN_API}/api/youpin/bff/trade/sale/v1/buy/list",
-            headers=_headers(),
+            headers=await _headers(),
             json={"pageIndex": page, "pageSize": page_size, "gameId": 730},
         )
     resp.raise_for_status()
@@ -461,7 +460,7 @@ async def fetch_sell_records(page: int = 1, page_size: int = 30) -> list:
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(
             f"{YOUPIN_API}/api/youpin/bff/trade/sale/v1/sell/list",
-            headers=_headers(),
+            headers=await _headers(),
             json={"pageIndex": page, "pageSize": page_size, "gameId": 730},
         )
     resp.raise_for_status()
@@ -480,7 +479,7 @@ async def fetch_stock_records(page: int = 1, page_size: int = 100) -> tuple:
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(
             f"{YOUPIN_API}/api/youpin/pc/inventory/list",
-            headers=_headers(),
+            headers=await _headers(),
             json={"pageIndex": page, "pageSize": page_size},
         )
     resp.raise_for_status()
@@ -501,7 +500,7 @@ async def fetch_full_inventory(page: int = 1, page_size: int = 500) -> tuple:
     async with httpx.AsyncClient(timeout=20) as client:
         resp = await client.post(
             f"{YOUPIN_API}/api/commodity/Inventory/GetUserInventoryDataListV3",
-            headers=_headers(),
+            headers=await _headers(),
             json={
                 "pageIndex": page,
                 "pageSize": page_size,
@@ -548,7 +547,7 @@ async def fetch_market_sell_price(
     async with httpx.AsyncClient(timeout=12) as client:
         resp = await client.post(
             f"{YOUPIN_API}/api/homepage/pc/goods/market/queryOnSaleCommodityList",
-            headers=_headers(pc_market=True),
+            headers=await _headers(pc_market=True),
             json=payload,
         )
     resp.raise_for_status()
@@ -573,7 +572,7 @@ async def fetch_market_lease_price(
     async with httpx.AsyncClient(timeout=12) as client:
         resp = await client.post(
             f"{YOUPIN_API}/api/homepage/v3/detail/commodity/list/lease",
-            headers=_headers(),
+            headers=await _headers(),
             json={
                 "templateId": template_id,
                 "pageSize": page_size,

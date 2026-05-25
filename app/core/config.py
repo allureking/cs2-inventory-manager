@@ -34,5 +34,8 @@ class Settings(BaseSettings):
     youpin_device_id: str = ""
     youpin_app_version: str = "5.28.3"  # 可在 .env 中覆盖，如 API 要求更新版本
 
+    # API 访问密钥 — 设置后所有修改类端点需要 Bearer token
+    app_api_key: str = ""
+
 
 settings = Settings()
