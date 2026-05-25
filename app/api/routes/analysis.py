@@ -752,33 +752,37 @@ async def spread_radar(
         "offset": (page - 1) * page_size,
     })).fetchall()
 
-    # Get platform breakdown for these items
-    items = []
-    for row in rows:
-        name = row[0]
-        # Fetch per-platform prices
-        plat_r = await db.execute(text("""
-            SELECT ps.platform, ps.sell_price, ps.sell_count
+    names = [row[0] for row in rows]
+    platform_map: dict[str, list] = {n: [] for n in names}
+
+    if names:
+        placeholders = ",".join(f":n{i}" for i in range(len(names)))
+        params = {f"n{i}": n for i, n in enumerate(names)}
+        plat_r = await db.execute(text(f"""
+            SELECT ps.market_hash_name, ps.platform, ps.sell_price, ps.sell_count
             FROM price_snapshot ps
             INNER JOIN (
-                SELECT platform, MAX(snapshot_minute) AS latest
+                SELECT market_hash_name, platform, MAX(snapshot_minute) AS latest
                 FROM price_snapshot
-                WHERE market_hash_name = :name
-                GROUP BY platform
-            ) lt ON ps.platform = lt.platform AND ps.snapshot_minute = lt.latest
-            WHERE ps.market_hash_name = :name AND ps.sell_price > 0 AND ps.platform != 'STEAM'
-        """), {"name": name})
-        platforms = [
-            {"platform": p[0], "sell_price": p[1], "sell_count": p[2]}
-            for p in plat_r.fetchall()
-        ]
+                WHERE market_hash_name IN ({placeholders})
+                GROUP BY market_hash_name, platform
+            ) lt ON ps.market_hash_name = lt.market_hash_name
+                AND ps.platform = lt.platform AND ps.snapshot_minute = lt.latest
+            WHERE ps.sell_price > 0 AND ps.platform != 'STEAM'
+        """), params)
+        for p in plat_r.fetchall():
+            if p[0] in platform_map:
+                platform_map[p[0]].append({"platform": p[1], "sell_price": p[2], "sell_count": p[3]})
+
+    items = []
+    for row in rows:
         items.append({
-            "market_hash_name": name,
+            "market_hash_name": row[0],
             "max_price": row[1],
             "min_price": row[2],
             "platform_count": row[3],
             "spread_pct": round(row[4], 1),
-            "platforms": platforms,
+            "platforms": platform_map.get(row[0], []),
         })
 
     # Total count

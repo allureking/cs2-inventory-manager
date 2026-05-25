@@ -445,12 +445,22 @@ async def compute_all_signals(target_date: Optional[str] = None) -> int:
         #    Pre-compute so we can calculate z-scores
         vol_map: dict[str, float] = {}  # market_hash_name → volatility_30
 
+        all_ph = await db.execute(
+            select(PriceHistory.market_hash_name, PriceHistory.close_price, PriceHistory.record_date)
+            .where(PriceHistory.platform == "ALL", PriceHistory.close_price.isnot(None), PriceHistory.close_price > 0)
+            .order_by(PriceHistory.market_hash_name, PriceHistory.record_date.asc())
+        )
+        price_history_map: dict[str, list[float]] = {}
+        for row in all_ph.all():
+            price_history_map.setdefault(row[0], []).append(float(row[1]))
+
         count = 0
-        # First pass: compute indicators and collect volatility
         item_indicator_cache: dict[str, dict] = {}
         for name in all_names:
             try:
-                indicators = await _compute_item_indicators(db, name, purchase_map, spread_map, days_held_map)
+                indicators = _compute_item_indicators_from_cache(
+                    name, price_history_map.get(name, []), purchase_map, spread_map, days_held_map
+                )
                 if indicators:
                     item_indicator_cache[name] = indicators
                     if indicators.get("volatility_30") is not None:
@@ -585,27 +595,14 @@ async def compute_all_signals(target_date: Optional[str] = None) -> int:
         return count
 
 
-async def _compute_item_indicators(
-    db: AsyncSession,
+def _compute_item_indicators_from_cache(
     market_hash_name: str,
+    closes: list[float],
     purchase_map: dict[str, float],
     spread_map: dict[str, float],
     days_held_map: dict[str, int],
 ) -> Optional[dict]:
-    """Compute raw technical indicators for a single item (no scoring)."""
-    result = await db.execute(
-        select(PriceHistory.close_price, PriceHistory.record_date)
-        .where(
-            and_(
-                PriceHistory.market_hash_name == market_hash_name,
-                PriceHistory.platform == "ALL",
-            )
-        )
-        .order_by(PriceHistory.record_date.asc())
-    )
-    rows = result.all()
-    closes = [float(r[0]) for r in rows if r[0] is not None and r[0] > 0]
-
+    """Compute raw technical indicators from pre-fetched close prices."""
     if len(closes) < 3:
         return None
 
