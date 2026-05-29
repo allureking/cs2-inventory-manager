@@ -97,15 +97,17 @@ _runtime_nickname: Optional[str] = None
 _runtime_member_level: int = 0  # 0=未知, 1=普通, 2=大会员, 3=黑金大会员
 
 _RUNTIME_STATE_FILE = Path(".runtime_state.json")
+_state_file_mtime: float = 0.0
 _token_lock = asyncio.Lock()
 _refresh_lock = asyncio.Lock()
 
 
 def _load_runtime_state() -> None:
     """从磁盘加载持久化的运行时 token（进程重启后恢复）"""
-    global _runtime_token, _runtime_nickname, _runtime_member_level
+    global _runtime_token, _runtime_nickname, _runtime_member_level, _state_file_mtime
     try:
         if _RUNTIME_STATE_FILE.exists():
+            _state_file_mtime = _RUNTIME_STATE_FILE.stat().st_mtime
             data = json.loads(_RUNTIME_STATE_FILE.read_text())
             _runtime_token = data.get("token") or None
             _runtime_nickname = data.get("nickname") or None
@@ -114,8 +116,21 @@ def _load_runtime_state() -> None:
         pass
 
 
+def _maybe_reload_state() -> None:
+    """多 worker 环境下检测 state 文件变更并重新加载"""
+    global _state_file_mtime
+    try:
+        if _RUNTIME_STATE_FILE.exists():
+            mt = _RUNTIME_STATE_FILE.stat().st_mtime
+            if mt > _state_file_mtime:
+                _load_runtime_state()
+    except Exception:
+        pass
+
+
 def _save_runtime_state() -> None:
     """将运行时 token 原子写入磁盘（先写临时文件再 rename，防止写入中断导致数据丢失）"""
+    global _state_file_mtime
     try:
         data = json.dumps({"token": _runtime_token, "nickname": _runtime_nickname, "member_level": _runtime_member_level})
         tmp_path = str(_RUNTIME_STATE_FILE) + ".tmp"
@@ -123,6 +138,7 @@ def _save_runtime_state() -> None:
             f.write(data)
         os.chmod(tmp_path, 0o600)
         os.replace(tmp_path, str(_RUNTIME_STATE_FILE))
+        _state_file_mtime = _RUNTIME_STATE_FILE.stat().st_mtime
     except Exception:
         pass
 
@@ -141,6 +157,7 @@ _ensure_device_id()
 
 def get_active_token() -> str:
     """返回当前有效 token：运行时(SMS) > .env 配置"""
+    _maybe_reload_state()
     return _runtime_token or settings.youpin_token
 
 
