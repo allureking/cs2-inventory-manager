@@ -68,13 +68,14 @@ async def collect_prices() -> None:
 
 
 async def _do_collect_prices(steamdt_svc) -> None:
+    import time as _time
+    t_start = _time.monotonic()
     collector_state["status"] = "running"
     collector_state["last_error"] = None
     collector_state["items_collected"] = 0
 
     try:
         async with AsyncSessionLocal() as db:
-            # Get unique active item names
             result = await db.execute(
                 select(InventoryItem.market_hash_name)
                 .where(InventoryItem.status.in_(["in_steam", "rented_out"]))
@@ -87,6 +88,7 @@ async def _do_collect_prices(steamdt_svc) -> None:
             collector_state["status"] = "idle"
             return
 
+        logger.info("collect_prices: START — %d items", len(hash_names))
         chunks = [hash_names[i:i + 100] for i in range(0, len(hash_names), 100)]
         collector_state["batches_total"] = len(chunks)
         collector_state["batches_done"] = 0
@@ -99,16 +101,15 @@ async def _do_collect_prices(steamdt_svc) -> None:
                 collector_state["batches_done"] += 1
             except Exception as e:
                 logger.warning("collect_prices batch error: %s", e)
-            # Rate limit: 1 batch/min
             if chunk is not chunks[-1]:
                 await asyncio.sleep(62)
 
+        elapsed = _time.monotonic() - t_start
         collector_state["status"] = "idle"
         collector_state["last_run"] = datetime.now(timezone.utc).isoformat()
         logger.info(
-            "collect_prices: done, %d items in %d batches",
-            collector_state["items_collected"],
-            len(chunks),
+            "collect_prices: DONE — %d items, %d batches, %.1fs",
+            collector_state["items_collected"], len(chunks), elapsed,
         )
     except Exception as e:
         collector_state["status"] = "error"
@@ -125,9 +126,12 @@ async def aggregate_daily(target_date: Optional[str] = None) -> int:
     Collapse yesterday's price_snapshot rows into price_history OHLC rows.
     Returns number of rows upserted.
     """
+    import time as _time
+    t_start = _time.monotonic()
     if target_date is None:
         yesterday = datetime.now(timezone.utc) - timedelta(days=1)
         target_date = yesterday.strftime("%Y%m%d")
+    logger.info("aggregate_daily: START — date=%s", target_date)
 
     # snapshot_minute is "YYYYMMDDHHmm", so prefix match on date
     prefix = target_date  # e.g. "20260222"
@@ -246,6 +250,8 @@ async def aggregate_daily(target_date: Optional[str] = None) -> int:
             await db.execute(ins)
 
         await db.commit()
+        elapsed = _time.monotonic() - t_start
+        logger.info("aggregate_daily: DONE — %d rows, %.1fs", count, elapsed)
         return count
 
 
@@ -406,13 +412,15 @@ async def backfill_avg_prices() -> None:
 async def snapshot_portfolio() -> None:
     """
     Record a timestamped snapshot of the entire portfolio's value, cost, and PnL.
-    Called every 30 min (5 min after collect_prices to ensure fresh data).
-    Enables portfolio value trend charts over time.
+    Called daily after collect_prices. Enables portfolio value trend charts.
     """
+    import time as _time
+    t_start = _time.monotonic()
     from sqlalchemy import and_, or_
 
     now = datetime.now(timezone.utc)
     snap_minute = now.strftime("%Y%m%d%H%M")
+    logger.info("snapshot_portfolio: START — minute=%s", snap_minute)
 
     try:
         async with AsyncSessionLocal() as db:
@@ -552,16 +560,15 @@ async def snapshot_portfolio() -> None:
             await db.execute(ins)
             await db.commit()
 
+            elapsed = _time.monotonic() - t_start
             logger.info(
-                "snapshot_portfolio: active=%d, value=%.2f, cost=%.2f, pnl=%s",
-                total_active, market_value, total_cost, pnl,
+                "snapshot_portfolio: DONE — active=%d, value=%.2f, cost=%.2f, pnl=%s, %.1fs",
+                total_active, market_value, total_cost, pnl, elapsed,
             )
 
-            # Pre-warm overview cache after portfolio snapshot
             try:
                 from app.api.routes.dashboard import invalidate_overview_cache
                 invalidate_overview_cache()
-                logger.info("snapshot_portfolio: overview cache invalidated")
             except Exception:
                 pass
     except Exception as e:
@@ -574,7 +581,10 @@ async def snapshot_portfolio() -> None:
 
 async def cleanup_old_snapshots(keep_days: int = 7) -> int:
     """Remove price_snapshot rows older than keep_days (already aggregated)."""
+    import time as _time
+    t_start = _time.monotonic()
     cutoff = (datetime.now(timezone.utc) - timedelta(days=keep_days)).strftime("%Y%m%d")
+    logger.info("cleanup: START — cutoff=%s (keep_days=%d)", cutoff, keep_days)
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             text("DELETE FROM price_snapshot WHERE snapshot_minute < :cutoff"),
@@ -582,6 +592,6 @@ async def cleanup_old_snapshots(keep_days: int = 7) -> int:
         )
         await db.commit()
         deleted = result.rowcount
-        if deleted:
-            logger.info("cleanup: purged %d old snapshots (before %s)", deleted, cutoff)
+        elapsed = _time.monotonic() - t_start
+        logger.info("cleanup: DONE — purged %d rows, %.1fs", deleted, elapsed)
         return deleted

@@ -112,15 +112,14 @@ def _calc_annuals(daily_income: float, rented_value: float, is_vip: bool = True)
 async def snapshot_daily(is_vip: bool = True) -> dict:
     """
     抓取当日数据并写入 daily_tracker。
-    1. 调用悠悠 API 获取租赁统计（几秒内完成）
-    2. DB 查询库存件数和总市值
-    3. 计算年化、涨跌（根据 is_vip 选择参数）
-    4. 写入 daily_tracker（upsert）
     """
+    import time as _time
+    t_start = _time.monotonic()
     from app.core.database import AsyncSessionLocal
     from app.services.youpin import fetch_lease_records, get_active_token
 
     today = datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d")
+    logger.info("snapshot_daily: START — date=%s", today)
 
     # 1) 租赁统计
     rental = {"count": 0, "value": 0.0, "income": 0.0}
@@ -212,7 +211,9 @@ async def snapshot_daily(is_vip: bool = True) -> dict:
         await db.execute(stmt)
         await db.commit()
 
-    logger.info("tracker snapshot_daily: %s 写入成功", today)
+    elapsed = _time.monotonic() - t_start
+    logger.info("snapshot_daily: DONE — date=%s, income=%.2f, value=%.2f, %.1fs",
+                today, rental["income"], inv_value, elapsed)
     return row
 
 
