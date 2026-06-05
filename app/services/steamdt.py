@@ -221,12 +221,22 @@ async def sync_base_info(db: AsyncSession) -> int:
 #  数据库工具函数                                                        #
 # ------------------------------------------------------------------ #
 
+def _allowed_platforms() -> set[str] | None:
+    raw = settings.price_platforms.strip()
+    if not raw:
+        return None
+    return {p.strip().upper() for p in raw.split(",") if p.strip()}
+
+
 async def _upsert_price_snapshots(
     market_hash_name: str,
     platforms: list[PlatformPriceVO],
     db: AsyncSession,
 ) -> None:
     """将平台价格列表写入 price_snapshot（按分钟去重）"""
+    allowed = _allowed_platforms()
+    if allowed:
+        platforms = [p for p in platforms if p.platform.upper() in allowed]
     minute = _snapshot_minute()
     rows = [
         {

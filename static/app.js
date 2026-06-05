@@ -386,11 +386,10 @@
 
         // ── Init ──────────────────────────────────────────────────────
         async init() {
-          const [,,,, marketStatus, alertData] = await Promise.all([
+          const [,,, marketStatus, alertData] = await Promise.all([
             this.loadOverview(),
             this.loadItems(),
             this.loadPortfolioHistory(),
-            this.loadMonitorStatus(),
             fetch('/api/youpin/market/status').then(r => r.ok ? r.json() : null).catch(() => null),
             fetch('/api/analysis/alerts?page_size=1&unread_only=true').then(r => r.ok ? r.json() : null).catch(() => null),
             this._loadAuthState(),

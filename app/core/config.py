@@ -37,5 +37,9 @@ class Settings(BaseSettings):
     # API 访问密钥 — 设置后所有修改类端点需要 Bearer token
     app_api_key: str = ""
 
+    # 采价平台白名单 — 只保存这些平台的价格快照，逗号分隔
+    # 可选: YOUPIN,BUFF,STEAM,C5,HALOSKINS,SKINPORT,DMARKET,WAXPEER,CSMONEY
+    price_platforms: str = "YOUPIN,BUFF,STEAM"
+
 
 settings = Settings()

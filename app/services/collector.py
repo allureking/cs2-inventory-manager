@@ -556,6 +556,14 @@ async def snapshot_portfolio() -> None:
                 "snapshot_portfolio: active=%d, value=%.2f, cost=%.2f, pnl=%s",
                 total_active, market_value, total_cost, pnl,
             )
+
+            # Pre-warm overview cache after portfolio snapshot
+            try:
+                from app.api.routes.dashboard import invalidate_overview_cache
+                invalidate_overview_cache()
+                logger.info("snapshot_portfolio: overview cache invalidated")
+            except Exception:
+                pass
     except Exception as e:
         logger.exception("snapshot_portfolio failed: %s", e)
 

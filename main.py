@@ -75,32 +75,31 @@ async def startup():
     # ── Background jobs ──
     _PDT = "America/Los_Angeles"  # 自动处理 PDT/PST 夏令时切换
 
-    # Price collection: every 30 min, on :00/:30 (UTC, 不受时区影响)
-    scheduler.add_job(collect_prices, "cron", minute="0,30", id="price_collect",
-                      misfire_grace_time=300, max_instances=1)
-    # Portfolio snapshot: every 30 min, on :15/:45 (UTC, 不受时区影响)
-    scheduler.add_job(snapshot_portfolio, "cron", minute="15,45", id="portfolio_snapshot",
-                      misfire_grace_time=300, max_instances=1)
-    # Cleanup old snapshots: 01:00 PDT
-    scheduler.add_job(cleanup_old_snapshots, "cron", hour=1, minute=0, id="cleanup_snapshots",
-                      timezone=_PDT, misfire_grace_time=600)
-
-    # ── 每日任务：美西时间 00:00 起依次执行 ──
-    # Daily tracker snapshot: 00:00 PDT
+    # ── 每日任务链：美西时间 00:00 起依次执行 ──
+    # 00:00  记录每日追踪
     scheduler.add_job(snapshot_daily, "cron", hour=0, minute=0, id="daily_tracker",
                       timezone=_PDT, misfire_grace_time=600)
-    # CSQAQ data sync: 00:02 PDT
+    # 00:02  CSQAQ 外部数据同步
     scheduler.add_job(csqaq_daily_sync, "cron", hour=0, minute=2, id="csqaq_sync",
                       timezone=_PDT, misfire_grace_time=600)
-    # Daily aggregation: 00:05 PDT
-    scheduler.add_job(aggregate_daily, "cron", hour=0, minute=5, id="daily_aggregate",
+    # 00:05  SteamDT 采价（268品/3批，约5分钟完成）
+    scheduler.add_job(collect_prices, "cron", hour=0, minute=5, id="price_collect",
+                      timezone=_PDT, misfire_grace_time=600, max_instances=1)
+    # 00:12  日聚合：将当日 price_snapshot 汇总到 price_history
+    scheduler.add_job(aggregate_daily, "cron", hour=0, minute=12, id="daily_aggregate",
                       timezone=_PDT, misfire_grace_time=600)
-    # Signal computation: 00:10 PDT
-    scheduler.add_job(compute_signals, "cron", hour=0, minute=10, id="daily_signals",
-                      timezone=_PDT, misfire_grace_time=600)
+    # 00:15  持仓快照（基于最新价格）
+    scheduler.add_job(snapshot_portfolio, "cron", hour=0, minute=15, id="portfolio_snapshot",
+                      timezone=_PDT, misfire_grace_time=600, max_instances=1)
+    # 01:00  清理 3 天前的 price_snapshot（日聚合已保存历史）
+    scheduler.add_job(cleanup_old_snapshots, "cron", hour=1, minute=0, id="cleanup_snapshots",
+                      timezone=_PDT, misfire_grace_time=600, kwargs={"keep_days": 3})
+    # Signal computation: DISABLED — kept for manual trigger via API
+    # scheduler.add_job(compute_signals, "cron", hour=0, minute=10, id="daily_signals",
+    #                   timezone=_PDT, misfire_grace_time=600)
 
     scheduler.start()
-    logger.info("APScheduler started with 7 background jobs")
+    logger.info("APScheduler started with 6 background jobs (daily_signals disabled)")
 
     # Take an immediate portfolio snapshot on startup
     try:

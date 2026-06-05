@@ -247,7 +247,12 @@ async def get_refresh_status():
 
 
 _overview_cache: dict = {"data": None, "ts": 0.0}
-_OVERVIEW_TTL = 30
+_OVERVIEW_TTL = 4 * 3600  # 4 hours — price data only changes once/day
+
+
+def invalidate_overview_cache() -> None:
+    """Called after daily price collection / portfolio snapshot to force refresh on next request."""
+    _overview_cache["ts"] = 0.0
 
 
 @router.get("/overview")
