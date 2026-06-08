@@ -24,6 +24,7 @@ from sqlalchemy import and_, select, func, or_
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.constants import ACTIVE_STATUSES
 from app.models.db_models import DailyTracker, InventoryItem, PriceSnapshot, TrackerConfig
 from app.services.pricing import get_latest_prices
 
@@ -49,7 +50,6 @@ _VIP_LONG_DAYS = 346.1   # R=22, 期望周期=22+0.15*8=23.2 → (365/23.2)*22
 _SHORT_WEIGHT = 0.7
 _LONG_WEIGHT = 0.3
 
-_ACTIVE = ["in_steam", "rented_out"]  # 不含 in_storage（收藏品不计入库存价值）
 
 
 # ══════════════════════════════════════════════════════════════
@@ -138,7 +138,7 @@ async def snapshot_daily(is_vip: bool = True) -> dict:
         # 总活跃件数（in_steam + rented_out）
         total_inv = (await db.execute(
             select(func.count(InventoryItem.id))
-            .where(InventoryItem.status.in_(_ACTIVE))
+            .where(InventoryItem.status.in_(ACTIVE_STATUSES))
         )).scalar() or 0
 
         # in_steam 物品市值：直接使用悠悠 API 估值（与同步拉取一致）

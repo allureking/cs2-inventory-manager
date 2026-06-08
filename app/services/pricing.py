@@ -56,3 +56,38 @@ async def get_latest_prices(
     ).all()
 
     return {row[0]: float(row[1]) for row in rows}
+
+
+async def get_all_latest_prices(db: AsyncSession) -> dict[str, float]:
+    """
+    返回所有饰品的 {market_hash_name: min_sell_price}。
+    逻辑同 get_latest_prices，但不限定名称列表。
+    """
+    latest_subq = (
+        select(
+            PriceSnapshot.market_hash_name,
+            func.max(PriceSnapshot.snapshot_minute).label("latest_minute"),
+        )
+        .group_by(PriceSnapshot.market_hash_name)
+        .subquery()
+    )
+
+    rows = (
+        await db.execute(
+            select(
+                PriceSnapshot.market_hash_name,
+                func.min(PriceSnapshot.sell_price).label("current_price"),
+            )
+            .join(
+                latest_subq,
+                and_(
+                    PriceSnapshot.market_hash_name == latest_subq.c.market_hash_name,
+                    PriceSnapshot.snapshot_minute == latest_subq.c.latest_minute,
+                ),
+            )
+            .where(PriceSnapshot.sell_price.isnot(None), PriceSnapshot.sell_price > 0)
+            .group_by(PriceSnapshot.market_hash_name)
+        )
+    ).all()
+
+    return {row[0]: float(row[1]) for row in rows}

@@ -28,13 +28,12 @@ from rich.panel import Panel
 from rich import box
 from sqlalchemy import case, func, select, or_
 
+from app.core.constants import ACTIVE_STATUSES
 from app.core.database import AsyncSessionLocal, init_db
 from app.models.db_models import InventoryItem
 
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(message)s")
 console = Console()
-
-VALID_STATUSES = {"in_steam", "rented_out", "in_storage"}
 
 
 async def cmd_list(show_all: bool = False, sort_by: str = "name", limit: int = 200):
@@ -55,7 +54,7 @@ async def cmd_list(show_all: bool = False, sort_by: str = "name", limit: int = 2
                 ).label("has_cost"),
                 func.min(InventoryItem.id).label("min_id"),
             )
-            .where(InventoryItem.status.in_(list(VALID_STATUSES)))
+            .where(InventoryItem.status.in_(ACTIVE_STATUSES))
             .group_by(InventoryItem.market_hash_name)
         )
 
@@ -124,7 +123,7 @@ async def cmd_set(identifier: str, price: float, by_id: bool = False, date: str 
             result = await db.execute(
                 select(InventoryItem).where(
                     InventoryItem.market_hash_name == identifier,
-                    InventoryItem.status.in_(list(VALID_STATUSES)),
+                    InventoryItem.status.in_(ACTIVE_STATUSES),
                     InventoryItem.purchase_price_manual.is_(None),
                     InventoryItem.purchase_price.is_(None),
                 )
@@ -183,7 +182,7 @@ async def cmd_batch(csv_path: str):
             result = await db.execute(
                 select(InventoryItem).where(
                     InventoryItem.market_hash_name == rec["name"],
-                    InventoryItem.status.in_(list(VALID_STATUSES)),
+                    InventoryItem.status.in_(ACTIVE_STATUSES),
                     InventoryItem.purchase_price_manual.is_(None),
                     InventoryItem.purchase_price.is_(None),
                 )
@@ -212,13 +211,13 @@ async def cmd_stats():
     """成本覆盖率统计"""
     async with AsyncSessionLocal() as db:
         total_r = await db.execute(
-            select(func.count()).where(InventoryItem.status.in_(list(VALID_STATUSES)))
+            select(func.count()).where(InventoryItem.status.in_(ACTIVE_STATUSES))
         )
         total = total_r.scalar() or 0
 
         with_cost_r = await db.execute(
             select(func.count()).where(
-                InventoryItem.status.in_(list(VALID_STATUSES)),
+                InventoryItem.status.in_(ACTIVE_STATUSES),
                 or_(InventoryItem.purchase_price.isnot(None), InventoryItem.purchase_price_manual.isnot(None)),
             )
         )
@@ -228,7 +227,7 @@ async def cmd_stats():
             select(
                 func.sum(func.coalesce(InventoryItem.purchase_price_manual, InventoryItem.purchase_price)),
             ).where(
-                InventoryItem.status.in_(list(VALID_STATUSES)),
+                InventoryItem.status.in_(ACTIVE_STATUSES),
                 or_(InventoryItem.purchase_price.isnot(None), InventoryItem.purchase_price_manual.isnot(None)),
             )
         )
@@ -246,7 +245,7 @@ async def cmd_stats():
                     )
                 ).label("has_cost"),
             )
-            .where(InventoryItem.status.in_(list(VALID_STATUSES)))
+            .where(InventoryItem.status.in_(ACTIVE_STATUSES))
             .group_by(InventoryItem.status)
         )
         status_rows = status_r.all()
@@ -259,7 +258,7 @@ async def cmd_stats():
                 func.sum(func.coalesce(InventoryItem.purchase_price_manual, InventoryItem.purchase_price)).label("total"),
             )
             .where(
-                InventoryItem.status.in_(list(VALID_STATUSES)),
+                InventoryItem.status.in_(ACTIVE_STATUSES),
                 or_(InventoryItem.purchase_price.isnot(None), InventoryItem.purchase_price_manual.isnot(None)),
             )
             .group_by(InventoryItem.purchase_platform)

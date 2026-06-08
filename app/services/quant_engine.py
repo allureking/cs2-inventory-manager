@@ -25,7 +25,9 @@ from sqlalchemy import and_, delete, func, or_, select, text
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.constants import ACTIVE_STATUSES
 from app.core.database import AsyncSessionLocal
+from app.services.pricing import get_all_latest_prices as _get_latest_prices
 from app.models.db_models import (
     InventoryItem,
     PriceHistory,
@@ -349,7 +351,7 @@ async def compute_all_signals(target_date: Optional[str] = None) -> int:
                 func.min(InventoryItem.purchase_date).label("earliest_date"),
                 func.min(InventoryItem.first_seen_at).label("earliest_seen"),
             )
-            .where(InventoryItem.status.in_(["in_steam", "rented_out"]))
+            .where(InventoryItem.status.in_(ACTIVE_STATUSES))
             .group_by(InventoryItem.market_hash_name)
         )
         purchase_map: dict[str, float] = {}
@@ -388,7 +390,7 @@ async def compute_all_signals(target_date: Optional[str] = None) -> int:
                 InventoryItem.market_hash_name,
                 func.count().label("cnt"),
             )
-            .where(InventoryItem.status.in_(["in_steam", "rented_out"]))
+            .where(InventoryItem.status.in_(ACTIVE_STATUSES))
             .group_by(InventoryItem.market_hash_name)
         )
         holding_count_map: dict[str, int] = {
@@ -851,22 +853,6 @@ async def _generate_alerts(
     return alert_count
 
 
-async def _get_latest_prices(db: AsyncSession) -> dict[str, float]:
-    """Get latest sell_price per item from price_snapshot (platform with lowest price)."""
-    stmt = text("""
-        SELECT ps.market_hash_name, MIN(ps.sell_price)
-        FROM price_snapshot ps
-        INNER JOIN (
-            SELECT market_hash_name, MAX(snapshot_minute) AS latest
-            FROM price_snapshot
-            GROUP BY market_hash_name
-        ) lt ON ps.market_hash_name = lt.market_hash_name
-            AND ps.snapshot_minute = lt.latest
-        WHERE ps.sell_price IS NOT NULL AND ps.sell_price > 0
-        GROUP BY ps.market_hash_name
-    """)
-    result = await db.execute(stmt)
-    return {row[0]: float(row[1]) for row in result.fetchall()}
 
 
 # ══════════════════════════════════════════════════════════════
@@ -892,7 +878,7 @@ async def compute_quick_pnl_alerts() -> int:
                 ).label("eff_price"),
             )
             .where(
-                InventoryItem.status.in_(["in_steam", "rented_out"]),
+                InventoryItem.status.in_(ACTIVE_STATUSES),
                 func.coalesce(
                     InventoryItem.purchase_price_manual,
                     InventoryItem.purchase_price,

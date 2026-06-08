@@ -32,14 +32,13 @@ from rich.console import Console
 from rich.table import Table
 from sqlalchemy import func, select
 
+from app.core.constants import ACTIVE_STATUSES
 from app.core.database import AsyncSessionLocal, init_db
 from app.models.db_models import InventoryItem
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 console = Console()
-
-VALID_STATUSES = {"in_steam", "rented_out", "in_storage"}
 
 
 @dataclass
@@ -359,7 +358,7 @@ async def do_import(records: list[BuyRecord], dry_run: bool = False, overwrite: 
     report = MatchReport()
 
     async with AsyncSessionLocal() as db:
-        query = select(InventoryItem).where(InventoryItem.status.in_(list(VALID_STATUSES)))
+        query = select(InventoryItem).where(InventoryItem.status.in_(ACTIVE_STATUSES))
         if not overwrite:
             query = query.where(InventoryItem.purchase_price.is_(None))
 
@@ -370,7 +369,7 @@ async def do_import(records: list[BuyRecord], dry_run: bool = False, overwrite: 
             # Count items already having cost (for report)
             count_r = await db.execute(
                 select(func.count()).where(
-                    InventoryItem.status.in_(list(VALID_STATUSES)),
+                    InventoryItem.status.in_(ACTIVE_STATUSES),
                     InventoryItem.purchase_price.isnot(None),
                 )
             )

@@ -24,6 +24,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.constants import ACTIVE_STATUSES
 from app.core.database import AsyncSessionLocal
 from app.models.db_models import InventoryItem, Item, QuantSignal
 
@@ -110,7 +111,7 @@ async def build_id_mapping() -> int:
                 InventoryItem.market_hash_name,
                 InventoryItem.name,
             )
-            .where(InventoryItem.status.in_(["in_steam", "rented_out"]))
+            .where(InventoryItem.status.in_(ACTIVE_STATUSES))
             .group_by(InventoryItem.market_hash_name)
         )
         items = result.all()
@@ -225,7 +226,7 @@ async def sync_all_items() -> int:
         missing_type_q = await db.execute(
             select(InventoryItem.market_hash_name)
             .where(
-                InventoryItem.status.in_(["in_steam", "rented_out"]),
+                InventoryItem.status.in_(ACTIVE_STATUSES),
                 InventoryItem.item_type.is_(None),
             )
             .distinct()
@@ -235,7 +236,7 @@ async def sync_all_items() -> int:
         missing_icon_q = await db.execute(
             select(InventoryItem.market_hash_name)
             .where(
-                InventoryItem.status.in_(["in_steam", "rented_out"]),
+                InventoryItem.status.in_(ACTIVE_STATUSES),
                 InventoryItem.icon_url.is_(None),
             )
             .distinct()

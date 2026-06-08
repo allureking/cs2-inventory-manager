@@ -32,6 +32,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.constants import ACTIVE_STATUSES
 from app.models.db_models import InventoryItem, PriceSnapshot, StorageUnit
 from app.schemas.steam import SteamAsset, SteamDescription, SteamInventoryResponse
 
@@ -372,7 +373,7 @@ async def get_inventory_with_prices(
     """
     sid = steam_id or settings.steam_steam_id
     if status_filter is None:
-        status_filter = ["in_steam", "rented_out"]
+        status_filter = ACTIVE_STATUSES
 
     items = list((await db.execute(
         select(InventoryItem)
@@ -434,7 +435,7 @@ async def get_portfolio_summary(db: AsyncSession, steam_id: Optional[str] = None
     """
     sid = steam_id or settings.steam_steam_id
 
-    all_active = await get_inventory_with_prices(db, sid, ["in_steam", "rented_out"])
+    all_active = await get_inventory_with_prices(db, sid, ACTIVE_STATUSES)
     storage_count_result = await db.execute(
         select(InventoryItem)
         .where(InventoryItem.steam_id == sid, InventoryItem.status == "in_storage")

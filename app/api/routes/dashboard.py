@@ -23,12 +23,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal, get_db
 from app.models.db_models import InventoryItem, PriceSnapshot
+from app.core.constants import ACTIVE_STATUSES
 from app.services import steamdt as price_svc
 from app.services.pricing import get_latest_prices as _get_latest_prices
 
 router = APIRouter()
-
-_ACTIVE = ["in_steam", "rented_out"]
 
 # 悠悠 API 估值缓存（避免 overview 每次请求都调外部 API）
 _rented_value_cache: dict = {"value": 0.0, "ts": 0.0}
@@ -179,7 +178,7 @@ async def _run_price_refresh() -> None:
             rows = (
                 await db.execute(
                     select(func.distinct(InventoryItem.market_hash_name))
-                    .where(InventoryItem.status.in_(_ACTIVE))
+                    .where(InventoryItem.status.in_(ACTIVE_STATUSES))
                 )
             ).scalars().all()
 
@@ -263,7 +262,7 @@ async def get_overview(db: AsyncSession = Depends(get_db)):
         return _overview_cache["data"]
 
     cost_expr = func.coalesce(InventoryItem.purchase_price_manual, InventoryItem.purchase_price)
-    is_active = InventoryItem.status.in_(_ACTIVE)
+    is_active = InventoryItem.status.in_(ACTIVE_STATUSES)
     has_price = or_(InventoryItem.purchase_price.isnot(None), InventoryItem.purchase_price_manual.isnot(None))
 
     combined_q = select(
@@ -288,7 +287,7 @@ async def get_overview(db: AsyncSession = Depends(get_db)):
     manual_count = 0
     for s, cnt, cost, priced, manual in combined_rows:
         status_counts[s] = cnt
-        if s in _ACTIVE:
+        if s in ACTIVE_STATUSES:
             total_cost += cost or 0
             priced_count += priced or 0
             manual_count += manual or 0
@@ -296,12 +295,12 @@ async def get_overview(db: AsyncSession = Depends(get_db)):
             rented_cost = cost or 0
         elif s == "in_steam":
             steam_cost = cost or 0
-    active_count = sum(status_counts.get(s, 0) for s in _ACTIVE)
+    active_count = sum(status_counts.get(s, 0) for s in ACTIVE_STATUSES)
 
     # P&L 计算仍需 price_snapshot 的逐件价格
     all_active_names = (await db.execute(
         select(InventoryItem.market_hash_name)
-        .where(InventoryItem.status.in_(_ACTIVE))
+        .where(InventoryItem.status.in_(ACTIVE_STATUSES))
         .distinct()
     )).scalars().all()
     full_price_map = await _get_latest_prices(list(all_active_names), db)
@@ -312,7 +311,7 @@ async def get_overview(db: AsyncSession = Depends(get_db)):
     if market_value_steam == 0.0 or market_value_rented == 0.0:
         name_status_rows = (await db.execute(
             select(InventoryItem.market_hash_name, InventoryItem.status, func.count(InventoryItem.id).label("cnt"))
-            .where(InventoryItem.status.in_(_ACTIVE))
+            .where(InventoryItem.status.in_(ACTIVE_STATUSES))
             .group_by(InventoryItem.market_hash_name, InventoryItem.status)
         )).all()
         if market_value_steam == 0.0:
@@ -338,7 +337,7 @@ async def get_overview(db: AsyncSession = Depends(get_db)):
                 ).label("cost"),
             )
             .where(
-                InventoryItem.status.in_(["in_steam", "rented_out"]),
+                InventoryItem.status.in_(ACTIVE_STATUSES),
                 or_(
                     InventoryItem.purchase_price.isnot(None),
                     InventoryItem.purchase_price_manual.isnot(None),

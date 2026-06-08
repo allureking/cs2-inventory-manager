@@ -28,33 +28,18 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
 from rich import box
-from sqlalchemy import case, func, select, or_, text
+from sqlalchemy import case, func, select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.constants import ACTIVE_STATUSES
 from app.core.database import AsyncSessionLocal, init_db
-from app.models.db_models import InventoryItem, PriceSnapshot
+from app.models.db_models import InventoryItem
+from app.services.pricing import get_all_latest_prices
 
 logging.basicConfig(level=logging.WARNING)
 console = Console()
 
-VALID_STATUSES = ["in_steam", "rented_out", "in_storage"]
 
-
-async def _get_latest_prices(db: AsyncSession) -> dict[str, float]:
-    stmt = text("""
-        SELECT ps.market_hash_name, MIN(ps.sell_price)
-        FROM price_snapshot ps
-        INNER JOIN (
-            SELECT market_hash_name, MAX(snapshot_minute) AS latest
-            FROM price_snapshot
-            GROUP BY market_hash_name
-        ) lt ON ps.market_hash_name = lt.market_hash_name
-            AND ps.snapshot_minute = lt.latest
-        WHERE ps.sell_price IS NOT NULL AND ps.sell_price > 0
-        GROUP BY ps.market_hash_name
-    """)
-    result = await db.execute(stmt)
-    return {row[0]: float(row[1]) for row in result.fetchall()}
 
 
 async def build_dashboard(
@@ -67,7 +52,7 @@ async def build_dashboard(
     renderables = []
 
     async with AsyncSessionLocal() as db:
-        prices = await _get_latest_prices(db)
+        prices = await get_all_latest_prices(db)
 
         result = await db.execute(
             select(
@@ -82,7 +67,7 @@ async def build_dashboard(
                 ).label("costed_qty"),
                 func.avg(func.coalesce(InventoryItem.purchase_price_manual, InventoryItem.purchase_price)).label("avg_cost"),
             )
-            .where(InventoryItem.status.in_(VALID_STATUSES))
+            .where(InventoryItem.status.in_(ACTIVE_STATUSES))
             .group_by(InventoryItem.market_hash_name)
         )
         rows = result.all()

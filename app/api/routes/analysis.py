@@ -27,6 +27,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, func, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.constants import ACTIVE_STATUSES
 from app.core.database import AsyncSessionLocal, get_db
 from app.models.db_models import (
     InventoryItem,
@@ -73,7 +74,7 @@ async def analysis_overview(db: AsyncSession = Depends(get_db)):
     # Only consider signals for items we own
     owned_names_q = (
         select(InventoryItem.market_hash_name)
-        .where(InventoryItem.status.in_(["in_steam", "rented_out"]))
+        .where(InventoryItem.status.in_(ACTIVE_STATUSES))
         .distinct()
     )
 
@@ -113,7 +114,7 @@ async def analysis_overview(db: AsyncSession = Depends(get_db)):
     priced_names_q = (
         select(InventoryItem.market_hash_name)
         .where(
-            InventoryItem.status.in_(["in_steam", "rented_out"]),
+            InventoryItem.status.in_(ACTIVE_STATUSES),
             func.coalesce(InventoryItem.purchase_price_manual, InventoryItem.purchase_price).isnot(None),
         )
         .distinct()
@@ -198,7 +199,7 @@ async def _get_category_trends(db: AsyncSession, signal_date: str) -> list[dict]
             QuantSignal.signal_date == signal_date,
             QuantSignal.market_hash_name.in_(
                 select(InventoryItem.market_hash_name)
-                .where(InventoryItem.status.in_(["in_steam", "rented_out"]))
+                .where(InventoryItem.status.in_(ACTIVE_STATUSES))
                 .distinct()
             ),
         )
@@ -342,7 +343,7 @@ async def get_item_signals(
         )
         .where(
             InventoryItem.market_hash_name == market_hash_name,
-            InventoryItem.status.in_(["in_steam", "rented_out"]),
+            InventoryItem.status.in_(ACTIVE_STATUSES),
         )
     )
     inv_rows = inv_r.all()
@@ -514,7 +515,7 @@ async def signal_rankings(
     if owned_only:
         owned_q = (
             select(InventoryItem.market_hash_name)
-            .where(InventoryItem.status.in_(["in_steam", "rented_out"]))
+            .where(InventoryItem.status.in_(ACTIVE_STATUSES))
             .distinct()
         )
         q = q.where(QuantSignal.market_hash_name.in_(owned_q))
@@ -885,7 +886,7 @@ async def search_items(
                 QuantSignal.signal_date == latest_date,
                 QuantSignal.market_hash_name.in_(
                     select(InventoryItem.market_hash_name)
-                    .where(InventoryItem.status.in_(["in_steam", "rented_out"]))
+                    .where(InventoryItem.status.in_(ACTIVE_STATUSES))
                     .distinct()
                 ),
             )
@@ -902,7 +903,7 @@ async def search_items(
             InventoryItem.icon_url,
         )
         .where(
-            InventoryItem.status.in_(["in_steam", "rented_out"]),
+            InventoryItem.status.in_(ACTIVE_STATUSES),
             or_(
                 InventoryItem.market_hash_name.ilike(f"%{q}%"),
                 InventoryItem.name.ilike(f"%{q}%"),

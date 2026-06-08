@@ -18,6 +18,7 @@ from sqlalchemy import func, or_, select, text
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.constants import ACTIVE_STATUSES
 from app.core.database import AsyncSessionLocal
 from app.models.db_models import InventoryItem, PortfolioSnapshot, PriceHistory, PriceSnapshot
 
@@ -78,7 +79,7 @@ async def _do_collect_prices(steamdt_svc) -> None:
         async with AsyncSessionLocal() as db:
             result = await db.execute(
                 select(InventoryItem.market_hash_name)
-                .where(InventoryItem.status.in_(["in_steam", "rented_out"]))
+                .where(InventoryItem.status.in_(ACTIVE_STATUSES))
                 .distinct()
             )
             hash_names = [row[0] for row in result.all()]
@@ -291,7 +292,7 @@ async def backfill_avg_prices() -> None:
         async with AsyncSessionLocal() as db:
             result = await db.execute(
                 select(InventoryItem.market_hash_name)
-                .where(InventoryItem.status.in_(["in_steam", "rented_out"]))
+                .where(InventoryItem.status.in_(ACTIVE_STATUSES))
                 .distinct()
             )
             hash_names = [row[0] for row in result.all()]
@@ -424,8 +425,6 @@ async def snapshot_portfolio() -> None:
 
     try:
         async with AsyncSessionLocal() as db:
-            _ACTIVE = ["in_steam", "rented_out"]
-
             # ── Count by status ──
             status_rows = (
                 await db.execute(
@@ -434,7 +433,7 @@ async def snapshot_portfolio() -> None:
                 )
             ).all()
             status_counts = dict(status_rows)
-            total_active = sum(status_counts.get(s, 0) for s in _ACTIVE)
+            total_active = sum(status_counts.get(s, 0) for s in ACTIVE_STATUSES)
 
             # ── Total cost (COALESCE manual, auto) ──
             total_cost = (
@@ -446,7 +445,7 @@ async def snapshot_portfolio() -> None:
                                 InventoryItem.purchase_price,
                             )
                         )
-                    ).where(InventoryItem.status.in_(_ACTIVE))
+                    ).where(InventoryItem.status.in_(ACTIVE_STATUSES))
                 )
             ).scalar() or 0
 
@@ -454,7 +453,7 @@ async def snapshot_portfolio() -> None:
             cost_priced = (
                 await db.execute(
                     select(func.count(InventoryItem.id)).where(
-                        InventoryItem.status.in_(_ACTIVE),
+                        InventoryItem.status.in_(ACTIVE_STATUSES),
                         or_(
                             InventoryItem.purchase_price.isnot(None),
                             InventoryItem.purchase_price_manual.isnot(None),
@@ -463,45 +462,59 @@ async def snapshot_portfolio() -> None:
                 )
             ).scalar() or 0
 
-            # ── Market value (latest price_snapshot per item × count, by status) ──
-            name_status_rows = (
-                await db.execute(
-                    select(
-                        InventoryItem.market_hash_name,
-                        InventoryItem.status,
-                        func.count(InventoryItem.id).label("cnt"),
-                    )
-                    .where(InventoryItem.status.in_(_ACTIVE))
-                    .group_by(InventoryItem.market_hash_name, InventoryItem.status)
-                )
-            ).all()
+            # ── Market value: 使用悠悠 API 聚合值（与 Overview/Tracker 口径一致）──
+            from app.services.youpin import fetch_stock_records, fetch_lease_records, get_active_token
+            from app.services.tracker import _parse_stats_desc
 
-            all_names = list({r[0] for r in name_status_rows})
-            name_to_count = {}
-            for r in name_status_rows:
-                name_to_count[r[0]] = name_to_count.get(r[0], 0) + r[2]
-
-            # Get latest prices (shared function)
-            from app.services.pricing import get_latest_prices
-            price_map = await get_latest_prices(all_names, db)
-
-            market_value = 0.0
             in_steam_value = 0.0
             rented_out_value = 0.0
-            market_priced = 0
-            for name, status, cnt in name_status_rows:
-                mp = price_map.get(name)
-                if mp is not None:
-                    val = mp * cnt
-                    market_value += val
-                    market_priced += cnt
-                    if status == "in_steam":
-                        in_steam_value += val
-                    elif status == "rented_out":
-                        rented_out_value += val
+            token = get_active_token()
+            if token:
+                try:
+                    _, _, stock_valuation = await fetch_stock_records(page=1, page_size=1)
+                    in_steam_value = float(str(stock_valuation).replace(",", "").replace("¥", "")) if stock_valuation else 0.0
+                except Exception as e:
+                    logger.warning("snapshot_portfolio: 获取库存估值失败: %s", e)
+                try:
+                    _, _, stats_desc = await fetch_lease_records(page=1, page_size=1)
+                    rental_stats = _parse_stats_desc(stats_desc)
+                    rented_out_value = rental_stats["value"]
+                except Exception as e:
+                    logger.warning("snapshot_portfolio: 获取租赁估值失败: %s", e)
 
-            # ── PnL: items with both cost and market price ──
-            item_cost_rows = (
+            # fallback: 悠悠 API 不可用时用 price_snapshot
+            if in_steam_value == 0.0 or rented_out_value == 0.0:
+                from app.services.pricing import get_latest_prices
+                name_status_rows = (
+                    await db.execute(
+                        select(
+                            InventoryItem.market_hash_name,
+                            InventoryItem.status,
+                            func.count(InventoryItem.id).label("cnt"),
+                        )
+                        .where(InventoryItem.status.in_(ACTIVE_STATUSES))
+                        .group_by(InventoryItem.market_hash_name, InventoryItem.status)
+                    )
+                ).all()
+                all_names = list({r[0] for r in name_status_rows})
+                price_map = await get_latest_prices(all_names, db)
+                if in_steam_value == 0.0:
+                    for n, s, c in name_status_rows:
+                        if s == "in_steam":
+                            mp = price_map.get(n)
+                            if mp: in_steam_value += mp * c
+                if rented_out_value == 0.0:
+                    for n, s, c in name_status_rows:
+                        if s == "rented_out":
+                            mp = price_map.get(n)
+                            if mp: rented_out_value += mp * c
+
+            market_value = in_steam_value + rented_out_value
+            market_priced = total_active
+
+            # ── PnL: 逐件 price_snapshot vs effective_cost ──
+            from app.services.pricing import get_latest_prices as _get_prices
+            pnl_item_rows = (
                 await db.execute(
                     select(
                         InventoryItem.market_hash_name,
@@ -511,7 +524,7 @@ async def snapshot_portfolio() -> None:
                         ).label("cost"),
                     )
                     .where(
-                        InventoryItem.status.in_(_ACTIVE),
+                        InventoryItem.status.in_(ACTIVE_STATUSES),
                         or_(
                             InventoryItem.purchase_price.isnot(None),
                             InventoryItem.purchase_price_manual.isnot(None),
@@ -519,11 +532,13 @@ async def snapshot_portfolio() -> None:
                     )
                 )
             ).all()
+            pnl_names = list({r[0] for r in pnl_item_rows})
+            pnl_price_map = await _get_prices(pnl_names, db)
 
             pnl_market_sum = 0.0
             pnl_cost_sum = 0.0
-            for row in item_cost_rows:
-                mp = price_map.get(row[0])
+            for row in pnl_item_rows:
+                mp = pnl_price_map.get(row[0])
                 if mp is not None and row[1] is not None:
                     pnl_market_sum += mp
                     pnl_cost_sum += float(row[1])

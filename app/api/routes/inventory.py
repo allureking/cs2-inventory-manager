@@ -31,6 +31,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.constants import ACTIVE_STATUSES
 from app.core.database import get_db
 from app.models.db_models import InventoryItem
 from app.services import steam as steam_svc
@@ -80,7 +81,7 @@ async def missing_cost(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(InventoryItem)
         .where(
-            InventoryItem.status.in_(["in_steam", "rented_out"]),
+            InventoryItem.status.in_(ACTIVE_STATUSES),
             InventoryItem.purchase_price.is_(None),
         )
         .order_by(InventoryItem.market_hash_name)
@@ -119,7 +120,7 @@ async def list_inventory(
     elif status in VALID_STATUSES:
         status_filter = [status]
     else:
-        status_filter = ["in_steam", "rented_out"]
+        status_filter = list(ACTIVE_STATUSES)
 
     items = await steam_svc.get_inventory_with_prices(db, status_filter=status_filter)
     return {"total": len(items), "status_filter": status_filter, "data": items}

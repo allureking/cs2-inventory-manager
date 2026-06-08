@@ -50,6 +50,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.constants import ACTIVE_STATUSES
 from app.models.db_models import InventoryItem, PriceSnapshot
 
 logger = logging.getLogger(__name__)
@@ -620,7 +621,6 @@ async def fetch_market_lease_price(
 
 # ── 批量刷新市场价格 ────────────────────────────────────────────────────────
 
-_ACTIVE = ["in_steam", "rented_out", "in_storage"]
 
 # 后台刷新状态（供 dashboard 轮询）
 market_refresh_state: dict = {
@@ -694,7 +694,7 @@ async def bulk_refresh_market_prices(db: AsyncSession) -> None:
                         func.min(InventoryItem.abrade).label("abrade"),
                     )
                     .where(
-                        InventoryItem.status.in_(_ACTIVE),
+                        InventoryItem.status.in_(ACTIVE_STATUSES),
                         InventoryItem.youpin_template_id.isnot(None),
                     )
                     .group_by(InventoryItem.youpin_template_id, InventoryItem.market_hash_name)
@@ -1221,7 +1221,7 @@ async def import_buy_records(db: AsyncSession) -> dict:
 
     logger.info("共拉取悠悠购买记录 %d 条", len(all_records))
 
-    valid_statuses = {"in_steam", "rented_out", "in_storage"}
+    valid_statuses = set(ACTIVE_STATUSES)
     result = await db.execute(
         select(InventoryItem).where(
             InventoryItem.purchase_price.is_(None),
@@ -1341,7 +1341,7 @@ async def import_sell_records(db: AsyncSession) -> dict:
             select(InventoryItem)
             .where(
                 InventoryItem.market_hash_name == hash_name,
-                InventoryItem.status.in_(["in_steam", "rented_out"]),
+                InventoryItem.status.in_(ACTIVE_STATUSES),
                 InventoryItem.class_id.notin_(["YOUPIN", "STEAM_PROTECTED"]),
             ).limit(1)
         )
