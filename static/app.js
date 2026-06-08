@@ -1,5 +1,15 @@
     const _CHANGELOG = Object.freeze([
           {
+            version: '0.9.1', date: '2026-06-08', major: false,
+            title_cn: '图表渲染修复（桌面 resize 崩溃 + iOS 空白）',
+            title_en: 'Chart Rendering Fixes (desktop resize crash + iOS blank)',
+            fixed: [
+              ['桌面端图表 resize 崩溃：窗口缩放/开 DevTools 时图表变空白且无法恢复——移除 fingerprint 中的宽度,避免与 Chart.js 原生 responsive 双重重建导致 getContext 报错', 'Desktop chart resize crash: charts blanked on window resize / DevTools — removed width from fingerprint to stop double-rebuild racing Chart.js responsive (getContext null)'],
+              ['iOS WebKit 概览图表空白:iOS 丢弃视口外 canvas 后备存储,导致折叠下方的持仓构成/盈亏排名/盈亏率分布绘制后空白——滚入视口时强制重绘修复(桌面/DevTools 无此问题)', 'iOS WebKit blank overview charts: iOS drops off-screen canvas backing store — force re-render on scroll-into-view (not reproducible on desktop/DevTools)'],
+            ],
+            commits: [],
+          },
+          {
             version: '0.9.0', date: '2026-06-08', major: true,
             title_cn: '数据可视化升级 + 全面移动端适配',
             title_en: 'Data-Viz Upgrade + Full Mobile Optimization',

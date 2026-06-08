@@ -1,5 +1,11 @@
 # Changelog / 更新日志
 
+## [0.9.1] - 2026-06-08
+
+### 修复 / Fixed
+- **桌面端图表 resize 崩溃**：窗口缩放 / 打开 DevTools 时概览图表变空白且无法恢复——移除 fingerprint 中的容器宽度,避免 ResizeObserver 与 Chart.js 原生 `responsive` 双重重建导致 `getContext` 报错 / **Desktop chart resize crash**: charts blanked on window resize / DevTools — removed container width from fingerprint to stop ResizeObserver double-rebuild racing Chart.js's native `responsive` (getContext null)
+- **iOS WebKit 概览图表空白**：iOS 会丢弃视口外 canvas 的后备存储,导致首屏折叠下方的持仓构成 / 盈亏排名 / 盈亏率分布绘制后空白、滚动到可见也不恢复——改为 IntersectionObserver 在图表滚入视口时强制 `chart.render()` 重绘(桌面 / DevTools 手机模式均为 Chromium 引擎,复现不出此 WebKit 专有问题) / **iOS WebKit blank overview charts**: iOS drops the backing store of off-screen canvases — force `chart.render()` on scroll-into-view via IntersectionObserver (WebKit-only; not reproducible on Chromium desktop/DevTools)
+
 ## [0.9.0] - 2026-06-08
 
 ### 新增 / Added
