@@ -11,11 +11,12 @@
 - [x] 测试基建 `tests/conftest.py`：`memory_db()` 内存库会话、`asgi_client()` ASGI 客户端(不触发 startup)、`make_item/make_snapshot` fixtures
 - [x] `tests/test_tracker_model.py`(32 用例)：`_calc_annuals`(VIP/非VIP/边界)、常量符合 expected_cycle 公式(S=0/0.85/1、CD=0/8)、`_parse_stats_desc`、`_safe_float/int`
 
+- [x] `tests/test_pricing_query.py`(14 用例)：get_latest_prices / get_all_latest_prices —— 空名单、缺价、跨平台取 min、多分钟只认最新分钟、null/0/负价排除、最新分钟全无效则剔除
+
 ## 进行中 🚧
-- (下一步) pricing 查询函数 DB 测试
+- (下一步) tracker CRUD DB 测试
 
 ## 待办 📋
-- [ ] `test_pricing_query.py`：get_latest_prices / get_all_latest_prices(空名单、缺价、跨平台取 min、多分钟取最新分钟、null/0/负价排除)
 - [ ] `test_tracker_crud.py`：get_daily_records / get_monthly_summary(VIP 10% vs 非VIP 20% 费率、缺天预估)/ update_record / import_export_excel
 - [ ] `test_pnl_aggregation.py` 或经路由：ACTIVE_STATUSES 计数/市值口径(空库存/全 in_storage/混合)、PnL(逐件 snapshot vs effective_cost、VIP/非VIP)
 - [ ] `test_youpin_pagination.py`：import_buy_records / import_sell_records 的 loop-until-empty(空页/单页/多页/末页不满/异常 break/MAX_PAGES)— mock fetch_*_records
