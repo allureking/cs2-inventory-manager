@@ -17,11 +17,11 @@
 - [x] `tests/test_youpin_pagination.py`(16 用例 = 8 场景 × buy/sell)：空页/单页不满/满页+空/满页+不满/多满页+空/首页异常/次页异常保留/ MAX_PAGES 上限,mock fetch_*_records
 
 ## 进行中 🚧
-- (下一步) dashboard 口径 + PnL 经路由测试
+- (下一步) 悠悠解析工具纯函数 + 早报
 
 ## 待办 📋
-- [ ] `test_dashboard_api.py`：overview / chart-data 经 ASGI —— ACTIVE_STATUSES 计数/市值口径(空库存/全 in_storage/混合)、PnL(逐件 snapshot vs effective_cost、覆盖率)、异常入参
-- [ ] `test_routes_misc.py`：tracker GET、monitoring、inventory GET、health — 正常 + 异常入参
+- [x] `tests/test_dashboard_api.py`(15 用例)：overview / chart-data 经 ASGI —— ACTIVE_STATUSES 计数/市值口径(空库存/全 in_storage/混合)、PnL(逐件 snapshot vs effective_cost、覆盖率)、异常入参
+- [x] `tests/test_routes_misc.py`(13 用例)：tracker GET、monitoring、inventory GET、health — 正常 + 异常入参
 - [ ] 纯工具边界(如有遗漏的 formatters/换算)
 - [ ] REPORT.md 早报
 
