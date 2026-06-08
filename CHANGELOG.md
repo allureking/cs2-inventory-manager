@@ -1,5 +1,44 @@
 # Changelog / 更新日志
 
+## [0.8.0] - 2026-06-08
+
+### 新增 / Added
+- **悠悠有品交易记录导入工具**（`scripts/import_youpin.py`）：5 级智能匹配（commodity_id → asset_id → hash+磨损 → hash_name → 中文名），FIFO 多实例绑定，支持 API/CSV/JSON 数据源，`--dry-run`/`--overwrite` / **YouPin trade record import tool**: 5-level smart matching with FIFO binding, API/CSV/JSON sources, dry-run & overwrite modes
+- **手动成本录入 CLI**（`scripts/manage_cost.py`）：list/set/set-id/batch/stats 命令，Rich 表格展示，支持按名称/ID/批量设置购入价 / **Manual cost entry CLI**: list/set/set-id/batch/stats commands with Rich tables
+- **利润监控终端仪表盘**（`scripts/dashboard.py`）：持仓总览、PnL 排行、信号高亮（$$>100%, $>50%, !!<-20%），`--watch` 持续刷新 / **Profit monitoring CLI dashboard**: portfolio overview, PnL ranking, signal highlights, --watch mode
+- **YAML 告警规则外置**（`config/alert_rules.yaml`）：7 条全局规则 + 按类目阈值覆盖（刀/手套利润止盈线 60%/120%，贴纸 30%），mtime 缓存热加载 / **YAML alert rules**: 7 global rules + per-category threshold overrides, mtime-based hot reload
+- **库存/租赁同步诊断日志**：每次同步后输出 API 聚合值 vs 实际遍历值对比（件数/价值/日租 DIFF） / **Sync diagnostic logging**: API aggregate vs actual traversal comparison after each sync
+
+### 修复 / Fixed
+- **租赁分页不再依赖 totalCount**：API 的 totalCount 可能缓存偏小导致漏拉最后一页，改为循环到空页为止（与库存同策略） / **Lease pagination fix**: no longer relies on API's potentially stale totalCount, loops until empty page
+
+### 变更 / Changed
+- Phase 1 降频优化：采价间隔 30min→2h，快照 15min→1h，缓存 TTL 扩展至 30min / Phase 1 tuning: price collection 30min→2h, snapshots 15min→1h, cache TTL 30min
+- 新增 `rich`、`pyyaml` 依赖 / Added `rich`, `pyyaml` dependencies
+- 量化引擎告警从硬编码改为 YAML 驱动 / Quant engine alerts switched from hardcoded to YAML-driven
+
+## [0.7.0] - 2026-05-29
+
+### 新增 / Added
+- **挂售快照功能**：保存货架数据供下架后参考 / **Listing snapshot**: save shelf data for reference after delisting
+- **加仓/减仓快捷操作**：收益追踪成本基准调整 / **Position sizing shortcuts**: adjust cost basis for income tracking
+- **概览走势图双大类切换**：组合价值 + 租赁走势 / **Overview chart dual-category toggle**: portfolio value + rental trends
+- **月度汇总缺失天数预估** + 日报表全列可编辑 / **Monthly summary missing-day estimation** + editable daily report columns
+
+### 修复 / Fixed
+- **多 worker 环境下 token 同步**：修复导入 84101 错误 / **Multi-worker token sync**: fixed import 84101 error
+- **Chart.js resize 无限递归**导致图表消失 / **Chart.js resize infinite recursion** causing charts to vanish
+- **快照保存**处理空字符串字段转换 / **Snapshot save** handles empty string field conversion
+- **库存市值计算统一**为悠悠 API 估值，消除 SteamDT 定价偏差 / **Unified market value** to use YouPin API valuation
+
+### 变更 / Changed
+- **首页改为资产概览+持仓列表合并**，收益追踪移至第二 Tab / **Homepage merged** overview + holdings, income tracker to 2nd tab
+- **概览走势图从 ApexCharts 迁回 Chart.js 4.4.0**（稳定性更好） / **Overview charts** migrated back from ApexCharts to Chart.js 4.4.0 (stability)
+- **全面性能优化**：持久 HTTP 客户端、N+1 查询修复（spread_radar 批量查询 + 信号计算预加载）、JS 代码分割、Pydantic 请求模型 / **Performance overhaul**: persistent HTTP client, N+1 query fixes, JS code splitting, Pydantic models
+- **安全加固**：CORS 收紧、SQL 参数化补全 / **Security hardening**: CORS tightening, SQL parameterization
+- Tracker 表格默认只渲染 30 行，减少 Alpine 绑定数 5600→1200 / Tracker table renders 30 rows by default, reducing Alpine bindings 5600→1200
+- 定时任务改为 PDT 时区 / Scheduled tasks switched to PDT timezone
+
 ## [0.6.0] - 2026-03-21
 
 ### 新增 / Added

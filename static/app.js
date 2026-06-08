@@ -1,5 +1,64 @@
     const _CHANGELOG = Object.freeze([
           {
+            version: '0.8.0', date: '2026-06-08', major: true,
+            title_cn: '成本管理与利润监控 — Phase 2/3',
+            title_en: 'Cost Management & Profit Monitoring — Phase 2/3',
+            added: [
+              ['悠悠有品交易记录导入工具：5 级智能匹配（commodity_id → asset_id → hash+磨损 → hash_name → 中文名），FIFO 多实例绑定', 'YouPin trade record import tool: 5-level smart matching (commodity_id → asset_id → hash+wear → hash_name → cn_name), FIFO multi-instance binding'],
+              ['手动成本录入 CLI：list/set/set-id/batch/stats 命令，Rich 表格展示', 'Manual cost entry CLI: list/set/set-id/batch/stats commands with Rich tables'],
+              ['利润监控终端仪表盘：持仓总览、PnL 排行、信号高亮、--watch 持续刷新', 'Profit monitoring CLI dashboard: portfolio overview, PnL ranking, signal highlights, --watch mode'],
+              ['YAML 告警规则外置：7 条全局规则 + 按类目（刀/手套/贴纸）阈值覆盖，热加载', 'YAML alert rules: 7 global rules + per-category threshold overrides (knife/glove/sticker), hot reload'],
+              ['库存/租赁同步诊断日志：每次同步后对比 API 聚合值 vs 实际遍历值', 'Sync diagnostic logging: compare API aggregate vs actual traversal after each sync'],
+            ],
+            fixed: [
+              ['租赁分页不再依赖 API 的 totalCount（可能缓存偏小），改为循环到空页为止', 'Lease pagination no longer relies on API totalCount (may be stale), loops until empty page'],
+            ],
+            changed: [
+              ['Phase 1 降频优化：采价间隔从 30min 调至 2h，快照从 15min 调至 1h，缓存 TTL 扩展至 30min', 'Phase 1 tuning: price collection 30min→2h, snapshots 15min→1h, cache TTL extended to 30min'],
+              ['新增 rich、pyyaml 依赖', 'Added rich, pyyaml dependencies'],
+            ],
+            commits: [
+              { hash: 'dfb047c', msg: 'fix: 租赁分页不再依赖 totalCount，改为循环到空页', date: '06-08' },
+              { hash: 'f7ff1ce', msg: 'feat: 成本管理与利润监控工具链 (Phase 2/3)', date: '06-08' },
+              { hash: '5f964f4', msg: 'diag: 添加任务链观测日志', date: '06-05' },
+              { hash: '8e43113', msg: 'perf: 阶段一精简 — 降频采价/快照 + 扩展缓存', date: '06-05' },
+            ],
+          },
+          {
+            version: '0.7.0', date: '2026-05-29', major: true,
+            title_cn: 'UI 重构 & 性能优化 & 新功能',
+            title_en: 'UI Overhaul, Performance & New Features',
+            added: [
+              ['挂售快照功能：保存货架数据供下架后参考', 'Listing snapshot: save shelf data for reference after delisting'],
+              ['加仓/减仓快捷操作：收益追踪成本基准调整', 'Position sizing shortcuts: adjust cost basis for income tracking'],
+              ['概览走势图双大类切换（组合价值 + 租赁走势）', 'Overview chart dual-category toggle (portfolio value + rental trends)'],
+              ['月度汇总缺失天数预估 + 日报表全列可编辑', 'Monthly summary missing-day estimation + editable daily report columns'],
+            ],
+            fixed: [
+              ['多 worker 环境下 token 同步：修复导入 84101 错误', 'Multi-worker token sync: fixed import 84101 error'],
+              ['Chart.js resize 无限递归导致图表消失', 'Chart.js resize infinite recursion causing charts to vanish'],
+              ['快照保存处理空字符串字段转换', 'Snapshot save handles empty string field conversion'],
+              ['库存市值计算统一为悠悠 API 估值', 'Unified market value calculation to use YouPin API valuation'],
+            ],
+            changed: [
+              ['首页改为资产概览+持仓列表合并，收益追踪移至第二 Tab', 'Homepage merged into overview + holdings, income tracker moved to 2nd tab'],
+              ['概览走势图从 ApexCharts 迁回 Chart.js 4.4.0（稳定性）', 'Overview charts migrated back from ApexCharts to Chart.js 4.4.0 (stability)'],
+              ['全面性能优化：持久 HTTP 客户端、N+1 查询修复、JS 代码分割、Pydantic 请求模型', 'Performance: persistent HTTP client, N+1 query fixes, JS code splitting, Pydantic request models'],
+              ['Tracker 表格默认只渲染 30 行，减少 Alpine 绑定数 5600→1200', 'Tracker table renders 30 rows by default, reducing Alpine bindings 5600→1200'],
+              ['定时任务改为 PDT 时区', 'Scheduled tasks switched to PDT timezone'],
+            ],
+            commits: [
+              { hash: '73379aa', msg: 'fix: 多 worker 环境下 token 同步', date: '05-29' },
+              { hash: '3397784', msg: 'perf: 持久HTTP客户端 + N+1修复 + JS代码分割', date: '05-24' },
+              { hash: 'd3220f7', msg: 'perf: 全面性能优化 + 安全加固', date: '05-24' },
+              { hash: '50fa646', msg: 'feat: 加仓/减仓 - 收益追踪成本基准快捷调整', date: '05-24' },
+              { hash: '70fc3a3', msg: 'feat: 挂售快照功能', date: '05-22' },
+              { hash: '7a0700d', msg: 'refactor: 概览走势图改用 Chart.js 4.4.0', date: '04-08' },
+              { hash: '0b50ad4', msg: 'feat: 首页改为资产概览+持仓列表合并', date: '04-08' },
+              { hash: '4b1c750', msg: 'fix: 统一库存市值计算', date: '04-06' },
+            ],
+          },
+          {
             version: '0.6.0', date: '2026-03-21', major: true,
             title_cn: '每日收益追踪系统 — 替代 Excel 手动记录',
             title_en: 'Daily Income Tracker — Replace Manual Excel Tracking',
