@@ -1007,6 +1007,28 @@ async def import_stock_records(db: AsyncSession) -> dict:
         reconciled_stock = r.rowcount
         await db.commit()
 
+    # ── 诊断日志：API 聚合 vs 实际遍历对比 ──
+    sum_price = 0.0
+    for rec in all_records:
+        try:
+            sum_price += float(rec.get("price") or 0)
+        except (TypeError, ValueError):
+            pass
+    api_val = 0.0
+    try:
+        api_val = float(str(valuation).replace(",", "").replace("¥", ""))
+    except (TypeError, ValueError):
+        pass
+    logger.info(
+        "库存同步诊断 ▸ API聚合: totalCount=%d valuation=¥%.2f | "
+        "实际遍历: records=%d sum_price=¥%.2f | "
+        "DIFF: 件数=%+d 价值=%+.2f",
+        total_count, api_val,
+        len(all_records), sum_price,
+        len(all_records) - total_count,
+        sum_price - api_val,
+    )
+
     return {
         "valuation": valuation,
         "total_fetched": len(all_records),
@@ -1027,8 +1049,8 @@ async def import_lease_records(db: AsyncSession) -> dict:
     batch, total_count, stats_desc = await fetch_lease_records(page=1, page_size=PAGE_SIZE)
     all_records.extend(batch)
 
-    total_pages = (total_count + PAGE_SIZE - 1) // PAGE_SIZE
-    for page in range(2, total_pages + 1):
+    MAX_PAGES = 200
+    for page in range(2, MAX_PAGES + 1):
         try:
             batch, _, _ = await fetch_lease_records(page=page, page_size=PAGE_SIZE)
         except Exception as e:
@@ -1038,7 +1060,7 @@ async def import_lease_records(db: AsyncSession) -> dict:
             break
         all_records.extend(batch)
 
-    logger.info("共拉取悠悠租出记录 %d 条", len(all_records))
+    logger.info("共拉取悠悠租出记录 %d 条（API totalCount=%d）", len(all_records), total_count)
     steam_id = cfg.steam_steam_id or "unknown"
     upserted, skipped = [], []
 
@@ -1143,6 +1165,30 @@ async def import_lease_records(db: AsyncSession) -> dict:
     reconciled_returned = max(0, prev_rented_count - len(upserted))
     logger.info("租出对账：之前 %d 件，本次 %d 件，%d 件租约归还 → 状态改回 in_steam",
                 prev_rented_count, len(upserted), reconciled_returned)
+
+    # ── 诊断日志：API 聚合 vs 实际遍历对比 ──
+    sum_rent_cents = 0
+    unique_cids = set()
+    for rec in all_records:
+        info = rec.get("commodityInfo") or {}
+        cid = info.get("commodityId")
+        if cid:
+            unique_cids.add(cid)
+        try:
+            sum_rent_cents += int(info.get("shortLeasePrice") or 0)
+        except (TypeError, ValueError):
+            pass
+    from app.services.tracker import _parse_stats_desc
+    api_stats = _parse_stats_desc(stats_desc)
+    logger.info(
+        "租赁同步诊断 ▸ API聚合: 件数=%d 价值=¥%.2f 日租=¥%.2f | "
+        "实际遍历: records=%d unique_cid=%d sum_rent=¥%.2f | "
+        "DIFF: 件数=%+d 日租=%+.2f",
+        api_stats["count"], api_stats["value"], api_stats["income"],
+        len(all_records), len(unique_cids), sum_rent_cents / 100,
+        len(all_records) - api_stats["count"],
+        sum_rent_cents / 100 - api_stats["income"],
+    )
 
     return {
         "stats": stats_desc,
