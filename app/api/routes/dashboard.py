@@ -615,3 +615,78 @@ async def set_manual_price(
         "purchase_price_manual": item.purchase_price_manual,
         "effective_price": effective,
     }
+
+
+@router.get("/chart-data")
+async def chart_data(db: AsyncSession = Depends(get_db)):
+    """Read-only aggregation for visualization charts (type composition, PnL distribution, top items)."""
+    from app.services.pricing import get_all_latest_prices
+
+    cost_expr = func.coalesce(InventoryItem.purchase_price_manual, InventoryItem.purchase_price)
+    has_price = or_(InventoryItem.purchase_price.isnot(None), InventoryItem.purchase_price_manual.isnot(None))
+
+    rows = (await db.execute(
+        select(
+            InventoryItem.market_hash_name,
+            InventoryItem.name,
+            InventoryItem.item_type,
+            func.count().label("qty"),
+            func.sum(cost_expr).label("total_cost"),
+            func.sum(case((has_price, 1), else_=0)).label("costed_qty"),
+            func.min(InventoryItem.icon_url).label("icon_url"),
+        )
+        .where(InventoryItem.status.in_(ACTIVE_STATUSES))
+        .group_by(InventoryItem.market_hash_name, InventoryItem.name, InventoryItem.item_type)
+    )).all()
+
+    prices = await get_all_latest_prices(db)
+
+    items = []
+    type_agg = {}
+    pnl_buckets = {"<-50": 0, "-50~-30": 0, "-30~-10": 0, "-10~0": 0,
+                   "0~10": 0, "10~30": 0, "30~50": 0, "50~100": 0, ">100": 0}
+    for hash_name, cn_name, item_type, qty, total_cost, costed_qty, icon_url in rows:
+        price = prices.get(hash_name, 0)
+        mv = round(price * qty, 2)
+        cost = round(total_cost or 0, 2)
+        pnl = None
+        pnl_pct = None
+        if costed_qty and total_cost:
+            avg_cost = total_cost / costed_qty
+            if price > 0:
+                pnl_pct = round((price - avg_cost) / avg_cost * 100, 1)
+                pnl = round((price - avg_cost) * costed_qty, 2)
+                if pnl_pct < -50: pnl_buckets["<-50"] += 1
+                elif pnl_pct < -30: pnl_buckets["-50~-30"] += 1
+                elif pnl_pct < -10: pnl_buckets["-30~-10"] += 1
+                elif pnl_pct < 0: pnl_buckets["-10~0"] += 1
+                elif pnl_pct < 10: pnl_buckets["0~10"] += 1
+                elif pnl_pct < 30: pnl_buckets["10~30"] += 1
+                elif pnl_pct < 50: pnl_buckets["30~50"] += 1
+                elif pnl_pct < 100: pnl_buckets["50~100"] += 1
+                else: pnl_buckets[">100"] += 1
+
+        t = item_type or "其他"
+        if t not in type_agg:
+            type_agg[t] = {"type": t, "qty": 0, "market_value": 0, "cost": 0}
+        type_agg[t]["qty"] += qty
+        type_agg[t]["market_value"] += mv
+        type_agg[t]["cost"] += cost
+
+        items.append({"name": hash_name, "cn_name": cn_name or hash_name, "type": t,
+                       "qty": qty, "market_value": mv, "cost": cost, "pnl": pnl, "pnl_pct": pnl_pct,
+                       "icon_url": icon_url})
+
+    items.sort(key=lambda x: x["market_value"], reverse=True)
+    top_value = items[:20]
+    gainers = sorted([i for i in items if i["pnl"] is not None and i["pnl"] > 0], key=lambda x: -x["pnl"])[:10]
+    losers = sorted([i for i in items if i["pnl"] is not None and i["pnl"] < 0], key=lambda x: x["pnl"])[:10]
+    type_list = sorted(type_agg.values(), key=lambda x: -x["market_value"])
+
+    return {
+        "type_composition": type_list,
+        "pnl_distribution": pnl_buckets,
+        "top_value": top_value,
+        "top_gainers": gainers,
+        "top_losers": losers,
+    }

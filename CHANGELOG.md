@@ -1,5 +1,24 @@
 # Changelog / 更新日志
 
+## [0.9.0] - 2026-06-08
+
+### 新增 / Added
+- **概览数据可视化升级**：持仓构成环形图（按类型市值）、盈亏 Top 涨/跌排行、盈亏率分布柱图、持仓价值 Top20 图标网格 / **Overview data-viz upgrade**: type-composition doughnut, P&L gainers/losers ranking, P&L-rate distribution, Top-20 holdings icon grid
+- **只读聚合接口** `/api/dashboard/chart-data`：按 `market_hash_name`/`item_type` 聚合，为新图表供数（不改任何业务计算） / **Read-only aggregation endpoint** `/api/dashboard/chart-data` feeding the new charts
+- **移动端顶栏「更多」抽屉 + 横向滚动 Tab 栏**：主操作（同步库存）常驻可见，其余操作收进抽屉 / **Mobile header "More" drawer + horizontal-scroll tab bar**: primary Sync stays visible, secondary actions in drawer
+- **移动端持仓列表卡片化**：每行 → 纵向卡片（饰品/状态/市价/盈亏），点击复用详情侧栏；收益追踪表 sticky 左固定首列 / **Mobile holdings card list** (taps reuse detail panel); tracker table sticky left column
+
+### 修复 / Fixed
+- **图表渲染根因修复**：宽度为 0 时不再渲染/缓存，切换到隐藏 Tab 再切回不再永久空白；统一 IntersectionObserver/ResizeObserver 生命周期 / **Chart lifecycle root-cause fix**: never render/cache at width 0; switching to a hidden tab and back no longer blanks; unified IO/RO lifecycle
+- **图表 resize 崩溃修复**：移除 fingerprint 中的宽度，避免与 Chart.js 原生 `responsive` 双重重建导致 `getContext` 报错与图表清空 / **Resize-crash fix**: removed width from fingerprint to stop double-rebuild racing Chart.js's native responsive (getContext null / blank charts)
+- **消除移动端页面级横向溢出**：顶栏、详情侧栏 `min(100vw,380px)`、宽表父链 `min-width:0` / **Eliminated page-level horizontal overflow on mobile**: header, side panel `min(100vw,380px)`, wide-table parent chains `min-width:0`
+
+### 变更 / Changed
+- 概览 6 张统计卡精简为 4 张信息密度更高的玻璃卡；大数字显示完整精确值，hover 显示精确数据 / Overview stat cards consolidated 6→4 denser glass cards; full precise big numbers with hover detail
+- 图表跟随三态主题（light/dark/system）；ApexCharts 收益/价格图主题色不再写死 / Charts follow light/dark/system theme; ApexCharts tracker/price colors no longer hardcoded
+- 移动端收尾：正文/数字 ≥12px、主操作点击高度 ≥40px、隐藏次要时间戳、模态 `max-height:90vh` 可滚动、表格移动端整页滚动 / Mobile polish: body ≥12px, tap targets ≥40px, hidden secondary timestamps, scrollable modals, page-scroll tables
+- 纯呈现层改造，未改动任何数据计算/聚合/API/业务逻辑 / Presentation-layer only; no changes to data aggregation/API/business logic
+
 ## [0.8.0] - 2026-06-08
 
 ### 新增 / Added

@@ -1,5 +1,27 @@
     const _CHANGELOG = Object.freeze([
           {
+            version: '0.9.0', date: '2026-06-08', major: true,
+            title_cn: '数据可视化升级 + 全面移动端适配',
+            title_en: 'Data-Viz Upgrade + Full Mobile Optimization',
+            added: [
+              ['概览新增持仓构成环形图、盈亏 Top 涨跌排行、盈亏率分布、持仓价值 Top20 图标网格', 'Overview: type-composition doughnut, P&L gainers/losers ranking, P&L-rate distribution, Top-20 holdings icon grid'],
+              ['新增只读聚合接口 /api/dashboard/chart-data 为新图表供数', 'New read-only /api/dashboard/chart-data aggregation endpoint feeding the charts'],
+              ['移动端顶栏「更多」抽屉 + 横向滚动 Tab 栏，主操作（同步）常驻', 'Mobile header "More" drawer + horizontal-scroll tab bar, primary Sync action always visible'],
+              ['移动端持仓列表卡片化（点击复用详情侧栏），收益追踪表 sticky 左固定首列', 'Mobile holdings list card-ified (taps reuse detail panel), tracker table sticky left column'],
+            ],
+            fixed: [
+              ['图表渲染根因修复：0 宽渲染不再被缓存成永久空白；切换隐藏 Tab 再切回不再空白', 'Chart lifecycle fix: width-0 renders never cached blank; switching to a hidden tab and back no longer blanks'],
+              ['图表 resize 崩溃修复：移除指纹中的宽度，避免与 Chart.js 原生 responsive 双重重建导致 getContext 报错/空白', 'Resize-crash fix: removed width from fingerprint to stop double-rebuild racing Chart.js responsive (getContext null / blank)'],
+              ['消除移动端页面级横向溢出（顶栏/侧栏/宽表父链）', 'Eliminated page-level horizontal overflow on mobile (header / side panel / wide-table parents)'],
+            ],
+            changed: [
+              ['概览 6 张统计卡精简为 4 张信息密度更高的玻璃卡（大数字显示完整精确值，hover 看精确）', 'Overview stat cards consolidated 6→4 denser glass cards (full precise big numbers, hover for exact)'],
+              ['图表跟随三态主题（light/dark/system），ApexCharts 收益/价格图主题色不再写死', 'Charts follow light/dark/system theme; ApexCharts tracker/price colors no longer hardcoded'],
+              ['移动端字号≥12px、主操作点击高度≥40px、隐藏次要时间戳、模态可滚动、表格整页滚动', 'Mobile: body ≥12px, primary tap targets ≥40px, secondary timestamps hidden, scrollable modals, page-scroll tables'],
+            ],
+            commits: [],
+          },
+          {
             version: '0.8.0', date: '2026-06-08', major: true,
             title_cn: '成本管理与利润监控 — Phase 2/3',
             title_en: 'Cost Management & Profit Monitoring — Phase 2/3',
@@ -301,9 +323,88 @@
           unknown: ['未知', 'Unknown'], overbought: ['超买', 'Overbought'], oversold: ['超卖', 'Oversold'], neutral_rsi: ['中性', 'Neutral'], above_upper: ['突破上轨', 'Above Upper'], below_lower: ['低于下轨', 'Below Lower'], in_band: ['带内', 'In Band'], page_of: ['/', '/'],
     });
 
+    // ══════════════════════════════════════════════════════════════════════
+    //  Chart visual helpers (theme-aware, ported from Demo B)
+    // ══════════════════════════════════════════════════════════════════════
+    const _cvIsDark = () => !document.documentElement.classList.contains('light');
+    const _cvCss = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+    const _cvGrid = () => _cvCss('--cv-border') || 'rgba(51,65,85,0.4)';
+    const _cvTick = () => _cvCss('--cv-muted') || '#64748b';
+    const _CV = { emerald: '#10b981', blue: '#3b82f6', amber: '#f59e0b', red: '#ef4444', pink: '#ec4899', purple: '#8b5cf6', cyan: '#06b6d4' };
+    const _CV_PALETTE = [_CV.blue, _CV.amber, _CV.emerald, _CV.purple, _CV.red, _CV.pink, _CV.cyan, '#a855f7'];
+    const _CV_FONT = 'ui-monospace, monospace';
+
+    const _cvTtStyle = () => ({
+      backgroundColor: _cvIsDark() ? 'rgba(15,23,42,0.95)' : 'rgba(255,255,255,0.97)',
+      titleColor: _cvIsDark() ? '#e2e8f0' : '#0f172a',
+      bodyColor: _cvIsDark() ? '#cbd5e1' : '#334155',
+      borderColor: _cvGrid(), borderWidth: 1, padding: 10,
+      bodyFont: { family: _CV_FONT, size: 11 }, cornerRadius: 8,
+    });
+    const _cvLegend = (pos = 'top') => ({
+      position: pos, align: 'start',
+      labels: { color: _cvTick(), font: { size: 10, family: _CV_FONT }, usePointStyle: true, pointStyle: 'circle', boxWidth: 7, padding: 12 },
+    });
+    const _cvAxisX = () => ({
+      ticks: { color: _cvTick(), font: { size: 9, family: _CV_FONT }, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 },
+      grid: { color: _cvGrid(), drawBorder: false },
+    });
+    const _cvAxisY = (extra = {}) => ({
+      ticks: { color: _cvTick(), font: { size: 9, family: _CV_FONT }, ...extra },
+      grid: { color: _cvGrid(), drawBorder: false },
+    });
+    const _cvBase = () => ({
+      responsive: true, maintainAspectRatio: false, resizeDelay: 100,
+      animation: { duration: 500, easing: 'easeOutQuart' },
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: _cvLegend(), tooltip: _cvTtStyle() },
+    });
+    function _cvAreaGrad(ctx, area, hex) {
+      const g = ctx.createLinearGradient(0, area.top, 0, area.bottom);
+      g.addColorStop(0, hex + '40'); g.addColorStop(1, hex + '00'); return g;
+    }
+    function _cvBarGrad(ctx, area, hex) {
+      const g = ctx.createLinearGradient(0, area.bottom, 0, area.top);
+      g.addColorStop(0, hex + '35'); g.addColorStop(1, hex + 'bb'); return g;
+    }
+    function _cvRichLine(label, data, color, { axis = 'y', fill = false, width = 2.5 } = {}) {
+      return {
+        label, data, yAxisID: axis, borderColor: color,
+        backgroundColor: fill ? (c) => { const a = c.chart.chartArea; return a ? _cvAreaGrad(c.chart.ctx, a, color) : null; } : 'transparent',
+        fill, borderWidth: width, tension: 0.45, cubicInterpolationMode: 'monotone',
+        pointRadius: 0, pointHoverRadius: 4,
+        pointBackgroundColor: color, pointBorderColor: _cvIsDark() ? '#0f172a' : '#fff', pointBorderWidth: 2,
+      };
+    }
+    const _cvZeroLinePlugin = {
+      id: 'zeroLine',
+      afterDraw(chart) {
+        const yScale = chart.scales.yMoney;
+        if (!yScale) return;
+        const y = yScale.getPixelForValue(0);
+        if (y < yScale.top || y > yScale.bottom) return;
+        const ctx = chart.ctx;
+        ctx.save();
+        ctx.strokeStyle = _cvIsDark() ? 'rgba(148,163,184,0.35)' : 'rgba(71,85,105,0.3)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(chart.chartArea.left, y);
+        ctx.lineTo(chart.chartArea.right, y);
+        ctx.stroke();
+        ctx.restore();
+      },
+    };
+    const _cvFmtFull = v => { if (v == null) return '-'; const s = v < 0 ? '-' : ''; return s + '¥' + Math.abs(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+    const _cvFmtMoney = v => { if (v == null) return ''; const a = Math.abs(v); const s = v < 0 ? '-' : ''; return s + '¥' + (a >= 1e4 ? (a / 1e4).toFixed(1) + '万' : a.toLocaleString()); };
+    const _cvFmtPct = v => v == null ? '' : v.toFixed(2) + '%';
+    const _cvFmtK = v => { if (v == null) return '-'; const a = Math.abs(v); const s = v < 0 ? '-' : ''; if (a >= 1e4) return s + '¥' + (a / 1e4).toFixed(1) + '万'; return s + '¥' + Math.round(a).toLocaleString(); };
+    const _cvFmtTip = v => `<span title="${_cvFmtFull(v)}" style="cursor:help;border-bottom:.5px dashed var(--cv-muted2)">${_cvFmtK(v)}</span>`;
+
     function app() {
       return {
         activeTab: 'overview',
+        mobileMenu: false,   // UI-only: mobile header "更多" drawer open state
         trackerData: [],
         trackerMonthly: [],
         trackerLoading: false,
@@ -328,7 +429,7 @@
 
         // 名称语言模式: 'cn'=中文优先 / 'en'=英文优先
         nameLang: localStorage.getItem('nameLang') || 'cn',
-        theme: localStorage.getItem('theme') || 'dark',
+        theme: localStorage.getItem('theme') ?? 'dark',
 
         // 批量智能改价状态
         batchRepricing: false,
@@ -417,6 +518,11 @@
         portfolioData: [],
         // _portfolioChart stored on canvas.__chart to avoid Alpine Proxy
         monitorStatus: {},
+        // Chart data from /api/dashboard/chart-data
+        chartData: {},
+        _chartInstances: {},
+        _chartObservers: {},   // unified IO+RO lifecycle, keyed by chart id
+        _chartsSetup: false,
 
         // 涨跌色模式：'cn'=红涨绿跌（默认） 'us'=绿涨红跌
         colorMode: 'cn',
@@ -445,10 +551,12 @@
 
         // ── Init ──────────────────────────────────────────────────────
         async init() {
-          const [,,, marketStatus, alertData] = await Promise.all([
+          const [,,,,, marketStatus, alertData] = await Promise.all([
             this.loadOverview(),
             this.loadItems(),
             this.loadPortfolioHistory(),
+            this.loadChartData(),
+            this.loadTracker(),
             fetch('/api/youpin/market/status').then(r => r.ok ? r.json() : null).catch(() => null),
             fetch('/api/analysis/alerts?page_size=1&unread_only=true').then(r => r.ok ? r.json() : null).catch(() => null),
             this._loadAuthState(),
@@ -460,12 +568,11 @@
             this._startRefreshPoll();
           }
           if (alertData) this.unreadAlertCount = alertData.total || 0;
-          // Lazy-load tracker; re-render chart on every tab switch (canvas needs visible DOM)
+          // 懒加载 tracker 数据。图表渲染时机统一交给 _setupChartObservers
+          // （ResizeObserver 在 tab 显示/旋屏时触发、IntersectionObserver 在滚入视口时触发），
+          // 不再用 setTimeout 兜底。
           this.$watch('activeTab', (tab) => {
             if (tab === 'tracker' && this.trackerData.length === 0) this.loadTracker();
-            // ApexCharts 在 display:none 容器中渲染宽度为0，切换 tab 后延迟重绘
-            if (tab === 'overview') setTimeout(() => { try { this.renderPortfolioChart(); } catch(e) { console.warn('Portfolio chart error:', e); } }, 50);
-            if (tab === 'tracker' && this.trackerData.length > 0) setTimeout(() => { try { this.renderTrackerChart(); } catch(e) { console.warn('Tracker chart error:', e); } }, 50);
           });
           // 持久化用户偏好到 localStorage
           this.$watch('nameLang', v => localStorage.setItem('nameLang', v));
@@ -473,6 +580,17 @@
           this.$watch('youpinMembership', v => localStorage.setItem('youpinMembership', v));
           // Apply saved theme
           if (this.theme === 'light') document.documentElement.classList.add('light');
+          // 渲染概览统计卡 + 建立图表统一可见性/尺寸观察器（单一入口）
+          this.$nextTick(() => { this.renderStatCards(); this._setupChartObservers(); this._syncHeaderH(); });
+          // 顶栏实际高度 → CSS 变量（移动端 token 横幅 top 跟随，避免重叠）
+          setTimeout(() => this._syncHeaderH(), 300);
+          window.addEventListener('resize', () => this._syncHeaderH());
+          window.addEventListener('orientationchange', () => setTimeout(() => this._syncHeaderH(), 200));
+        },
+
+        _syncHeaderH() {
+          const h = document.querySelector('header');
+          if (h) document.documentElement.style.setProperty('--hdr-h', h.offsetHeight + 'px');
         },
 
         async _checkToken() {
@@ -637,7 +755,9 @@
         },
 
         async loadAll() {
-          await Promise.all([this.loadOverview(), this.loadItems(), this.loadPortfolioHistory(), this.loadMonitorStatus()]);
+          await Promise.all([this.loadOverview(), this.loadItems(), this.loadPortfolioHistory(), this.loadMonitorStatus(), this.loadChartData()]);
+          this.renderStatCards();
+          this.renderOverviewCharts();
         },
 
         // ── Tracker ────────────────────────────────────────────────
@@ -758,10 +878,15 @@
         renderTrackerChart() {
           const el = document.getElementById('trackerChart');
           if (!el) return;
-          const fingerprint = this.trackerChartType + ':' + this.trackerData.length;
-          if (el.__chart && el.__fingerprint === fingerprint) return;
+          const w = el.offsetWidth;
+          if (!w) return;  // RED LINE: width 0 → bail, never create, never cache
+          if (this.trackerGranularity !== 'hourly' && !this.trackerData?.length) return;
+          const isMobile = window.matchMedia('(max-width: 640px)').matches;
+          const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+          const dark = _cvIsDark();
+          const fingerprint = 'tk:' + this.trackerChartType + ':' + this.trackerGranularity + ':' + this.trackerData.length + ':' + (dark ? 'dk' : 'lt');
+          if (this._trackerChart && el.__fingerprint === fingerprint) return;
           if (this._trackerChart) { this._trackerChart.destroy(); this._trackerChart = null; }
-          el.__fingerprint = fingerprint;
 
           const key = this.trackerChartType;
           const isPct = ['combined_annual','short_lease_annual','long_lease_annual','price_change'].includes(key);
@@ -798,41 +923,44 @@
 
           this._trackerChart = new ApexCharts(el, {
             chart: { type: 'area', height: chartHeight, background: 'transparent',
-              toolbar: { show: true, offsetY: -5, tools: { download: false, selection: false, zoom: true, zoomin: true, zoomout: true, pan: true, reset: true } },
-              zoom: { enabled: true, type: 'x', autoScaleYaxis: true },
+              toolbar: { show: !isMobile, offsetY: -5, tools: { download: false, selection: false, zoom: true, zoomin: true, zoomout: true, pan: true, reset: true } },
+              zoom: { enabled: !isTouch, type: 'x', autoScaleYaxis: true },
               fontFamily: 'ui-monospace, monospace',
             },
             series: [{ name: label, data: series }],
             stroke: { curve: 'smooth', width: 2 },
             fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.25, opacityTo: 0.02 } },
-            colors: ['#3b82f6'],
+            colors: [_CV.blue],
             dataLabels: { enabled: false },
-            xaxis: { type: 'category', labels: { style: { colors: '#64748b', fontSize: '10px' }, rotate: 0, hideOverlappingLabels: true }, tickAmount: 10, axisBorder: { show: false }, axisTicks: { show: false } },
-            yaxis: { labels: { style: { colors: '#64748b', fontSize: '10px' }, formatter: fmtY } },
-            grid: { borderColor: 'rgba(51,65,85,0.2)', strokeDashArray: 3, padding: { left: 5, right: 5 } },
-            tooltip: { theme: 'dark', y: { formatter: fmtTip } },
-            theme: { mode: 'dark' },
+            xaxis: { type: 'category', labels: { style: { colors: _cvTick(), fontSize: '10px' }, rotate: 0, hideOverlappingLabels: true }, tickAmount: 10, axisBorder: { show: false }, axisTicks: { show: false } },
+            yaxis: { labels: { style: { colors: _cvTick(), fontSize: '10px' }, formatter: fmtY } },
+            grid: { borderColor: _cvGrid(), strokeDashArray: 3, padding: { left: 5, right: 5 } },
+            tooltip: { theme: dark ? 'dark' : 'light', y: { formatter: fmtTip } },
+            theme: { mode: dark ? 'dark' : 'light' },
           });
           this._trackerChart.render();
+          el.__fingerprint = fingerprint;  // cache ONLY after a successful w>0 render
 
-          // 滚轮缩放 X 轴
-          this.$nextTick(() => {
-            const chartEl = el.querySelector('.apexcharts-canvas');
-            if (!chartEl) return;
-            chartEl.addEventListener('wheel', (e) => {
-              e.preventDefault();
-              const g = this._trackerChart.w.globals;
-              const min = g.minX, max = g.maxX, total = g.dataPoints;
-              const range = max - min;
-              if (range <= 0) return;
-              const factor = e.deltaY > 0 ? 0.15 : -0.15;
-              let newMin = Math.round(min + range * factor);
-              let newMax = Math.round(max - range * factor);
-              newMin = Math.max(0, newMin);
-              newMax = Math.min(total - 1, newMax);
-              if (newMax - newMin >= 5) this._trackerChart.zoomX(newMin, newMax);
-            }, { passive: false });
-          });
+          // 滚轮缩放 X 轴 — 仅桌面（触摸设备无 wheel 事件，跳过死代码）
+          if (!isTouch) {
+            this.$nextTick(() => {
+              const chartEl = el.querySelector('.apexcharts-canvas');
+              if (!chartEl) return;
+              chartEl.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const g = this._trackerChart.w.globals;
+                const min = g.minX, max = g.maxX, total = g.dataPoints;
+                const range = max - min;
+                if (range <= 0) return;
+                const factor = e.deltaY > 0 ? 0.15 : -0.15;
+                let newMin = Math.round(min + range * factor);
+                let newMax = Math.round(max - range * factor);
+                newMin = Math.max(0, newMin);
+                newMax = Math.min(total - 1, newMax);
+                if (newMax - newMin >= 5) this._trackerChart.zoomX(newMin, newMax);
+              }, { passive: false });
+            });
+          }
         },
 
         async loadOverview() {
@@ -849,27 +977,24 @@
             if (!r.ok) return;
             const d = await r.json();
             this.portfolioData = d.data || [];
-            if (this.activeTab === 'overview') setTimeout(() => { try { this.renderPortfolioChart(); } catch(e) { console.warn('Portfolio chart error:', e); } }, 50);
+            // 数据更新后直接重绘（宽度守卫：不可见则 no-op，观察器会在可见时补绘）
+            this.$nextTick(() => { try { this.renderPortfolioChart(); } catch(e) { console.warn('Portfolio chart error:', e); } });
           } catch (e) { this.showToast(e.message || '加载持仓历史失败', 'error'); }
         },
 
         renderPortfolioChart() {
           const canvas = document.getElementById('portfolioChart');
           if (!canvas) return;
-          const fingerprint = this.portfolioCategory + ':' + (this.portfolioCategory === 'value' ? this.portfolioData.length : this.trackerData.length);
+          const w = (canvas.parentElement || canvas).offsetWidth;
+          if (!w) return;  // RED LINE: width 0 → bail, never create, never cache
+          // 指纹只含 数据+主题，不含宽度：resize 交给 Chart.js 原生 responsive，避免双重重建竞态
+          const fingerprint = this.portfolioCategory + ':' + (this.portfolioCategory === 'value' ? this.portfolioData.length : this.trackerData.length) + ':' + (_cvIsDark() ? 'dk' : 'lt');
           if (canvas.__chart && canvas.__fingerprint === fingerprint) return;
           if (canvas.__chart) { canvas.__chart.destroy(); canvas.__chart = null; }
-          canvas.__fingerprint = fingerprint;
           const ctx = canvas.getContext('2d');
           if (!ctx) return;
 
-          const fmtMoney = v => { if (v == null) return ''; const a = Math.abs(v); const s = v < 0 ? '-' : ''; return s + '¥' + (a >= 1e4 ? (a/1e4).toFixed(1)+'万' : a.toLocaleString()); };
-          const fmtPct = v => v == null ? '' : v.toFixed(2) + '%';
-          const gridColor = 'rgba(51,65,85,0.2)';
-          const tickColor = '#64748b';
-
           if (this.portfolioCategory === 'value') {
-            // ── 组合价值：左Y金额，右Y百分比 ──
             const data = this.portfolioData;
             if (!data.length) return;
             const labels = data.map(d => {
@@ -878,65 +1003,308 @@
             });
             canvas.__chart = new Chart(ctx, {
               type: 'line',
-              data: {
-                labels,
-                datasets: [
-                  { label: this.t('market_value'), data: data.map(d => d.market_value), yAxisID: 'yMoney', borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)', fill: true, borderWidth: 2.5, pointRadius: 0, tension: 0.3, order: 1 },
-                  { label: this.t('total_cost'), data: data.map(d => d.total_cost), yAxisID: 'yMoney', borderColor: '#3b82f6', borderDash: [6,3], borderWidth: 2, pointRadius: 0, tension: 0.3, fill: false, order: 2 },
-                  { label: this.t('pnl_amount'), data: data.map(d => d.pnl), yAxisID: 'yMoney', borderColor: '#f59e0b', borderDash: [4,2], borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false, order: 3 },
-                  { label: this.t('chart_pnl_pct'), data: data.map(d => d.pnl_pct), yAxisID: 'yPct', borderColor: '#ef4444', borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false, order: 4 },
-                ],
-              },
+              data: { labels, datasets: [
+                _cvRichLine(this.t('market_value'), data.map(d => d.market_value), _CV.emerald, { axis: 'yMoney' }),
+                _cvRichLine(this.t('total_cost'),   data.map(d => d.total_cost),   _CV.blue,    { axis: 'yMoney', width: 2 }),
+                _cvRichLine(this.t('pnl_amount'),   data.map(d => d.pnl),          _CV.amber,   { axis: 'yMoney', width: 1.5 }),
+                _cvRichLine(this.t('chart_pnl_pct'),data.map(d => d.pnl_pct),      _CV.red,     { axis: 'yPct',   width: 1.5 }),
+              ]},
+              plugins: [_cvZeroLinePlugin],
               options: {
-                responsive: true, maintainAspectRatio: false, resizeDelay: 100, animation: false,
-                interaction: { mode: 'index', intersect: false },
-                plugins: {
-                  legend: { position: 'top', align: 'start', labels: { color: '#94a3b8', font: { size: 11, family: 'ui-monospace, monospace' }, usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 8, padding: 12 } },
-                  tooltip: { backgroundColor: 'rgba(15,23,42,0.95)', titleColor: '#e2e8f0', bodyColor: '#cbd5e1', borderColor: 'rgba(51,65,85,0.5)', borderWidth: 1, padding: 10, bodyFont: { family: 'ui-monospace, monospace', size: 11 },
-                    callbacks: { label: ctx => { const v = ctx.raw; return ctx.dataset.label + ': ' + (ctx.datasetIndex === 3 ? fmtPct(v) : fmtMoney(v)); } },
-                  },
+                ..._cvBase(),
+                plugins: { ..._cvBase().plugins,
+                  tooltip: { ..._cvTtStyle(), callbacks: { label: c => c.dataset.label + ': ' + (c.datasetIndex === 3 ? _cvFmtPct(c.raw) : _cvFmtFull(c.raw)) } },
                 },
                 scales: {
-                  x: { ticks: { color: tickColor, font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 }, grid: { color: gridColor, drawBorder: false } },
-                  yMoney: { position: 'left', ticks: { color: tickColor, font: { size: 10 }, callback: fmtMoney }, grid: { color: gridColor, drawBorder: false } },
-                  yPct: { position: 'right', ticks: { color: '#ef4444', font: { size: 10 }, callback: v => fmtPct(v) }, grid: { drawOnChartArea: false } },
+                  x: _cvAxisX(),
+                  yMoney: { position: 'left', ..._cvAxisY({ callback: _cvFmtMoney }) },
+                  yPct: { position: 'right', ticks: { color: _CV.red, font: { size: 9, family: _CV_FONT }, callback: v => _cvFmtPct(v) }, grid: { drawOnChartArea: false } },
                 },
               },
             });
           } else {
-            // ── 租赁走势：左Y百分比，右Y金额 ──
             const data = [...this.trackerData].reverse();
             if (!data.length) return;
             const labels = data.map(d => d.date);
             canvas.__chart = new Chart(ctx, {
               type: 'line',
-              data: {
-                labels,
-                datasets: [
-                  { label: this.t('tracker_col_combined'), data: data.map(d => d.combined_annual != null ? +(d.combined_annual * 100).toFixed(2) : null), yAxisID: 'yPct', borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)', fill: true, borderWidth: 2.5, pointRadius: 0, tension: 0.3, order: 1 },
-                  { label: this.t('tracker_col_income'), data: data.map(d => d.daily_income), yAxisID: 'yRight', borderColor: '#f59e0b', borderWidth: 2, pointRadius: 0, tension: 0.3, fill: false, order: 2 },
-                  { label: this.t('tracker_col_rented'), data: data.map(d => d.rented_count), yAxisID: 'yRight', borderColor: '#3b82f6', borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false, order: 3 },
-                  { label: this.t('chart_rented_value'), data: data.map(d => d.rented_value), yAxisID: 'yValue', borderColor: '#ec4899', borderDash: [6,3], borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false, order: 4 },
-                ],
-              },
+              data: { labels, datasets: [
+                _cvRichLine(this.t('tracker_col_combined'), data.map(d => d.combined_annual != null ? +(d.combined_annual * 100).toFixed(2) : null), _CV.emerald, { axis: 'yPct', fill: true }),
+                _cvRichLine(this.t('tracker_col_income'),   data.map(d => d.daily_income),  _CV.amber, { axis: 'yRight', width: 2 }),
+                _cvRichLine(this.t('tracker_col_rented'),   data.map(d => d.rented_count),  _CV.blue,  { axis: 'yRight', width: 1.5 }),
+                _cvRichLine(this.t('chart_rented_value'),   data.map(d => d.rented_value),  _CV.pink,  { axis: 'yValue', width: 1.5 }),
+              ]},
               options: {
-                responsive: true, maintainAspectRatio: false, resizeDelay: 100, animation: false,
-                interaction: { mode: 'index', intersect: false },
-                plugins: {
-                  legend: { position: 'top', align: 'start', labels: { color: '#94a3b8', font: { size: 11, family: 'ui-monospace, monospace' }, usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 8, padding: 12 } },
-                  tooltip: { backgroundColor: 'rgba(15,23,42,0.95)', titleColor: '#e2e8f0', bodyColor: '#cbd5e1', borderColor: 'rgba(51,65,85,0.5)', borderWidth: 1, padding: 10, bodyFont: { family: 'ui-monospace, monospace', size: 11 },
-                    callbacks: { label: ctx => { const v = ctx.raw; const i = ctx.datasetIndex; return ctx.dataset.label + ': ' + (i === 0 ? fmtPct(v) : i === 2 ? (v??0)+' 件' : fmtMoney(v)); } },
-                  },
+                ..._cvBase(),
+                plugins: { ..._cvBase().plugins,
+                  tooltip: { ..._cvTtStyle(), callbacks: { label: c => { const v = c.raw; const i = c.datasetIndex; return c.dataset.label + ': ' + (i === 0 ? _cvFmtPct(v) : i === 2 ? (v??0)+' 件' : _cvFmtFull(v)); } } },
                 },
                 scales: {
-                  x: { ticks: { color: tickColor, font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 }, grid: { color: gridColor, drawBorder: false } },
-                  yPct: { position: 'left', ticks: { color: '#10b981', font: { size: 10 }, callback: v => fmtPct(v) }, grid: { color: gridColor, drawBorder: false } },
-                  yRight: { position: 'right', ticks: { color: '#f59e0b', font: { size: 10 }, callback: fmtMoney }, grid: { drawOnChartArea: false } },
+                  x: _cvAxisX(),
+                  yPct: { position: 'left', ticks: { color: _CV.emerald, font: { size: 9, family: _CV_FONT }, callback: v => _cvFmtPct(v) }, grid: { color: _cvGrid(), drawBorder: false } },
+                  yRight: { position: 'right', ticks: { color: _CV.amber, font: { size: 9, family: _CV_FONT }, callback: _cvFmtMoney }, grid: { drawOnChartArea: false } },
                   yValue: { display: false },
                 },
               },
             });
           }
+          canvas.__fingerprint = fingerprint;  // cache ONLY after a successful w>0 render
+        },
+
+        // ── Chart Data (new visualizations) ──────────────────────────────
+        async loadChartData() {
+          try {
+            const r = await fetch('/api/dashboard/chart-data');
+            if (r.ok) {
+              this.chartData = await r.json();
+              // 数据到达后重绘概览图（宽度守卫：不可见则 no-op）
+              this.$nextTick(() => { try { this.renderOverviewCharts(); } catch(e) { console.warn('Overview chart error:', e); } });
+            }
+          } catch (e) { console.warn('Chart data load failed:', e.message); }
+        },
+
+        renderStatCards() {
+          const el = document.getElementById('statCards');
+          if (!el || !this.overview.total_active) return;
+          const o = this.overview;
+          const t = this.trackerData?.[0] || {};
+          const sb = o.status_breakdown || {};
+          const cb = o.cost_breakdown || {};
+          const total = o.total_active || 0;
+          const rented = sb.rented_out || 0;
+          const steam = sb.in_steam || 0;
+          const rentedPct = total ? Math.round(rented / total * 100) : 0;
+          const steamPct = total ? Math.round(steam / total * 100) : 0;
+          const pnlColor = (o.pnl || 0) >= 0 ? _CV.emerald : _CV.red;
+          const coveragePct = o.coverage_pct || 0;
+          const pricedCount = o.priced_count || 0;
+          const unpricedCount = o.unpriced_count || 0;
+          const dot = (color, label) => `<span style="color:${color}">●</span> ${label}`;
+
+          el.innerHTML = `
+            <div class="glass-solid stat-card" style="padding:16px; border-radius:var(--cv-r);">
+              <div style="font-size:10px;color:var(--cv-muted);">持仓市值</div>
+              <div style="font-size:22px;font-weight:800;letter-spacing:-.8px;color:${_CV.emerald};margin:4px 0;">
+                ${_cvFmtFull(o.market_value)}</div>
+              <div style="font-size:10px;color:var(--cv-muted);display:flex;justify-content:space-between;">
+                <span>库存 ${_cvFmtTip(o.market_value_steam)}</span>
+                <span>出租 ${_cvFmtTip(o.market_value_rented)}</span>
+              </div>
+              <div style="margin-top:8px;font-size:9px;color:var(--cv-muted2);">
+                ${dot(_CV.purple, `出租中 ${rented.toLocaleString()} (${rentedPct}%)`)}
+                &nbsp;${dot(_CV.blue, `Steam ${steam.toLocaleString()} (${steamPct}%)`)}
+                &nbsp;· 共 ${total.toLocaleString()} 件
+              </div>
+            </div>
+            <div class="glass-solid stat-card" style="padding:16px; border-radius:var(--cv-r);">
+              <div style="font-size:10px;color:var(--cv-muted);">持仓成本 & 定价</div>
+              <div style="font-size:22px;font-weight:800;letter-spacing:-.8px;color:${_CV.blue};margin:4px 0;">
+                ${_cvFmtFull(o.total_cost)}</div>
+              <div style="font-size:10px;color:var(--cv-muted);display:flex;justify-content:space-between;">
+                <span>出租 ${_cvFmtTip(cb.rented_out)}</span>
+                <span>Steam ${_cvFmtTip(cb.in_steam)}</span>
+              </div>
+              <div style="margin-top:8px;font-size:9px;color:var(--cv-muted2);">
+                定价覆盖 <span style="color:${coveragePct > 80 ? _CV.emerald : _CV.amber}">${coveragePct}%</span>
+                · 已定价 ${pricedCount.toLocaleString()} · 未定价 <span style="color:${_CV.amber}">${unpricedCount.toLocaleString()}</span>
+              </div>
+            </div>
+            <div class="glass-solid stat-card" style="padding:16px; border-radius:var(--cv-r);">
+              <div style="font-size:10px;color:var(--cv-muted);">盈亏</div>
+              <div style="font-size:22px;font-weight:800;letter-spacing:-.8px;color:${pnlColor};margin:4px 0;">
+                ${(o.pnl >= 0 ? '+' : '') + _cvFmtFull(o.pnl)}</div>
+              <div style="font-size:14px;font-weight:700;color:${pnlColor};">
+                ${(o.pnl_pct >= 0 ? '+' : '') + (o.pnl_pct || 0).toFixed(2)}%</div>
+              <div style="margin-top:6px;font-size:9px;color:var(--cv-muted2);">
+                基于 ${(o.pnl_covered_count || o.market_priced_count || 0).toLocaleString()} 件已定价持仓
+              </div>
+            </div>
+            <div class="glass-solid stat-card" style="padding:16px; border-radius:var(--cv-r);">
+              <div style="font-size:10px;color:var(--cv-muted);">租赁收益</div>
+              <div style="font-size:22px;font-weight:800;letter-spacing:-.8px;color:${_CV.amber};margin:4px 0;">
+                ${_cvFmtFull(t.daily_income)}<span style="font-size:12px;font-weight:400;color:var(--cv-muted);"> /日</span></div>
+              <div style="font-size:14px;font-weight:700;color:${_CV.amber};">
+                年化 ${((t.combined_annual || 0) * 100).toFixed(1)}%</div>
+              <div style="margin-top:6px;font-size:9px;color:var(--cv-muted2);">
+                出租 ${rented.toLocaleString()} 件 · 件均 ¥${(t.income_per_item || 0).toFixed(2)}/日
+              </div>
+            </div>`;
+        },
+
+        _destroyOverviewCharts() {
+          ['doughnut', 'rank', 'dist'].forEach(k => {
+            if (this._chartInstances[k]) { this._chartInstances[k].destroy(); delete this._chartInstances[k]; }
+          });
+        },
+
+        // ── Unified chart lifecycle (single entry) ──────────────────────
+        // Render only when the container actually has width (B1/B2 red line:
+        // width-0 renders are skipped and never cached). Redraw on size change
+        // (rotation / tab-switch reflow) via ResizeObserver, and on
+        // scroll-into-view via IntersectionObserver. Each render fn is
+        // idempotent (width+theme-aware fingerprint) so repeated calls are cheap.
+        _renderWhenVisible(observeEl, key, fn) {
+          if (!observeEl) return;
+          fn();                                  // immediate attempt — no-op if width 0
+          if (this._chartObservers[key]) return; // attach observers once per element
+          const rec = {};
+          if ('ResizeObserver' in window) {
+            let t;
+            rec.ro = new ResizeObserver(() => { clearTimeout(t); t = setTimeout(fn, 120); });
+            rec.ro.observe(observeEl);
+          }
+          if ('IntersectionObserver' in window) {
+            rec.io = new IntersectionObserver((es) => { for (const e of es) if (e.isIntersecting) fn(); }, { threshold: 0.01 });
+            rec.io.observe(observeEl);
+          }
+          this._chartObservers[key] = rec;
+        },
+        // wrapper element (fixed-height div) of a canvas chart, used for width measure + observation
+        _chartWrap(id) { const c = document.getElementById(id); return c ? (c.parentElement || c) : null; },
+        _setupChartObservers() {
+          if (this._chartsSetup) return;
+          this._chartsSetup = true;
+          this._renderWhenVisible(this._chartWrap('portfolioChart'), 'portfolio', () => this.renderPortfolioChart());
+          this._renderWhenVisible(this._chartWrap('doughnutChart'),  'doughnut',  () => this._renderDoughnut());
+          this._renderWhenVisible(this._chartWrap('rankChart'),      'rank',      () => this._renderRank());
+          this._renderWhenVisible(this._chartWrap('distChart'),      'dist',      () => this._renderDist());
+          this._renderWhenVisible(document.getElementById('trackerChart'), 'tracker', () => this.renderTrackerChart());
+          this._renderWhenVisible(document.getElementById('priceChart'),   'price',   () => this.renderPriceChart());
+        },
+
+        renderOverviewCharts() {
+          if (!this.chartData?.type_composition) return;
+          this._renderDoughnut();
+          this._renderTopGrid();
+          this._renderRank();
+          this._renderDist();
+        },
+
+        _renderDoughnut() {
+          const canvas = document.getElementById('doughnutChart');
+          const types = this.chartData.type_composition;
+          if (!canvas || !types?.length) return;
+          const w = (canvas.parentElement || canvas).offsetWidth;
+          if (!w) return;  // RED LINE: width 0 → bail, never create, never cache
+          const lm = { '非凡 手套': '手套', '隐秘 步枪': '步枪(隐秘)', '隐秘 匕首': '匕首', '保密 步枪': '步枪(保密)',
+            '隐秘 手枪': '手枪', '隐秘 狙击步枪': '狙击(隐秘)', '保密 狙击步枪': '狙击(保密)', '卓越 探员': '探员',
+            '受限 步枪': '步枪(受限)', '高级 探员': '探员(高级)', '工业级 步枪': '步枪(工业)', '大师 探员': '探员(大师)',
+            '其他': '其他', 'N/A': '其他' };
+          const labels = types.map(t => lm[t.type] || t.type);
+          const values = types.map(t => Math.round(t.market_value));
+          const fp = 'dn:' + values.reduce((a, b) => a + b, 0) + ':' + (_cvIsDark() ? 'dk' : 'lt');
+          if (this._chartInstances.doughnut && canvas.__fp === fp) return;
+          if (this._chartInstances.doughnut) this._chartInstances.doughnut.destroy();
+          canvas.__fp = fp;
+          this._chartInstances.doughnut = new Chart(canvas.getContext('2d'), {
+            type: 'doughnut',
+            data: { labels, datasets: [{ data: values, backgroundColor: labels.map((_, i) => _CV_PALETTE[i % _CV_PALETTE.length]), borderWidth: 0, hoverOffset: 6 }] },
+            options: {
+              responsive: true, maintainAspectRatio: false, cutout: '55%',
+              animation: { animateRotate: true, duration: 600 },
+              plugins: {
+                legend: _cvLegend('right'),
+                tooltip: { ..._cvTtStyle(), callbacks: { label: c => { const t = c.dataset.data.reduce((s, x) => s + x, 0) || 1; return c.label + ': ' + _cvFmtFull(c.parsed) + ' (' + Math.round(c.parsed / t * 100) + '%)'; } } },
+              },
+            },
+          });
+        },
+
+        _chartIcon(url) {
+          if (!url) return '/static/placeholder.svg';
+          if (url.startsWith('http')) return url;
+          return `https://community.fastly.steamstatic.com/economy/image/${url}/128fx128f`;
+        },
+        _renderTopGrid() {
+          const items = this.chartData.top_value;
+          const el = document.getElementById('topGrid');
+          if (!el || !items?.length) return;
+          const cardHtml = items.map(i => {
+            const icon = this._chartIcon(i.icon_url);
+            let name = i.cn_name || i.name;
+            if (name && name.length > 20) name = name.slice(0, 18) + '…';
+            const pnlColor = (i.pnl || 0) >= 0 ? _CV.emerald : _CV.red;
+            return `<div class="item-card">
+              <img src="${icon}" alt="" loading="lazy" onerror="this.src='/static/placeholder.svg'">
+              <div class="item-name">${name || '—'}</div>
+              <div class="item-val" style="color:${pnlColor}" title="${_cvFmtFull(i.market_value)}">${_cvFmtK(i.market_value)}</div>
+              <div class="item-qty">×${i.qty}</div>
+            </div>`;
+          }).join('');
+          const n = items.length;
+          const divisors = [];
+          for (let c = 5; c <= n; c++) { if (n % c === 0) divisors.push(c); }
+          const doLayout = () => {
+            const w = el.offsetWidth || el.parentElement?.offsetWidth || 0;
+            if (w < 10) { requestAnimationFrame(doLayout); return; }
+            const ideal = Math.floor(w / 110);
+            let cols = divisors.length ? divisors.reduce((best, d) => Math.abs(d - ideal) < Math.abs(best - ideal) ? d : best) : ideal;
+            cols = Math.max(5, Math.min(n, cols));
+            el.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+            el.innerHTML = cardHtml;
+          };
+          requestAnimationFrame(doLayout);
+          if (!this._topGridResizeBound) {
+            this._topGridResizeBound = true;
+            let timer;
+            window.addEventListener('resize', () => { clearTimeout(timer); timer = setTimeout(() => { if (this.activeTab === 'overview') this._renderTopGrid(); }, 150); });
+          }
+        },
+
+        _renderRank() {
+          const canvas = document.getElementById('rankChart');
+          const gainers = this.chartData.top_gainers || [];
+          const losers = this.chartData.top_losers || [];
+          if (!canvas) return;
+          const w = (canvas.parentElement || canvas).offsetWidth;
+          if (!w) return;  // RED LINE: width 0 → bail, never create, never cache
+          const combined = [...[...gainers].reverse(), ...losers];  // 不原地 reverse，避免污染 chartData
+          if (!combined.length) return;
+          const labels = combined.map(i => { let s = i.cn_name || i.name || ''; return s.length > 18 ? s.slice(0, 16) + '…' : s; });
+          const values = combined.map(i => i.pnl);
+          const fp = 'rk:' + values.reduce((a, b) => a + (b || 0), 0) + ':' + values.length + ':' + (_cvIsDark() ? 'dk' : 'lt');
+          if (this._chartInstances.rank && canvas.__fp === fp) return;
+          if (this._chartInstances.rank) this._chartInstances.rank.destroy();
+          canvas.__fp = fp;
+          this._chartInstances.rank = new Chart(canvas.getContext('2d'), {
+            type: 'bar',
+            data: { labels, datasets: [{ data: values,
+              backgroundColor: c => { const a = c.chart.chartArea; if (!a) return (c.raw >= 0 ? _CV.emerald : _CV.red) + '80'; return _cvBarGrad(c.chart.ctx, a, c.raw >= 0 ? _CV.emerald : _CV.red); },
+              borderColor: c => c.raw >= 0 ? _CV.emerald : _CV.red,
+              borderWidth: 1.5, borderRadius: 5, borderSkipped: false,
+            }]},
+            options: { ..._cvBase(), indexAxis: 'y',
+              plugins: { legend: { display: false }, tooltip: { ..._cvTtStyle(), callbacks: { label: c => _cvFmtFull(c.raw) } } },
+              scales: { x: { ..._cvAxisY({ callback: _cvFmtMoney }), position: 'top' }, y: { ticks: { color: _cvTick(), font: { size: 9, family: _CV_FONT } }, grid: { display: false } } },
+            },
+          });
+        },
+
+        _renderDist() {
+          const canvas = document.getElementById('distChart');
+          const dist = this.chartData.pnl_distribution;
+          if (!canvas || !dist) return;
+          const w = (canvas.parentElement || canvas).offsetWidth;
+          if (!w) return;  // RED LINE: width 0 → bail, never create, never cache
+          const bL = ['<-50%', '-50~-30%', '-30~-10%', '-10~0%', '0~10%', '10~30%', '30~50%', '50~100%', '>100%'];
+          const bK = ['<-50', '-50~-30', '-30~-10', '-10~0', '0~10', '10~30', '30~50', '50~100', '>100'];
+          const vals = bK.map(k => dist[k] || 0);
+          const cols = bK.map((_, i) => i < 4 ? _CV.red : i === 4 ? (_cvIsDark() ? '#64748b' : '#94a3b8') : _CV.emerald);
+          const fp = 'ds:' + vals.join(',') + ':' + (_cvIsDark() ? 'dk' : 'lt');
+          if (this._chartInstances.dist && canvas.__fp === fp) return;
+          if (this._chartInstances.dist) this._chartInstances.dist.destroy();
+          canvas.__fp = fp;
+          this._chartInstances.dist = new Chart(canvas.getContext('2d'), {
+            type: 'bar',
+            data: { labels: bL, datasets: [{ data: vals,
+              backgroundColor: c => { const a = c.chart.chartArea; if (!a) return cols[c.dataIndex] + '80'; return _cvBarGrad(c.chart.ctx, a, cols[c.dataIndex]); },
+              borderColor: cols, borderWidth: 1.5, borderRadius: 5, borderSkipped: false, maxBarThickness: 36,
+            }]},
+            options: { ..._cvBase(),
+              plugins: { legend: { display: false }, tooltip: { ..._cvTtStyle(), callbacks: { label: c => c.raw + ' 个品类' } } },
+              scales: { x: { ..._cvAxisX(), grid: { display: false } }, y: _cvAxisY() },
+            },
+          });
         },
 
         // ── System Monitor ─────────────────────────────────────────────
@@ -1031,6 +1399,7 @@
             if (row) { row.purchase_price_manual = upd.purchase_price_manual; row.effective_price = upd.effective_price; }
             this.showToast('保存成功 ✓');
             await this.loadOverview();
+            this.renderStatCards();
           } catch { this.showToast('保存失败', 'error'); }
           finally { this.saving = false; }
         },
@@ -1597,14 +1966,15 @@
         },
 
         renderPriceChart() {
-          if (this._priceChart) { this._priceChart.destroy(); this._priceChart = null; }
           const el = document.getElementById('priceChart');
           if (!el || !this.itemSignals?.chart_data?.length) return;
+          const cw = el.offsetWidth;
+          if (!cw) return;  // RED LINE: width 0 → bail, never create, never cache
 
           const raw = this.itemSignals.chart_data;
-          const isDark = !document.documentElement.classList.contains('light');
-          const textColor = isDark ? '#64748b' : '#475569';
-          const gridColor = isDark ? 'rgba(51,65,85,0.2)' : 'rgba(186,214,235,0.3)';
+          const isDark = _cvIsDark();
+          const textColor = _cvTick();
+          const gridColor = _cvGrid();
 
           // 时间范围过滤
           let data = raw;
@@ -1612,6 +1982,9 @@
             const cutoff = Date.now() - this.chartDays * 86400e3;
             data = raw.filter(d => { const s=d.date; return new Date(s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8)).getTime() >= cutoff; });
           }
+          const fp = 'pc:' + (this.itemSignals.market_hash_name || '') + ':' + this.chartDays + ':' + data.length + ':' + (isDark ? 'dk' : 'lt');
+          if (this._priceChart && el.__fingerprint === fp) return;
+          if (this._priceChart) { this._priceChart.destroy(); this._priceChart = null; }
           const cats = data.map(d => { const s=d.date; return s.slice(4,6)+'/'+s.slice(6,8); });
           const mkS = (name, key, color, w, dash) => ({ name, data: data.map(d => d[key] ?? null), color, strokeWidth: w, dashArray: dash || 0 });
 
@@ -1631,11 +2004,12 @@
             xaxis: { categories: cats, labels: { style: { colors: textColor, fontSize: '9px' }, rotate: 0, hideOverlappingLabels: true }, tickAmount: 10, axisBorder: { show: false }, axisTicks: { show: false } },
             yaxis: { labels: { style: { colors: textColor, fontSize: '10px' }, formatter: v => v != null ? '¥'+Number(v).toLocaleString() : '' } },
             grid: { borderColor: gridColor, strokeDashArray: 3 },
-            legend: { labels: { colors: '#94a3b8' }, fontSize: '10px', markers: { width: 10, height: 10 } },
+            legend: { labels: { colors: textColor }, fontSize: '10px', markers: { width: 10, height: 10 } },
             tooltip: { theme: isDark ? 'dark' : 'light', shared: true, intersect: false },
             theme: { mode: isDark ? 'dark' : 'light' },
           });
           this._priceChart.render();
+          el.__fingerprint = fp;  // cache ONLY after a successful w>0 render
         },
 
         async triggerBackfill() {
@@ -1713,9 +2087,25 @@
         },
 
         toggleTheme() {
-          this.theme = this.theme === 'dark' ? 'light' : 'dark';
-          localStorage.setItem('theme', this.theme);
-          document.documentElement.classList.toggle('light', this.theme === 'light');
+          const next = this.theme === 'dark' ? 'light' : this.theme === 'light' ? 'system' : 'dark';
+          this.theme = next;
+          if (next === 'system') {
+            localStorage.removeItem('theme');
+            const prefersDark = matchMedia('(prefers-color-scheme: dark)').matches;
+            document.documentElement.classList.toggle('light', !prefersDark);
+          } else {
+            localStorage.setItem('theme', next);
+            document.documentElement.classList.toggle('light', next === 'light');
+          }
+          // N1: 主题切换后重绘所有图表（指纹含有效主题 → 强制重建；隐藏的图宽度0自动 no-op）
+          this._destroyOverviewCharts();
+          this.$nextTick(() => {
+            this.renderStatCards();
+            this.renderPortfolioChart();
+            this.renderOverviewCharts();
+            this.renderTrackerChart();
+            this.renderPriceChart();
+          });
         },
 
         scoreColor(s) {
