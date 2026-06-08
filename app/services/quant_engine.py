@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 import math
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 from sqlalchemy import and_, delete, func, or_, select, text
@@ -700,8 +701,7 @@ async def _calc_spread_map(db: AsyncSession) -> dict[str, float]:
 #  Alert generation
 # ══════════════════════════════════════════════════════════════
 
-_ALERT_RULES = [
-    # (alert_type, severity, field, op, threshold, title_template)
+_ALERT_RULES_DEFAULT = [
     ("profit_50",       "warning",  "pnl_pct",     ">", 50,  "盈利超50%: {name} ({val:.1f}%)"),
     ("profit_100",      "critical", "pnl_pct",     ">", 100, "盈利超100%: {name} ({val:.1f}%)"),
     ("near_ath",        "warning",  "ath_pct",     ">", 90,  "接近历史高点: {name} (ATH {val:.1f}%)"),
@@ -710,6 +710,73 @@ _ALERT_RULES = [
     ("momentum_surge",  "warning",  "momentum_7",  ">", 20,  "7日暴涨: {name} (+{val:.1f}%)"),
     ("spread_arb",      "info",     "spread_pct",  ">", 15,  "跨平台价差: {name} ({val:.1f}%)"),
 ]
+
+_YAML_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "alert_rules.yaml"
+_yaml_cache: dict = {"rules": None, "overrides": None, "mtime": 0.0}
+
+
+def _load_alert_rules() -> tuple[list[tuple], dict]:
+    """
+    Load alert rules from config/alert_rules.yaml (with mtime caching).
+    Returns (rules, category_overrides) — falls back to hardcoded defaults on error.
+    """
+    try:
+        if not _YAML_PATH.exists():
+            return _ALERT_RULES_DEFAULT, {}
+
+        mt = _YAML_PATH.stat().st_mtime
+        if mt == _yaml_cache["mtime"] and _yaml_cache["rules"] is not None:
+            return _yaml_cache["rules"], _yaml_cache["overrides"]
+
+        import yaml
+        with open(_YAML_PATH, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+
+        rules = []
+        for r in cfg.get("rules", []):
+            rules.append((
+                r["type"],
+                r.get("severity", "info"),
+                r["field"],
+                r.get("op", ">"),
+                float(r["threshold"]),
+                r.get("title", f"{r['type']}: {{name}} ({{val:.1f}})"),
+            ))
+
+        overrides = cfg.get("category_overrides", {}) or {}
+
+        _yaml_cache["rules"] = rules or _ALERT_RULES_DEFAULT
+        _yaml_cache["overrides"] = overrides
+        _yaml_cache["mtime"] = mt
+        logger.info("Loaded %d alert rules from %s (overrides: %s)", len(rules), _YAML_PATH, list(overrides.keys()))
+        return _yaml_cache["rules"], _yaml_cache["overrides"]
+    except Exception as e:
+        logger.warning("Failed to load alert_rules.yaml, using defaults: %s", e)
+        return _ALERT_RULES_DEFAULT, {}
+
+
+def _get_rules_for_item(market_hash_name: str) -> list[tuple]:
+    """Get alert rules with category-specific threshold overrides applied."""
+    from app.api.routes.analysis import _classify_item
+
+    rules, overrides = _load_alert_rules()
+    category = _classify_item(market_hash_name)
+    cat_overrides = overrides.get(category, {})
+    if not cat_overrides:
+        return rules
+
+    adjusted = []
+    for rule_type, severity, field, op, threshold, title in rules:
+        override = cat_overrides.get(rule_type, {})
+        adjusted.append((
+            rule_type,
+            override.get("severity", severity),
+            field,
+            op,
+            float(override.get("threshold", threshold)),
+            override.get("title", title),
+        ))
+    return adjusted
 
 
 async def _generate_alerts(
@@ -745,7 +812,8 @@ async def _generate_alerts(
         else:
             vals["pnl_pct"] = None
 
-        for alert_type, severity, field, op, threshold, title_tpl in _ALERT_RULES:
+        item_rules = _get_rules_for_item(sig.market_hash_name)
+        for alert_type, severity, field, op, threshold, title_tpl in item_rules:
             val = vals.get(field)
             if val is None:
                 continue
@@ -843,10 +911,13 @@ async def compute_quick_pnl_alerts() -> int:
 
             pnl_pct = (current - buy_price) / buy_price * 100
 
-            for threshold, alert_type, severity in [
-                (100, "profit_100", "critical"),
-                (50,  "profit_50",  "warning"),
-            ]:
+            item_rules = _get_rules_for_item(name)
+            pnl_rules = sorted(
+                [(float(t), at, sev) for at, sev, fld, op, t, _ in item_rules if fld == "pnl_pct" and op == ">"],
+                key=lambda x: -x[0],
+            ) or [(100, "profit_100", "critical"), (50, "profit_50", "warning")]
+
+            for threshold, alert_type, severity in pnl_rules:
                 if pnl_pct > threshold:
                     # Check duplicate
                     existing = await db.execute(

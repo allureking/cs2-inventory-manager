@@ -1,0 +1,80 @@
+# CS2 库存告警规则配置
+# 修改后无需重启服务 — 下次 compute_all_signals 运行时自动加载
+
+# ── 全局默认规则 ──
+# 所有饰品类型共用，除非被 category_overrides 覆盖
+rules:
+  - type: profit_50
+    severity: warning
+    field: pnl_pct
+    op: ">"
+    threshold: 50
+    title: "盈利超50%: {name} ({val:.1f}%)"
+
+  - type: profit_100
+    severity: critical
+    field: pnl_pct
+    op: ">"
+    threshold: 100
+    title: "盈利超100%: {name} ({val:.1f}%)"
+
+  - type: near_ath
+    severity: warning
+    field: ath_pct
+    op: ">"
+    threshold: 90
+    title: "接近历史高点: {name} (ATH {val:.1f}%)"
+
+  - type: rsi_overbought
+    severity: warning
+    field: rsi_14
+    op: ">"
+    threshold: 75
+    title: "RSI超买: {name} (RSI={val:.1f})"
+
+  - type: rsi_oversold
+    severity: info
+    field: rsi_14
+    op: "<"
+    threshold: 25
+    title: "RSI超卖: {name} (RSI={val:.1f})"
+
+  - type: momentum_surge
+    severity: warning
+    field: momentum_7
+    op: ">"
+    threshold: 20
+    title: "7日暴涨: {name} (+{val:.1f}%)"
+
+  - type: spread_arb
+    severity: info
+    field: spread_pct
+    op: ">"
+    threshold: 15
+    title: "跨平台价差: {name} ({val:.1f}%)"
+
+# ── 按饰品类型覆盖阈值 ──
+# 可用类型: knife, glove, pistol, rifle, sniper, smg, shotgun, mg, sticker, case, other
+# 只需列出要覆盖的规则 type + 新阈值，其余沿用全局默认
+category_overrides:
+  knife:
+    profit_50:
+      threshold: 60     # 刀具止损线设高一点
+    profit_100:
+      threshold: 120
+    momentum_surge:
+      threshold: 25     # 刀具价格波动更大
+
+  glove:
+    profit_50:
+      threshold: 60     # 手套同刀具
+    profit_100:
+      threshold: 120
+    momentum_surge:
+      threshold: 25
+
+  sticker:
+    profit_50:
+      threshold: 30     # 贴纸利润空间小，早点提醒
+    momentum_surge:
+      threshold: 15     # 贴纸波动敏感
