@@ -14,10 +14,10 @@
 - [x] `tests/test_pricing_query.py`(14 用例)：get_latest_prices / get_all_latest_prices —— 空名单、缺价、跨平台取 min、多分钟只认最新分钟、null/0/负价排除、最新分钟全无效则剔除
 
 ## 进行中 🚧
-- (下一步) tracker CRUD DB 测试
+- (下一步) youpin 分页 loop 测试
 
 ## 待办 📋
-- [ ] `test_tracker_crud.py`：get_daily_records / get_monthly_summary(VIP 10% vs 非VIP 20% 费率、缺天预估)/ update_record / import_export_excel
+- [x] `tests/test_tracker_crud.py`(19 用例)：config kv、daily_records 倒序/范围、monthly VIP10%·非VIP20% 费率与缺天预估/月末库存、update_record 重算、Excel 往返：get_daily_records / get_monthly_summary(VIP 10% vs 非VIP 20% 费率、缺天预估)/ update_record / import_export_excel
 - [ ] `test_pnl_aggregation.py` 或经路由：ACTIVE_STATUSES 计数/市值口径(空库存/全 in_storage/混合)、PnL(逐件 snapshot vs effective_cost、VIP/非VIP)
 - [ ] `test_youpin_pagination.py`：import_buy_records / import_sell_records 的 loop-until-empty(空页/单页/多页/末页不满/异常 break/MAX_PAGES)— mock fetch_*_records
 - [ ] `test_routes.py`：dashboard overview/chart-data、tracker GET、monitoring、inventory GET — 正常 + 异常入参(FastAPI/httpx ASGI)
