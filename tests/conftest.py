@@ -43,16 +43,27 @@ async def memory_db():
         await engine.dispose()
 
 
+def _default_routers():
+    """默认只挂 dashboard 路由（无 Form 依赖,不需要 python-multipart）。"""
+    from app.api.routes import dashboard
+    return [(dashboard.router, "/api/dashboard")]
+
+
 @asynccontextmanager
-async def asgi_client(seed=None):
+async def asgi_client(seed=None, routers=None):
     """
     产出 (httpx.AsyncClient, sessionmaker)，get_db 已覆盖为内存库。
-    seed: 可选 async 函数 seed(db)，在发请求前注入 fixtures。
+
+    - 不导入 main：自建最小 FastAPI app,只挂载传入的 routers
+      （从而不触发 lifespan / APScheduler / StaticFiles / 含 Form 的路由对
+       python-multipart 的依赖）。
+    - seed: 可选 async 函数 seed(db)，发请求前注入 fixtures。
+    - routers: [(router, prefix), ...]，默认仅 dashboard。
     """
     import httpx
+    from fastapi import FastAPI
 
     from app.core.database import get_db
-    from main import app  # 延迟 import：仅创建 app 对象,不进入 lifespan
 
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
@@ -71,13 +82,16 @@ async def asgi_client(seed=None):
         async with Session() as db:
             yield db
 
+    app = FastAPI()
+    for router, prefix in (routers if routers is not None else _default_routers()):
+        app.include_router(router, prefix=prefix)
     app.dependency_overrides[get_db] = _override_get_db
+
     transport = httpx.ASGITransport(app=app)
     try:
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             yield client, Session
     finally:
-        app.dependency_overrides.pop(get_db, None)
         await engine.dispose()
 
 
