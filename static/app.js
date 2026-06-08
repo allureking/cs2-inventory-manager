@@ -1138,26 +1138,46 @@
         },
 
         // ── Unified chart lifecycle (single entry) ──────────────────────
-        // Render only when the container actually has width (B1/B2 red line:
-        // width-0 renders are skipped and never cached). Redraw on size change
-        // (rotation / tab-switch reflow) via ResizeObserver, and on
-        // scroll-into-view via IntersectionObserver. Each render fn is
-        // idempotent (width+theme-aware fingerprint) so repeated calls are cheap.
+        // Width-0 renders skipped & never cached (B1/B2 red line). On size change
+        // (rotation/tab reflow) ResizeObserver lets the chart libs resize natively
+        // (no destroy/recreate → no Chart.js responsive race). On scroll-into-view
+        // IntersectionObserver FORCE-repaints Chart.js instances: iOS WebKit drops
+        // the backing store of off-screen canvases, so a chart drawn while below
+        // the fold shows blank and never auto-redraws — re-render() when it becomes
+        // visible fixes it. If no instance yet, create it (now that it's on-screen).
         _renderWhenVisible(observeEl, key, fn) {
           if (!observeEl) return;
-          fn();                                  // immediate attempt — no-op if width 0
+          const safe = () => { try { fn(); } catch (e) { console.warn('chart ' + key, e); } };
+          safe();                                // immediate attempt — no-op if width 0
           if (this._chartObservers[key]) return; // attach observers once per element
           const rec = {};
           if ('ResizeObserver' in window) {
             let t;
-            rec.ro = new ResizeObserver(() => { clearTimeout(t); t = setTimeout(fn, 120); });
+            rec.ro = new ResizeObserver(() => { clearTimeout(t); t = setTimeout(safe, 150); });
             rec.ro.observe(observeEl);
           }
           if ('IntersectionObserver' in window) {
-            rec.io = new IntersectionObserver((es) => { for (const e of es) if (e.isIntersecting) fn(); }, { threshold: 0.01 });
+            rec.io = new IntersectionObserver((es) => {
+              for (const e of es) {
+                if (!e.isIntersecting) continue;
+                const inst = this._chartFor(key);
+                if (!inst) { safe(); }                                   // not built yet → build on-screen
+                else if (inst.canvas && typeof inst.render === 'function') {
+                  try { inst.render(); } catch (_) {}                    // Chart.js: force repaint (iOS off-screen fix)
+                }
+              }
+            }, { threshold: 0.01, rootMargin: '250px' });
             rec.io.observe(observeEl);
           }
           this._chartObservers[key] = rec;
+        },
+        // live chart instance for a given key (Chart.js have .canvas; ApexCharts don't)
+        _chartFor(key) {
+          if (key === 'portfolio') return document.getElementById('portfolioChart')?.__chart;
+          if (key === 'doughnut' || key === 'rank' || key === 'dist') return this._chartInstances[key];
+          if (key === 'tracker') return this._trackerChart;
+          if (key === 'price') return this._priceChart;
+          return null;
         },
         // wrapper element (fixed-height div) of a canvas chart, used for width measure + observation
         _chartWrap(id) { const c = document.getElementById(id); return c ? (c.parentElement || c) : null; },
