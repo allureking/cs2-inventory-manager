@@ -38,3 +38,7 @@ node_modules/
 
 # Local dev notes (personal session notes, not for repo)
 DEV_NOTES.md
+
+# coverage 报告(本地生成,不入库)
+htmlcov/
+.coverage
