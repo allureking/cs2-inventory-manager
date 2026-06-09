@@ -1,8 +1,6 @@
-# 开发/测试工具依赖（仅本地开发,不影响线上运行时）
-# 安装: pip install -r requirements-dev.txt && pre-commit install
+# 开发/测试工具依赖（在 requirements.txt 之外额外需要的，仅本地开发）
+# 安装: pip install -r requirements.txt -r requirements-dev.txt && pre-commit install
+# 注：运行时依赖（含 python-multipart）已在 requirements.txt，无需在此重复。
 pytest
 pytest-cov
 pre-commit
-# python-multipart：FastAPI 处理 Form/File 上传所需(tracker 导入 Excel 等路由)。
-# 运行时也需要,理应在 requirements.txt;此处列出供测试环境补齐。
-python-multipart
