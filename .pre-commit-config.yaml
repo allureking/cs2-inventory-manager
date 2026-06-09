@@ -1,0 +1,13 @@
+# pre-commit: 提交前自动跑后端回归测试,失败则挡下 commit。
+# 启用(新克隆后一次性): pip install pre-commit && pre-commit install
+# 跳过(应急,慎用):    git commit --no-verify
+repos:
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest (backend regression suite)
+        entry: python3 -m pytest -q
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]   # pre-commit 4.x 的阶段名(旧版写 commit)
