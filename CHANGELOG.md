@@ -1,5 +1,19 @@
 # Changelog / 更新日志
 
+## [0.11.0] - 2026-06-10
+
+### 新增 / Added
+- **AURORA 设计系统**（`static/aurora.css`，纯叠加层，零业务 DOM 改动）：动态极光背景（GPU transform 漂移动画）+ SVG feTurbulence 胶片颗粒；oklch 广色域配色与 color-mix() 派生色；暗色「深空极光」/ 亮色「晨雾蓝瓷」双主题 / **AURORA design system** (`static/aurora.css`, pure overlay): living aurora background (GPU drift animation) + film grain; oklch wide-gamut palette with color-mix() derivations; dual dark/light themes
+- **液态玻璃表面**：卡片家族（.card/.glass-chart/.glass-solid）统一镜面上缘高光、饱和玻璃模糊、悬浮浮起 + 极光描边；指针追光——光标处环境光斑（rAF 节流单监听） / **Liquid-glass surfaces**: specular top-edge highlight, saturated backdrop blur, hover lift + aurora ring; cursor-following ambient light (single rAF-throttled listener)
+- **主题切换圆形揭幕**：View Transitions API 从按钮位置扩散揭幕，不支持的浏览器瞬时降级 / **Circular-reveal theme switching** via View Transitions API with graceful fallback
+- **弹簧物理动效**：CSS `linear()` 真弹簧缓动（cubic-bezier 兜底）贯穿按钮按压/模态框入场/Tab 切换/卡片浮起 / **Spring-physics motion**: CSS `linear()` easing (cubic-bezier fallback) across buttons, modals, tabs, cards
+- **细节打磨**：统计卡彩色顶缘光带 + 数值升格辉光、金融级 tabular-nums 等宽数字、品牌字极光渐变、玻璃化表头/分页/抽屉、focus-visible 焦点环、::selection 配色、text-wrap: balance / **Polish**: color-coded stat-card accents, tabular-nums digits, gradient brand text, glassed table headers/pagination/drawer, focus rings, selection colors
+
+### 变更 / Changed
+- 登录页重绘为同源 AURORA 语言（极光 + 玻璃卡 + 弹簧按钮） / Login page restyled with the same AURORA language
+- `prefers-reduced-motion` 下全部动画/过渡/追光降级关闭 / All motion disabled under `prefers-reduced-motion`
+- 悠悠 Token 过期横幅由刺红实色改为暗红玻璃 / Token-expiry banner softened from solid crimson to dark-rose glass
+
 ## [0.10.0] - 2026-06-10
 
 ### 新增 / Added

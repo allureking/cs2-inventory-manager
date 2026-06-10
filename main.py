@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="CS2 Inventory Manager",
     description="CS2 饰品量化交易监控系统",
-    version="0.10.0",
+    version="0.11.0",
 )
 
 def _api_key_ok(request: Request) -> bool:
@@ -188,7 +188,7 @@ async def serve_login():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "0.10.0"}
+    return {"status": "ok", "version": "0.11.0"}
 
 
 if __name__ == "__main__":

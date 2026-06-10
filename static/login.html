@@ -5,49 +5,103 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>登录 — CS2 库存管理系统</title>
   <style>
+    /* AURORA 设计语言(与主应用 aurora.css 同源) */
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { height: 100%; }
+    :root {
+      --aur-accent: oklch(0.66 0.19 258);
+      --aur-accent-2: oklch(0.62 0.21 292);
+      --aur-accent-3: oklch(0.75 0.15 195);
+      --aur-spring: cubic-bezier(0.22, 1.2, 0.36, 1);
+    }
     body {
-      font-family: ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
-      background: #0b1220;
-      background-image:
-        radial-gradient(ellipse 60% 40% at 20% 0%, rgba(37,99,235,0.18), transparent),
-        radial-gradient(ellipse 50% 40% at 90% 100%, rgba(139,92,246,0.12), transparent);
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #050a16;
       display: flex; align-items: center; justify-content: center;
       color: #e2e8f0;
+      font-variant-numeric: tabular-nums;
+      overflow: hidden;
+    }
+    body::before {
+      content: ""; position: fixed; inset: -20vmax; z-index: -2; pointer-events: none;
+      background:
+        radial-gradient(42vmax 34vmax at 20% 10%, color-mix(in oklab, var(--aur-accent) 26%, transparent), transparent 70%),
+        radial-gradient(38vmax 30vmax at 85% 25%, color-mix(in oklab, var(--aur-accent-2) 20%, transparent), transparent 70%),
+        radial-gradient(34vmax 28vmax at 50% 100%, color-mix(in oklab, var(--aur-accent-3) 16%, transparent), transparent 72%);
+      animation: drift 40s ease-in-out infinite alternate;
+      will-change: transform;
+    }
+    @keyframes drift {
+      0%   { transform: translate3d(0,0,0) scale(1); }
+      50%  { transform: translate3d(3vmax,-2vmax,0) scale(1.07); }
+      100% { transform: translate3d(-2vmax,2vmax,0) scale(0.98); }
+    }
+    body::after {
+      content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: .5;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
     }
     .card {
-      width: min(92vw, 380px);
-      background: rgba(15,23,42,0.75);
-      border: 1px solid rgba(51,65,85,0.5);
-      border-radius: 20px;
-      padding: 36px 32px;
-      backdrop-filter: blur(16px);
-      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+      width: min(92vw, 384px);
+      background: rgba(10, 17, 33, 0.55);
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 22px;
+      padding: 38px 34px;
+      backdrop-filter: blur(26px) saturate(1.6);
+      -webkit-backdrop-filter: blur(26px) saturate(1.6);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.12),
+        0 1px 2px rgba(0,0,0,0.3),
+        0 32px 80px -20px rgba(0,0,0,0.65);
+      animation: cardIn .6s var(--aur-spring) both;
+      position: relative;
     }
-    h1 { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+    .card::before {
+      content: ""; position: absolute; top: 0; left: 10%; right: 10%; height: 2px;
+      background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--aur-accent) 65%, transparent), color-mix(in oklab, var(--aur-accent-3) 55%, transparent), transparent);
+      pointer-events: none;
+    }
+    @keyframes cardIn { from { opacity: 0; transform: translateY(18px) scale(.97); } to { opacity: 1; transform: none; } }
+    h1 {
+      font-size: 19px; font-weight: 700; margin-bottom: 4px; letter-spacing: -0.01em;
+      background: linear-gradient(100deg, #fff 30%, color-mix(in oklab, var(--aur-accent) 70%, #fff) 70%, color-mix(in oklab, var(--aur-accent-3) 65%, #fff));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
     .sub { font-size: 12px; color: #64748b; margin-bottom: 28px; }
-    label { display: block; font-size: 12px; color: #94a3b8; margin: 14px 0 6px; }
+    label { display: block; font-size: 11px; color: #94a3b8; margin: 14px 0 6px; text-transform: uppercase; letter-spacing: .08em; }
     input {
-      width: 100%; padding: 10px 12px; font-size: 14px; color: #e2e8f0;
-      background: rgba(2,6,23,0.6); border: 1px solid rgba(51,65,85,0.6);
-      border-radius: 10px; outline: none; transition: border-color .15s;
+      width: 100%; padding: 11px 13px; font-size: 14px; color: #e2e8f0;
+      background: rgba(2,6,23,0.55); border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px; outline: none;
+      transition: border-color .25s, box-shadow .25s, background .25s;
     }
-    input:focus { border-color: rgba(59,130,246,0.6); }
+    input:focus {
+      border-color: color-mix(in oklab, var(--aur-accent) 60%, transparent);
+      box-shadow: 0 0 0 3px color-mix(in oklab, var(--aur-accent) 18%, transparent);
+      background: rgba(2,6,23,0.75);
+    }
     button {
-      width: 100%; margin-top: 24px; padding: 11px; font-size: 14px; font-weight: 600;
-      color: #fff; background: linear-gradient(135deg,#1d4ed8,#2563eb);
-      border: none; border-radius: 12px; cursor: pointer;
-      box-shadow: 0 0 20px rgba(37,99,235,0.3); transition: box-shadow .15s, opacity .15s;
+      width: 100%; margin-top: 26px; padding: 12px; font-size: 14px; font-weight: 600;
+      color: #fff;
+      background: linear-gradient(135deg, color-mix(in oklab, var(--aur-accent) 88%, #000), color-mix(in oklab, var(--aur-accent-2) 70%, var(--aur-accent)));
+      border: none; border-radius: 13px; cursor: pointer;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 4px 24px -4px color-mix(in oklab, var(--aur-accent) 55%, transparent);
+      transition: transform .35s var(--aur-spring), box-shadow .35s var(--aur-spring), opacity .2s;
     }
-    button:hover { box-shadow: 0 0 28px rgba(37,99,235,0.5); }
+    button:hover { box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 6px 32px -4px color-mix(in oklab, var(--aur-accent) 75%, transparent); transform: translateY(-1px); }
+    button:active:not(:disabled) { transform: scale(.97); }
     button:disabled { opacity: .5; cursor: not-allowed; }
     .err {
       display: none; margin-top: 14px; padding: 9px 12px; font-size: 12px;
       color: #fca5a5; background: rgba(239,68,68,0.1);
       border: 1px solid rgba(239,68,68,0.25); border-radius: 10px;
     }
-    .foot { margin-top: 22px; font-size: 11px; color: #475569; text-align: center; }
+    .foot { margin-top: 24px; font-size: 11px; color: #475569; text-align: center; text-wrap: balance; }
+    ::selection { background: color-mix(in oklab, var(--aur-accent) 35%, transparent); color: #fff; }
+    :focus-visible { outline: none; }
+    @media (prefers-reduced-motion: reduce) {
+      body::before { animation: none; }
+      .card { animation: none; }
+    }
   </style>
 </head>
 <body>

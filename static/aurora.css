@@ -1,0 +1,350 @@
+/* ════════════════════════════════════════════════════════════════════════
+   AURORA — Liquid Glass 设计系统层 (v0.11.0)
+
+   设计原则:
+   - 纯叠加:加载于内联样式之后,只覆盖视觉表皮,不动布局/业务 DOM
+   - 现代 CSS:oklch 色彩、color-mix()、linear() 弹簧缓动、视图过渡、
+     conic/radial 极光、backdrop-filter 饱和玻璃、tabular-nums 金融数字
+   - 双主题:暗色「深空极光」/ 亮色「晨雾蓝瓷」,自动适配
+   - 可访问性:prefers-reduced-motion 全量降级、focus-visible 焦点环
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── 设计令牌 ──────────────────────────────────────────────────────────── */
+:root {
+  --aur-accent:    oklch(0.66 0.19 258);   /* 主蓝 */
+  --aur-accent-2:  oklch(0.62 0.21 292);   /* 紫 */
+  --aur-accent-3:  oklch(0.75 0.15 195);   /* 青 */
+  --aur-emerald:   oklch(0.74 0.16 162);
+  --aur-surface:   rgba(10, 17, 33, 0.52);
+  --aur-surface-2: rgba(13, 22, 41, 0.46);
+  --aur-edge-hi:   rgba(255, 255, 255, 0.10);  /* 玻璃上缘镜面高光 */
+  --aur-edge-lo:   rgba(99, 102, 241, 0.12);   /* 玻璃下缘冷光 */
+  --aur-ring:      color-mix(in oklab, oklch(0.66 0.19 258) 65%, transparent);
+  /* 弹簧缓动:先 cubic-bezier 兜底,支持 linear() 的浏览器用真弹簧曲线 */
+  --aur-spring: cubic-bezier(0.22, 1.2, 0.36, 1);
+  --aur-spring: linear(0, 0.32 4.3%, 0.62 8.9%, 0.85 13.9%, 1.002 19.4%,
+                  1.07 25.4%, 1.086 31%, 1.04 44.3%, 0.999 56.5%, 0.99 65%, 1);
+}
+html.light {
+  --aur-surface:   rgba(255, 255, 255, 0.72);
+  --aur-surface-2: rgba(255, 255, 255, 0.6);
+  --aur-edge-hi:   rgba(255, 255, 255, 0.95);
+  --aur-edge-lo:   rgba(96, 165, 250, 0.18);
+}
+
+/* ── 全局基底 ──────────────────────────────────────────────────────────── */
+body {
+  background: #050a16;
+  background-image: none;          /* 旧静态径向光斑由 ::before 极光层取代 */
+  font-variant-numeric: tabular-nums;   /* 金融数字等宽对齐 */
+  text-rendering: optimizeLegibility;
+}
+html.light body {
+  background: #eef4fb;
+  background-image: none;
+}
+
+/* 极光层:三团 oklch 光晕缓慢漂移 + 呼吸,GPU transform 动画 */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -20vmax;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(38vmax 30vmax at 18% 12%, color-mix(in oklab, var(--aur-accent) 22%, transparent), transparent 70%),
+    radial-gradient(34vmax 28vmax at 85% 18%, color-mix(in oklab, var(--aur-accent-2) 17%, transparent), transparent 70%),
+    radial-gradient(30vmax 26vmax at 50% 95%, color-mix(in oklab, var(--aur-accent-3) 13%, transparent), transparent 72%),
+    radial-gradient(26vmax 20vmax at 75% 70%, color-mix(in oklab, var(--aur-emerald) 9%, transparent), transparent 75%),
+    linear-gradient(180deg, color-mix(in oklab, var(--aur-accent) 9%, transparent), transparent 28vmax);
+  animation: aurDrift 46s ease-in-out infinite alternate;
+  will-change: transform;
+}
+html.light body::before {
+  background:
+    radial-gradient(40vmax 32vmax at 15% 10%, rgba(125, 180, 255, 0.30), transparent 70%),
+    radial-gradient(36vmax 30vmax at 88% 15%, rgba(196, 181, 253, 0.26), transparent 70%),
+    radial-gradient(32vmax 26vmax at 50% 96%, rgba(125, 211, 252, 0.24), transparent 72%),
+    radial-gradient(24vmax 20vmax at 72% 68%, rgba(167, 243, 208, 0.18), transparent 75%);
+}
+@keyframes aurDrift {
+  0%   { transform: translate3d(0, 0, 0) scale(1) rotate(0.001deg); }
+  33%  { transform: translate3d(3vmax, -2vmax, 0) scale(1.06); }
+  66%  { transform: translate3d(-2vmax, 2.5vmax, 0) scale(0.97); }
+  100% { transform: translate3d(2vmax, 1vmax, 0) scale(1.04); }
+}
+
+/* 胶片颗粒:SVG feTurbulence,消除大渐变色带,质感关键帧 */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+html.light body::after { opacity: 0.35; }
+
+/* ── 液态玻璃表面:卡片家族 ────────────────────────────────────────────── */
+.card, .glass-chart, .glass-solid {
+  position: relative;
+  background: var(--aur-surface);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  box-shadow:
+    inset 0 1px 0 var(--aur-edge-hi),                /* 上缘镜面高光 */
+    inset 0 -1px 0 rgba(255, 255, 255, 0.02),
+    0 1px 2px rgba(0, 0, 0, 0.25),
+    0 8px 32px -12px rgba(0, 0, 0, 0.45);
+  transition:
+    transform 0.45s var(--aur-spring),
+    box-shadow 0.45s var(--aur-spring),
+    border-color 0.3s ease;
+}
+html.light .card, html.light .glass-chart, html.light .glass-solid {
+  background: var(--aur-surface) !important;
+  border-color: rgba(148, 184, 220, 0.4) !important;
+  box-shadow:
+    inset 0 1px 0 var(--aur-edge-hi),
+    0 1px 3px rgba(56, 100, 160, 0.08),
+    0 12px 32px -16px rgba(56, 100, 160, 0.18);
+}
+
+/* 指针追光:卡片表面跟随光标的环境光斑(JS 写入 --mx/--my) */
+.card::after, .glass-chart::after, .glass-solid::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 50%),
+    color-mix(in oklab, var(--aur-accent) 7%, transparent), transparent 65%);
+  transition: opacity 0.4s ease;
+  z-index: 0;
+}
+.card:hover::after, .glass-chart:hover::after, .glass-solid:hover::after { opacity: 1; }
+html.light .card:hover::after, html.light .glass-chart:hover::after { opacity: 0.5; }
+
+/* 卡片悬浮:轻浮起 + 边缘点亮 */
+.card:hover, .glass-chart:hover, .glass-solid:hover {
+  border-color: rgba(255, 255, 255, 0.13);
+  box-shadow:
+    inset 0 1px 0 var(--aur-edge-hi),
+    0 2px 4px rgba(0, 0, 0, 0.2),
+    0 18px 48px -16px rgba(0, 0, 0, 0.55),
+    0 0 0 1px color-mix(in oklab, var(--aur-accent) 12%, transparent);
+}
+
+/* 概览统计卡:彩色顶缘光带 + 数字升格 */
+.stat-card { border-radius: 16px; overflow: hidden; }
+.stat-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  pointer-events: none;
+  opacity: 0.85;
+  background: linear-gradient(90deg, transparent, var(--sc-hue, var(--aur-accent)) 35%, transparent 90%);
+}
+.stat-card:nth-child(1) { --sc-hue: oklch(0.74 0.16 162); }   /* 市值 → 翡翠 */
+.stat-card:nth-child(2) { --sc-hue: oklch(0.66 0.19 258); }   /* 成本 → 蓝 */
+.stat-card:nth-child(3) { --sc-hue: oklch(0.62 0.21 292); }   /* 盈亏 → 紫 */
+.stat-card:nth-child(4) { --sc-hue: oklch(0.78 0.16 75); }    /* 租金 → 琥珀 */
+.stat-card div[style*="font-size:22px"] {
+  font-size: 25px !important;
+  letter-spacing: -0.02em !important;
+  text-shadow: 0 0 24px color-mix(in oklab, currentColor 35%, transparent);
+}
+.stat-card > div[style*="font-size:10px"]:first-child,
+.stat-card div[style*="font-size:10px"]:first-child {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.stat-card:hover {
+  transform: translateY(-3px) scale(1.005);
+  box-shadow:
+    0 24px 60px -20px rgba(0, 0, 0, 0.6),
+    0 0 0 1px color-mix(in oklab, var(--aur-accent) 22%, transparent),
+    0 0 40px -8px color-mix(in oklab, var(--aur-accent) 25%, transparent) !important;
+}
+html.light .stat-card:hover {
+  box-shadow:
+    0 18px 44px -16px rgba(56, 100, 160, 0.28),
+    0 0 0 1px rgba(96, 165, 250, 0.4) !important;
+}
+
+/* ── 顶栏:悬浮玻璃坞 ──────────────────────────────────────────────────── */
+header.sticky {
+  background: color-mix(in srgb, #060d1a 62%, transparent) !important;
+  backdrop-filter: blur(28px) saturate(1.9) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(1.9) !important;
+  border-bottom: 1px solid transparent !important;
+}
+header.sticky::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 2%,
+    color-mix(in oklab, var(--aur-accent) 35%, transparent) 28%,
+    color-mix(in oklab, var(--aur-accent-2) 30%, transparent) 55%,
+    color-mix(in oklab, var(--aur-accent-3) 25%, transparent) 78%,
+    transparent 98%);
+  pointer-events: none;
+}
+html.light header.sticky {
+  background: rgba(240, 248, 255, 0.72) !important;
+  backdrop-filter: blur(28px) saturate(1.6) !important;
+}
+
+/* 品牌字:极光渐变文字 */
+header .sm\:block p.text-sm.font-bold {
+  background: linear-gradient(100deg, #fff 20%, color-mix(in oklab, var(--aur-accent) 75%, #fff) 55%, color-mix(in oklab, var(--aur-accent-3) 70%, #fff) 85%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent !important;
+}
+html.light header .sm\:block p.text-sm.font-bold {
+  background: linear-gradient(100deg, #0f172a 20%, oklch(0.5 0.19 258) 60%, oklch(0.55 0.15 195) 90%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent !important;
+}
+
+/* Tab 容器与激活态:渐变药丸 + 辉光 */
+.nav-tabs {
+  background: rgba(8, 14, 28, 0.55) !important;
+  border-color: rgba(255, 255, 255, 0.06) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+html.light .nav-tabs {
+  background: rgba(255, 255, 255, 0.65) !important;
+  border-color: rgba(148, 184, 220, 0.45) !important;
+}
+.nav-tabs button { transition: all 0.3s var(--aur-spring); }
+.nav-tabs button.bg-slate-700 {
+  background: linear-gradient(135deg,
+    color-mix(in oklab, var(--aur-accent) 85%, #000) ,
+    color-mix(in oklab, var(--aur-accent-2) 70%, var(--aur-accent))) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 2px 12px -2px color-mix(in oklab, var(--aur-accent) 55%, transparent) !important;
+}
+html.light .nav-tabs button.bg-slate-700 { color: #fff !important; }
+
+/* ── 按钮微交互:弹簧按压 + 镜面 sheen ─────────────────────────────────── */
+button { transition-property: transform, box-shadow, background, color, border-color, opacity; }
+button:active:not(:disabled) { transform: scale(0.96); transition: transform 0.08s ease; }
+button:not(:active) { transition-duration: 0.35s; transition-timing-function: var(--aur-spring); }
+
+/* ── 表格:玻璃表头 + 行悬浮光带 ───────────────────────────────────────── */
+thead th {
+  background: rgba(7, 13, 27, 0.78) !important;
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+}
+html.light thead th { background: rgba(240, 247, 255, 0.85) !important; backdrop-filter: blur(12px); }
+.tbl-row { transition: background 0.18s ease, box-shadow 0.18s ease; }
+.tbl-row:hover {
+  background: color-mix(in oklab, var(--aur-accent) 7%, transparent);
+  box-shadow:
+    inset 3px 0 0 color-mix(in oklab, var(--aur-accent) 70%, transparent),
+    0 1px 12px rgba(0, 0, 0, 0.25);
+}
+html.light .tbl-row:hover {
+  background: rgba(219, 234, 254, 0.45) !important;
+  box-shadow: inset 3px 0 0 rgba(59, 130, 246, 0.6);
+}
+
+/* ── 模态框:弹簧入场 + 深景深背板 ─────────────────────────────────────── */
+.fixed.inset-0.z-50 { animation: aurFade 0.28s ease both; }
+.fixed.inset-0.z-50 > div {
+  animation: aurModalIn 0.42s var(--aur-spring) both;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 32px 80px -16px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+@keyframes aurFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes aurModalIn {
+  from { opacity: 0; transform: translateY(14px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Tab 内容入场:幅度更大的弹簧上浮 */
+.fade-up { animation: fadeUp 0.5s var(--aur-spring) both; }
+
+/* Token 过期横幅:刺红实色 → 暗红玻璃 */
+.token-banner {
+  background: linear-gradient(90deg, rgba(112, 16, 45, 0.94), rgba(105, 24, 24, 0.9)) !important;
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  border-bottom: 1px solid rgba(244, 63, 94, 0.30) !important;
+}
+
+/* ── 细节打磨 ──────────────────────────────────────────────────────────── */
+::selection { background: color-mix(in oklab, var(--aur-accent) 35%, transparent); color: #fff; }
+html.light ::selection { color: #0f172a; }
+
+:focus-visible { outline: 2px solid var(--aur-ring); outline-offset: 2px; border-radius: 4px; }
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, #64748b 45%, transparent);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover { background: color-mix(in oklab, var(--aur-accent) 60%, #64748b); }
+
+/* 标题断行平衡 */
+h1, h2, h3, .cv-chart-title { text-wrap: balance; }
+
+/* 顶部进度条:极光配色 */
+#progress-bar {
+  background: linear-gradient(90deg, var(--aur-accent) 0%, var(--aur-accent-2) 40%, var(--aur-accent-3) 75%, var(--aur-accent) 100%);
+  background-size: 200% 100%;
+  height: 2.5px;
+  box-shadow: 0 0 12px color-mix(in oklab, var(--aur-accent) 60%, transparent);
+}
+
+/* 分页与 pill:玻璃化 */
+.pg-btn { backdrop-filter: blur(8px); }
+.pg-btn.active {
+  background: linear-gradient(135deg,
+    color-mix(in oklab, var(--aur-accent) 85%, #000),
+    color-mix(in oklab, var(--aur-accent-2) 65%, var(--aur-accent)));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 0 16px color-mix(in oklab, var(--aur-accent) 40%, transparent);
+}
+.pill-toggle { backdrop-filter: blur(8px); transition: all 0.3s var(--aur-spring); }
+
+/* 移动端抽屉:同步玻璃语言 */
+@media (max-width: 640px) {
+  .nav-actions.nav-open {
+    background: rgba(9, 15, 30, 0.88) !important;
+    backdrop-filter: blur(28px) saturate(1.7);
+    -webkit-backdrop-filter: blur(28px) saturate(1.7);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 24px 64px rgba(0,0,0,0.6) !important;
+  }
+  html.light .nav-actions.nav-open { background: rgba(248, 252, 255, 0.92) !important; }
+  body::before { inset: -40vmax; }   /* 移动端光晕铺满 */
+}
+
+/* ── 视图过渡(主题切换圆形揭幕,app.js 调用) ──────────────────────────── */
+::view-transition-old(root), ::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) { z-index: 1; }
+::view-transition-new(root) { z-index: 2147483646; }
+
+/* ── 可访问性:整体降级 ────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

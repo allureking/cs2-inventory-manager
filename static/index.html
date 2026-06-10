@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CS2 库存管理系统 — CS2 Inventory Manager</title>
   <!-- 本地资源带版本查询串做缓存破坏：每次发版同步更新 ?v=（与版本号一致），普通刷新即生效 -->
-  <link rel="stylesheet" href="/static/style.css?v=0.10.0">
+  <link rel="stylesheet" href="/static/style.css?v=0.11.0">
   <script defer src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script defer src="/static/app.js?v=0.10.0"></script>
+  <script defer src="/static/app.js?v=0.11.0"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
   <style>
     /* ── Base ────────────────────────────────────────────────────────── */
@@ -362,6 +362,8 @@
       .tbl-wrap { max-height: none; }
     }
   </style>
+  <!-- AURORA 设计系统层:必须在内联样式之后加载(同特异性后者胜) -->
+  <link rel="stylesheet" href="/static/aurora.css?v=0.11.0">
 </head>
 
 <body x-data="app()" class="text-slate-300 antialiased">
@@ -441,7 +443,7 @@
             class="px-2 py-1 rounded-lg text-[10px] transition-all"
             :style="nameLang==='en' ? 'background:rgba(59,130,246,0.12);color:#60a5fa' : 'background:rgba(51,65,85,0.2);color:#64748b'"
             x-text="nameLang==='cn' ? '中' : 'EN'"></button>
-          <button @click="toggleTheme()"
+          <button @click="toggleTheme($event)"
             class="px-2 py-1 rounded-lg text-[10px] transition-all"
             :style="theme==='light' ? 'background:rgba(251,191,36,0.15);color:#fbbf24' : theme==='system' ? 'background:rgba(59,130,246,0.12);color:#60a5fa' : 'background:rgba(51,65,85,0.2);color:#64748b'"
             x-text="theme==='light' ? '☀' : theme==='system' ? '⚙' : '🌙'"></button>

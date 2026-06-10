@@ -1,3 +1,21 @@
+    // ── AURORA 指针追光：卡片表面跟随光标的环境光斑（写入 CSS 变量,纯视觉）──
+    // 单个委托监听 + rAF 节流;触屏/降级动效环境零开销。
+    (() => {
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      let raf = 0;
+      document.addEventListener('pointermove', (e) => {
+        if (raf) return;
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          const card = e.target.closest?.('.card, .glass-chart, .glass-solid');
+          if (!card) return;
+          const r = card.getBoundingClientRect();
+          card.style.setProperty('--mx', ((e.clientX - r.left) / r.width * 100).toFixed(2) + '%');
+          card.style.setProperty('--my', ((e.clientY - r.top) / r.height * 100).toFixed(2) + '%');
+        });
+      }, { passive: true });
+    })();
+
     // ── 会话守卫（v0.10.0 用户系统）：任何 /api/ 请求收到 401 即视为未登录/会话过期，
     // 跳转登录页（/api/auth/* 除外，由登录页自身处理错误提示）。
     // 0.9.x 的 X-API-Key 弹窗注入已废弃：浏览器走 session cookie，API key 仅留给脚本/curl。
@@ -14,6 +32,21 @@
     })();
 
     const _CHANGELOG = Object.freeze([
+          {
+            version: '0.11.0', date: '2026-06-10', major: true,
+            title_cn: 'AURORA 设计系统：全站 UI 升级',
+            title_en: 'AURORA Design System: Sitewide UI Upgrade',
+            added: [
+              ['动态极光背景 + 胶片颗粒质感，oklch 广色域配色，暗色「深空极光」/ 亮色「晨雾蓝瓷」双主题', 'Living aurora background with film grain, oklch wide-gamut palette, dual themes (deep-space / morning-mist)'],
+              ['液态玻璃表面：卡片镜面上缘高光、指针追光（光标处环境光斑）、悬浮浮起与极光描边', 'Liquid-glass surfaces: specular top edge, cursor-following ambient light, hover lift with aurora ring'],
+              ['主题切换圆形揭幕动画（View Transitions API），统计卡彩色顶缘光带 + 金融级等宽数字', 'Circular-reveal theme switching (View Transitions API), color-coded stat card accents, tabular-nums financial digits'],
+              ['弹簧物理动效（CSS linear() 缓动）贯穿按钮/模态框/Tab 切换；prefers-reduced-motion 全量降级', 'Spring-physics motion (CSS linear() easing) across buttons/modals/tabs; full prefers-reduced-motion fallback'],
+            ],
+            changed: [
+              ['登录页同步 AURORA 设计语言；所有视觉为纯叠加层，零业务逻辑改动', 'Login page restyled to match; pure overlay layer, zero business-logic changes'],
+            ],
+            commits: [],
+          },
           {
             version: '0.10.0', date: '2026-06-10', major: true,
             title_cn: '用户系统：账号登录 + 密码管理',
@@ -2206,16 +2239,33 @@
           } catch (e) { this.showToast('CSQAQ 同步失败: ' + e.message, 'error'); }
         },
 
-        toggleTheme() {
+        toggleTheme(ev) {
           const next = this.theme === 'dark' ? 'light' : this.theme === 'light' ? 'system' : 'dark';
           this.theme = next;
-          if (next === 'system') {
-            localStorage.removeItem('theme');
-            const prefersDark = matchMedia('(prefers-color-scheme: dark)').matches;
-            document.documentElement.classList.toggle('light', !prefersDark);
+          const apply = () => {
+            if (next === 'system') {
+              localStorage.removeItem('theme');
+              const prefersDark = matchMedia('(prefers-color-scheme: dark)').matches;
+              document.documentElement.classList.toggle('light', !prefersDark);
+            } else {
+              localStorage.setItem('theme', next);
+              document.documentElement.classList.toggle('light', next === 'light');
+            }
+          };
+          // AURORA: View Transitions 圆形揭幕(从主题按钮位置扩散);不支持则瞬时切换
+          if (document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            const x = ev?.clientX ?? innerWidth - 80, y = ev?.clientY ?? 28;
+            const r = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+            const vt = document.startViewTransition(apply);
+            vt.ready.then(() => {
+              document.documentElement.animate(
+                { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`] },
+                { duration: 520, easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+                  pseudoElement: '::view-transition-new(root)' },
+              );
+            }).catch(() => {});
           } else {
-            localStorage.setItem('theme', next);
-            document.documentElement.classList.toggle('light', next === 'light');
+            apply();
           }
           // N1: 主题切换后重绘所有图表（指纹含有效主题 → 强制重建；隐藏的图宽度0自动 no-op）
           this._destroyOverviewCharts();
