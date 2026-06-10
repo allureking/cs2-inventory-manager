@@ -1,5 +1,12 @@
 # Changelog / 更新日志
 
+## [0.9.2] - 2026-06-10
+
+### 新增 / Added
+- **写操作 API Key 鉴权**：服务端配置 `APP_API_KEY` 后，所有 `/api/` 写请求（改价、上架、下架、导入、SMS 登录等）必须携带密钥；在原 `Authorization: Bearer` 之外新增 `X-API-Key` 头支持，以兼容 nginx Basic Auth 占用 Authorization 头的部署 / **API-key auth for write operations**: with `APP_API_KEY` set, all `/api/` mutating requests require the key; added `X-API-Key` header support (besides `Authorization: Bearer`) to coexist with nginx Basic Auth
+- **前端自动附带密钥**：首次写操作收到 401 时弹窗输入一次，存入 localStorage 后自动注入后续请求 / **Frontend auto-attach**: prompted once on first 401, key stored in localStorage and injected into subsequent writes
+- CORS 允许方法补充 `PUT`（改价端点），允许头补充 `X-API-Key` / CORS: added `PUT` method and `X-API-Key` header to allowlists
+
 ## [0.9.1] - 2026-06-08
 
 ### 修复 / Fixed

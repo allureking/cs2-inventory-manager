@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="CS2 Inventory Manager",
     description="CS2 饰品量化交易监控系统",
-    version="0.6.0",
+    version="0.9.2",
 )
 
 class APIKeyMiddleware(BaseHTTPMiddleware):
@@ -52,6 +52,9 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         auth = request.headers.get("Authorization", "")
         if auth == f"Bearer {settings.app_api_key}":
             return await call_next(request)
+        # 浏览器前端经 nginx Basic Auth 时 Authorization 头被占用，改走 X-API-Key
+        if request.headers.get("X-API-Key", "") == settings.app_api_key:
+            return await call_next(request)
         return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
 
 
@@ -59,8 +62,8 @@ app.add_middleware(APIKeyMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["https://cs2.kingke.dev"],
-    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-API-Key"],
 )
 
 app.include_router(prices.router, prefix="/api/prices", tags=["prices"])
@@ -128,7 +131,7 @@ async def serve_ui():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "0.6.0"}
+    return {"status": "ok", "version": "0.9.2"}
 
 
 if __name__ == "__main__":

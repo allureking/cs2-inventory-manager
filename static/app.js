@@ -1,4 +1,44 @@
+    // ── API key 注入：/api/ 的写请求自动附带 X-API-Key（服务端 APP_API_KEY 启用后必需）──
+    // nginx Basic Auth 占用了 Authorization 头，因此走自定义头；key 存 localStorage，
+    // 首次 401 时弹窗输入一次即可。GET/HEAD/OPTIONS 不附带（服务端也不校验读请求）。
+    (() => {
+      const SAFE = ['GET', 'HEAD', 'OPTIONS'];
+      const orig = window.fetch.bind(window);
+      const withKey = (headers, key) => {
+        if (headers instanceof Headers) { const h = new Headers(headers); h.set('X-API-Key', key); return h; }
+        return Object.assign({}, headers, { 'X-API-Key': key });
+      };
+      window.fetch = async (input, init) => {
+        const url = typeof input === 'string' ? input : (input && input.url) || '';
+        const method = ((init && init.method) || 'GET').toUpperCase();
+        if (!url.startsWith('/api/') || SAFE.includes(method)) return orig(input, init);
+        init = init || {};
+        const stored = localStorage.getItem('app_api_key');
+        if (stored) init.headers = withKey(init.headers, stored);
+        let resp = await orig(input, init);
+        if (resp.status === 401) {
+          const entered = window.prompt('写操作需要 API Key（服务器 .env 的 APP_API_KEY）：');
+          if (entered && entered.trim()) {
+            localStorage.setItem('app_api_key', entered.trim());
+            init.headers = withKey(init.headers, entered.trim());
+            resp = await orig(input, init);
+          }
+        }
+        return resp;
+      };
+    })();
+
     const _CHANGELOG = Object.freeze([
+          {
+            version: '0.9.2', date: '2026-06-10', major: false,
+            title_cn: '安全加固：写操作 API Key 鉴权',
+            title_en: 'Security Hardening: API-Key Auth for Write Operations',
+            added: [
+              ['服务端 APP_API_KEY 启用后，所有 /api/ 写请求（改价/上架/下架/导入等）须携带密钥；新增 X-API-Key 头支持以兼容 nginx Basic Auth', 'With APP_API_KEY set, all /api/ write requests (reprice/list/delist/import) require the key; new X-API-Key header support coexists with nginx Basic Auth'],
+              ['前端自动附带密钥：首次写操作弹窗输入一次，存 localStorage 后续自动注入', 'Frontend auto-attaches the key: prompted once on first write, stored in localStorage and injected automatically'],
+            ],
+            commits: [],
+          },
           {
             version: '0.9.1', date: '2026-06-08', major: false,
             title_cn: '图表渲染修复（桌面 resize 崩溃 + iOS 空白）',
