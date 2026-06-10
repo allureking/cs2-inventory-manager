@@ -1,5 +1,18 @@
 # Changelog / 更新日志
 
+## [0.10.0] - 2026-06-10
+
+### 新增 / Added
+- **用户系统**：应用级账号登录（PBKDF2-SHA256 600k 迭代哈希 + HMAC 签名 HttpOnly session cookie，30 天有效），登录页 `/login`；`app_user` 表支持 super_admin/admin/viewer 角色 / **User system**: app-level account login (PBKDF2-SHA256 hashing + HMAC-signed HttpOnly session cookie, 30-day TTL), login page at `/login`, role column for future RBAC
+- **密码管理**：右上角账户区修改密码（旧 session 全部失效）、退出登录；忘记密码可 SSH 运行 `scripts/create_user.py --reset` 重置 / **Password management**: in-app change password (invalidates old sessions) + logout; forgot-password recovery via `scripts/create_user.py --reset` over SSH
+- **登录限速**：同 IP+用户名 5 次失败锁定 5 分钟，防爆破 / **Login throttling**: 5 failures per IP+username → 5-minute lockout
+- 8 个新测试（哈希/token/中间件门禁/限速/改密失效/种子脚本），全量 332 通过 / 8 new tests, 332 total passing
+
+### 变更 / Changed
+- **取代 nginx Basic Auth**：单一登录入口，不再双重弹窗；未初始化用户时门禁直通（本地开发零配置） / **Replaces nginx Basic Auth**: single login, no double prompt; gate inactive until first user is seeded (zero-config local dev)
+- **X-API-Key 仅保留给脚本/curl**：浏览器写操作走登录会话，0.9.2 的前端 API Key 弹窗注入已移除；`/api/auth/login|logout` 可匿名访问（凭证在 body 中验证） / **X-API-Key now scripts/curl-only**: browser writes ride the login session; the 0.9.2 frontend key-prompt was removed; `/api/auth/login|logout` are anonymous-accessible
+- `/docs`、`/openapi.json` 等全部非白名单路径纳入登录门禁（此前公网可读） / `/docs`, `/openapi.json` and all non-whitelisted paths now require login (previously public)
+
 ## [0.9.3] - 2026-06-10
 
 ### 修复 / Fixed

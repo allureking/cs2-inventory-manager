@@ -10,7 +10,7 @@ logging.basicConfig(
 )
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -18,6 +18,8 @@ from app.core.config import settings
 from app.core.database import init_db
 from app.api.routes import prices, items, inventory, youpin, listing
 from app.api.routes import dashboard, analysis, monitoring, tracker
+from app.api.routes import auth as auth_routes
+from app.services import auth as auth_svc
 
 # ── 定时任务 ────────────────────────────────────────────────────────────────
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -38,8 +40,17 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="CS2 Inventory Manager",
     description="CS2 饰品量化交易监控系统",
-    version="0.9.3",
+    version="0.10.0",
 )
+
+def _api_key_ok(request: Request) -> bool:
+    if not settings.app_api_key:
+        return False
+    if request.headers.get("Authorization", "") == f"Bearer {settings.app_api_key}":
+        return True
+    # 历史上 nginx Basic Auth 占用 Authorization 头，保留 X-API-Key 通道（脚本/curl 用）
+    return request.headers.get("X-API-Key", "") == settings.app_api_key
+
 
 class APIKeyMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -49,16 +60,56 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         if not request.url.path.startswith("/api/"):
             return await call_next(request)
-        auth = request.headers.get("Authorization", "")
-        if auth == f"Bearer {settings.app_api_key}":
+        # v0.10.0: 登录/登出本身必须可匿名 POST（凭证在 body 里验证）
+        if request.url.path in ("/api/auth/login", "/api/auth/logout"):
             return await call_next(request)
-        # 浏览器前端经 nginx Basic Auth 时 Authorization 头被占用，改走 X-API-Key
-        if request.headers.get("X-API-Key", "") == settings.app_api_key:
+        # v0.10.0: 已登录的 session 用户可直接写（SessionAuthMiddleware 在外层设 state.user）
+        if getattr(request.state, "user", None):
+            return await call_next(request)
+        if _api_key_ok(request):
             return await call_next(request)
         return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
 
 
+class SessionAuthMiddleware(BaseHTTPMiddleware):
+    """
+    应用级登录门禁（v0.10.0 用户系统）。
+
+    - 白名单：/health（monitor.sh）、/login、/api/auth/login|logout、/static/*、favicon。
+    - 用户表为空（系统未初始化/本地开发）→ 直通，行为与 0.9.x 相同。
+    - 有效 session cookie → request.state.user；
+      有效 APP_API_KEY（Bearer / X-API-Key）→ 等价凭证（脚本/curl 通道）。
+    - 未认证：/api/* 返回 401 JSON；页面请求 302 → /login。
+    """
+
+    _PUBLIC = ("/health", "/login", "/api/auth/login", "/api/auth/logout", "/favicon.ico")
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        if path in self._PUBLIC or path.startswith("/static/"):
+            return await call_next(request)
+        if not await auth_svc.users_exist():
+            return await call_next(request)
+
+        token = request.cookies.get(auth_svc.SESSION_COOKIE, "")
+        if token:
+            user = await auth_svc.verify_session(token)
+            if user:
+                request.state.user = user
+                return await call_next(request)
+        if _api_key_ok(request):
+            request.state.user = {"id": 0, "username": "api-key", "role": "super_admin",
+                                  "via": "api_key"}
+            return await call_next(request)
+
+        if path.startswith("/api/"):
+            return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
+        return RedirectResponse(url="/login", status_code=302)
+
+
+# 注意顺序：后 add 的先执行 → CORS(最外) → SessionAuth → APIKey(最内)
 app.add_middleware(APIKeyMiddleware)
+app.add_middleware(SessionAuthMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["https://cs2.kingke.dev"],
@@ -66,6 +117,7 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization", "X-API-Key"],
 )
 
+app.include_router(auth_routes.router, prefix="/api/auth", tags=["auth"])
 app.include_router(prices.router, prefix="/api/prices", tags=["prices"])
 app.include_router(items.router, prefix="/api/items", tags=["items"])
 app.include_router(inventory.router, prefix="/api/inventory", tags=["inventory"])
@@ -129,9 +181,14 @@ async def serve_ui():
     return FileResponse("static/index.html")
 
 
+@app.get("/login", include_in_schema=False)
+async def serve_login():
+    return FileResponse("static/login.html")
+
+
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "0.9.3"}
+    return {"status": "ok", "version": "0.10.0"}
 
 
 if __name__ == "__main__":

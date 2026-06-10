@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CS2 库存管理系统 — CS2 Inventory Manager</title>
   <!-- 本地资源带版本查询串做缓存破坏：每次发版同步更新 ?v=（与版本号一致），普通刷新即生效 -->
-  <link rel="stylesheet" href="/static/style.css?v=0.9.3">
+  <link rel="stylesheet" href="/static/style.css?v=0.10.0">
   <script defer src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script defer src="/static/app.js?v=0.9.3"></script>
+  <script defer src="/static/app.js?v=0.10.0"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
   <style>
     /* ── Base ────────────────────────────────────────────────────────── */
@@ -531,6 +531,23 @@
           </svg>
           <span x-text="t('btn_match_records')"></span>
         </button>
+
+        <!-- 应用账户（v0.10.0 用户系统;未启用时整块隐藏） -->
+        <div x-show="currentUser.username" x-cloak class="flex items-center gap-1.5">
+          <span class="px-2 py-1 rounded-lg text-[11px]"
+            style="background:rgba(51,65,85,0.25);color:#94a3b8;border:1px solid rgba(51,65,85,0.35)"
+            :title="currentUser.role">
+            👤 <span x-text="currentUser.username"></span>
+          </span>
+          <button @click="pwModal.show=true"
+            class="px-2 py-1 rounded-lg text-[11px] transition-all"
+            style="background:rgba(59,130,246,0.12);color:#60a5fa;border:1px solid rgba(59,130,246,0.2)"
+            x-text="nameLang==='cn' ? '改密' : 'Password'"></button>
+          <button @click="logoutApp()"
+            class="px-2 py-1 rounded-lg text-[11px] transition-all"
+            style="background:rgba(239,68,68,0.1);color:#f87171;border:1px solid rgba(239,68,68,0.2)"
+            x-text="nameLang==='cn' ? '退出' : 'Logout'"></button>
+        </div>
       </div>
     </div>
   </header>
@@ -651,6 +668,56 @@
               class="px-3 py-2 rounded-xl text-xs font-medium text-white transition-all disabled:opacity-40"
               style="background:rgba(16,185,129,0.2);color:#34d399;border:1px solid rgba(16,185,129,0.3)" x-text="t('btn_apply')"></button>
           </div>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- ── 修改密码模态框（v0.10.0 用户系统） ──────────────────────────────── -->
+  <template x-teleport="body">
+    <div x-show="pwModal.show" x-cloak
+      class="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style="background:rgba(0,0,0,0.6);backdrop-filter:blur(4px)"
+      @keydown.escape.window="pwModal.show=false">
+      <div class="w-full max-w-sm rounded-2xl p-6" style="background:#0f172a;border:1px solid rgba(51,65,85,0.5)">
+        <p class="text-slate-200 font-medium mb-1" x-text="nameLang==='cn' ? '修改登录密码' : 'Change Password'"></p>
+        <p class="text-[11px] text-slate-600 mb-4">
+          👤 <span x-text="currentUser.username"></span> ·
+          <span x-text="nameLang==='cn' ? '修改后其他设备需重新登录' : 'Other sessions will be signed out'"></span>
+        </p>
+
+        <div class="space-y-3 mb-4">
+          <div>
+            <label class="block text-[11px] text-slate-600 mb-1" x-text="nameLang==='cn' ? '当前密码' : 'Current password'"></label>
+            <input x-model="pwModal.oldPw" type="password" autocomplete="current-password"
+              class="w-full px-3 py-2 rounded-xl text-sm border" />
+          </div>
+          <div>
+            <label class="block text-[11px] text-slate-600 mb-1" x-text="nameLang==='cn' ? '新密码（至少 8 位）' : 'New password (min 8 chars)'"></label>
+            <input x-model="pwModal.newPw" type="password" autocomplete="new-password"
+              class="w-full px-3 py-2 rounded-xl text-sm border" />
+          </div>
+          <div>
+            <label class="block text-[11px] text-slate-600 mb-1" x-text="nameLang==='cn' ? '确认新密码' : 'Confirm new password'"></label>
+            <input x-model="pwModal.newPw2" type="password" autocomplete="new-password"
+              @keydown.enter="changeAppPassword()"
+              class="w-full px-3 py-2 rounded-xl text-sm border" />
+          </div>
+        </div>
+
+        <p x-show="pwModal.msg" x-cloak class="text-[12px] mb-3"
+          :style="pwModal.ok ? 'color:#4ade80' : 'color:#f87171'" x-text="pwModal.msg"></p>
+
+        <div class="flex gap-3">
+          <button @click="pwModal.show=false; pwModal.msg=''"
+            class="flex-1 py-2 rounded-xl text-sm transition-all"
+            style="background:rgba(51,65,85,0.3);color:#94a3b8" x-text="t('btn_cancel')"></button>
+          <button @click="changeAppPassword()" :disabled="pwModal.saving || !pwModal.oldPw || !pwModal.newPw"
+            class="flex-1 py-2 rounded-xl text-sm font-medium text-white transition-all disabled:opacity-40"
+            style="background:linear-gradient(135deg,#1d4ed8,#2563eb)">
+            <span x-show="!pwModal.saving" x-text="nameLang==='cn' ? '确认修改' : 'Save'"></span>
+            <span x-show="pwModal.saving" x-cloak x-text="nameLang==='cn' ? '保存中…' : 'Saving…'"></span>
+          </button>
         </div>
       </div>
     </div>

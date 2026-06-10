@@ -1,34 +1,33 @@
-    // ── API key 注入：/api/ 的写请求自动附带 X-API-Key（服务端 APP_API_KEY 启用后必需）──
-    // nginx Basic Auth 占用了 Authorization 头，因此走自定义头；key 存 localStorage，
-    // 首次 401 时弹窗输入一次即可。GET/HEAD/OPTIONS 不附带（服务端也不校验读请求）。
+    // ── 会话守卫（v0.10.0 用户系统）：任何 /api/ 请求收到 401 即视为未登录/会话过期，
+    // 跳转登录页（/api/auth/* 除外，由登录页自身处理错误提示）。
+    // 0.9.x 的 X-API-Key 弹窗注入已废弃：浏览器走 session cookie，API key 仅留给脚本/curl。
     (() => {
-      const SAFE = ['GET', 'HEAD', 'OPTIONS'];
       const orig = window.fetch.bind(window);
-      const withKey = (headers, key) => {
-        if (headers instanceof Headers) { const h = new Headers(headers); h.set('X-API-Key', key); return h; }
-        return Object.assign({}, headers, { 'X-API-Key': key });
-      };
       window.fetch = async (input, init) => {
         const url = typeof input === 'string' ? input : (input && input.url) || '';
-        const method = ((init && init.method) || 'GET').toUpperCase();
-        if (!url.startsWith('/api/') || SAFE.includes(method)) return orig(input, init);
-        init = init || {};
-        const stored = localStorage.getItem('app_api_key');
-        if (stored) init.headers = withKey(init.headers, stored);
-        let resp = await orig(input, init);
-        if (resp.status === 401) {
-          const entered = window.prompt('写操作需要 API Key（服务器 .env 的 APP_API_KEY）：');
-          if (entered && entered.trim()) {
-            localStorage.setItem('app_api_key', entered.trim());
-            init.headers = withKey(init.headers, entered.trim());
-            resp = await orig(input, init);
-          }
+        const resp = await orig(input, init);
+        if (resp.status === 401 && url.startsWith('/api/') && !url.startsWith('/api/auth/')) {
+          window.location.href = '/login';
         }
         return resp;
       };
     })();
 
     const _CHANGELOG = Object.freeze([
+          {
+            version: '0.10.0', date: '2026-06-10', major: true,
+            title_cn: '用户系统：账号登录 + 密码管理',
+            title_en: 'User System: Account Login + Password Management',
+            added: [
+              ['应用级账号登录（superadmin 超级管理员），HttpOnly session cookie，30 天有效；登录页 /login', 'App-level account login (superadmin) with HttpOnly session cookie (30-day); login page at /login'],
+              ['右上角账户区：显示当前用户、修改密码（旧 session 自动失效）、退出登录', 'Header account area: current user, change password (invalidates old sessions), logout'],
+              ['登录限速：同 IP+用户名 5 次失败锁 5 分钟；忘记密码可 SSH 运行 scripts/create_user.py --reset 重置', 'Login throttle: 5 failures / 5 min lockout; forgot password → reset via scripts/create_user.py --reset over SSH'],
+            ],
+            changed: [
+              ['取代 nginx Basic Auth 双重弹窗；X-API-Key 仅保留给脚本/curl，浏览器写操作走登录会话，不再弹 API Key 输入框', 'Replaces the nginx Basic Auth double prompt; X-API-Key kept for scripts/curl only — browser writes use the login session, no more key prompt'],
+            ],
+            commits: [],
+          },
           {
             version: '0.9.3', date: '2026-06-10', major: false,
             title_cn: '数据质量：估值解析修复 + 历史数据防污染',
@@ -564,6 +563,9 @@
         repriceModal: { show: false, item: null, newPrice: '', newLeaseUnit: '', newLongLeaseUnit: '', newDeposit: '', saving: false },
         loginModal: { show: false, phone: '', code: '', sessionId: '', smsSending: false, logging: false, cooldown: 0, manualToken: '' },
         authState: { has_token: false, token_source: 'none', nickname: null },
+        // 应用登录用户（v0.10.0 用户系统）；username 为空 = 未启用用户系统（本地开发）
+        currentUser: { username: '', role: '' },
+        pwModal: { show: false, oldPw: '', newPw: '', newPw2: '', saving: false, msg: '', ok: false },
         selectedItems: [],
         quickList: {
           assetId: '', templateId: null, mode: 'sell',
@@ -622,6 +624,7 @@
             fetch('/api/analysis/alerts?page_size=1&unread_only=true').then(r => r.ok ? r.json() : null).catch(() => null),
             this._loadAuthState(),
             this._checkToken(),
+            this._loadCurrentUser(),
           ]);
           if (marketStatus?.status === 'running') {
             this.refreshing = true;
@@ -668,6 +671,42 @@
               }
             }
           } catch (e) { console.warn('Token check failed:', e.message); }
+        },
+
+        // ── 应用登录用户（v0.10.0 用户系统）─────────────────────────────
+        async _loadCurrentUser() {
+          try {
+            const r = await fetch('/api/auth/me');
+            if (r.ok) this.currentUser = await r.json();
+          } catch (e) { /* 未启用用户系统时 404/网络错误均忽略 */ }
+        },
+        async changeAppPassword() {
+          const m = this.pwModal;
+          m.msg = ''; m.ok = false;
+          if (m.newPw.length < 8) { m.msg = this.nameLang==='cn' ? '新密码至少 8 位' : 'New password must be at least 8 characters'; return; }
+          if (m.newPw !== m.newPw2) { m.msg = this.nameLang==='cn' ? '两次输入的新密码不一致' : 'New passwords do not match'; return; }
+          m.saving = true;
+          try {
+            const r = await fetch('/api/auth/change-password', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ old_password: m.oldPw, new_password: m.newPw }),
+            });
+            const data = await r.json().catch(() => ({}));
+            if (r.ok) {
+              m.ok = true;
+              m.msg = this.nameLang==='cn' ? '密码已修改 ✓' : 'Password changed ✓';
+              m.oldPw = m.newPw = m.newPw2 = '';
+              setTimeout(() => { m.show = false; m.msg = ''; }, 1200);
+            } else {
+              m.msg = data.detail || (this.nameLang==='cn' ? '修改失败' : 'Change failed');
+            }
+          } catch (e) {
+            m.msg = this.nameLang==='cn' ? '网络错误' : 'Network error';
+          } finally { m.saving = false; }
+        },
+        async logoutApp() {
+          try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (e) {}
+          window.location.href = '/login';
         },
 
         async _loadAuthState() {

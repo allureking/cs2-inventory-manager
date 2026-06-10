@@ -386,3 +386,17 @@ class ListingSnapshotItem(Base):
     open_sublet: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
 
     purchase_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+
+class AppUser(Base):
+    """应用登录用户（v0.10.0 用户系统）"""
+
+    __tablename__ = "app_user"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    password_hash: Mapped[str] = mapped_column(String, nullable=False)  # pbkdf2_sha256$iters$salt$hash
+    role: Mapped[str] = mapped_column(String(32), nullable=False, default="super_admin")
+    # epoch 秒；改密/重置后旧 session token（iat < 此值）全部失效
+    password_changed_at: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

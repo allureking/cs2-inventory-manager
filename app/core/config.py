@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     # API 访问密钥 — 设置后所有修改类端点需要 Bearer token
     app_api_key: str = ""
 
+    # 用户系统（v0.10.0）：session token 签名密钥（openssl rand -hex 32）
+    # 未配置时进程内随机生成，重启后所有登录失效
+    app_secret: str = ""
+    # session cookie 的 Secure 标记（生产 https 保持 True；本地 http 调试可关）
+    session_cookie_secure: bool = True
+
     # 采价平台白名单 — 只保存这些平台的价格快照，逗号分隔
     # 可选: YOUPIN,BUFF,STEAM,C5,HALOSKINS,SKINPORT,DMARKET,WAXPEER,CSMONEY
     price_platforms: str = "YOUPIN,BUFF,STEAM"

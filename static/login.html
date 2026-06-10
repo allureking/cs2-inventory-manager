@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>登录 — CS2 库存管理系统</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #0b1220;
+      background-image:
+        radial-gradient(ellipse 60% 40% at 20% 0%, rgba(37,99,235,0.18), transparent),
+        radial-gradient(ellipse 50% 40% at 90% 100%, rgba(139,92,246,0.12), transparent);
+      display: flex; align-items: center; justify-content: center;
+      color: #e2e8f0;
+    }
+    .card {
+      width: min(92vw, 380px);
+      background: rgba(15,23,42,0.75);
+      border: 1px solid rgba(51,65,85,0.5);
+      border-radius: 20px;
+      padding: 36px 32px;
+      backdrop-filter: blur(16px);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    }
+    h1 { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+    .sub { font-size: 12px; color: #64748b; margin-bottom: 28px; }
+    label { display: block; font-size: 12px; color: #94a3b8; margin: 14px 0 6px; }
+    input {
+      width: 100%; padding: 10px 12px; font-size: 14px; color: #e2e8f0;
+      background: rgba(2,6,23,0.6); border: 1px solid rgba(51,65,85,0.6);
+      border-radius: 10px; outline: none; transition: border-color .15s;
+    }
+    input:focus { border-color: rgba(59,130,246,0.6); }
+    button {
+      width: 100%; margin-top: 24px; padding: 11px; font-size: 14px; font-weight: 600;
+      color: #fff; background: linear-gradient(135deg,#1d4ed8,#2563eb);
+      border: none; border-radius: 12px; cursor: pointer;
+      box-shadow: 0 0 20px rgba(37,99,235,0.3); transition: box-shadow .15s, opacity .15s;
+    }
+    button:hover { box-shadow: 0 0 28px rgba(37,99,235,0.5); }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .err {
+      display: none; margin-top: 14px; padding: 9px 12px; font-size: 12px;
+      color: #fca5a5; background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.25); border-radius: 10px;
+    }
+    .foot { margin-top: 22px; font-size: 11px; color: #475569; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>CS2 库存管理系统</h1>
+    <div class="sub">CS2 Inventory Manager — 请登录</div>
+    <form id="f">
+      <label for="u">用户名 / Username</label>
+      <input id="u" name="username" autocomplete="username" required autofocus />
+      <label for="p">密码 / Password</label>
+      <input id="p" name="password" type="password" autocomplete="current-password" required />
+      <button id="btn" type="submit">登 录</button>
+      <div class="err" id="err"></div>
+    </form>
+    <div class="foot">忘记密码？SSH 运行 scripts/create_user.py --reset 重置</div>
+  </div>
+  <script>
+    const f = document.getElementById('f'), btn = document.getElementById('btn'), err = document.getElementById('err');
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      btn.disabled = true; err.style.display = 'none';
+      try {
+        const r = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: f.username.value.trim(), password: f.password.value }),
+        });
+        if (r.ok) { location.href = '/'; return; }
+        const data = await r.json().catch(() => ({}));
+        err.textContent = data.detail || (r.status === 429 ? '尝试次数过多，请 5 分钟后再试' : '登录失败');
+        err.style.display = 'block';
+      } catch (_) {
+        err.textContent = '网络错误，请重试';
+        err.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
