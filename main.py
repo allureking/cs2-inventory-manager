@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="CS2 Inventory Manager",
     description="CS2 饰品量化交易监控系统",
-    version="0.9.2",
+    version="0.9.3",
 )
 
 class APIKeyMiddleware(BaseHTTPMiddleware):
@@ -131,7 +131,7 @@ async def serve_ui():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "0.9.2"}
+    return {"status": "ok", "version": "0.9.3"}
 
 
 if __name__ == "__main__":

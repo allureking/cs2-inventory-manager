@@ -1,5 +1,16 @@
 # Changelog / 更新日志
 
+## [0.9.3] - 2026-06-10
+
+### 修复 / Fixed
+- **估值解析崩溃致口径混用**：悠悠 API 估值带 `¥` 前缀时（如 `¥425194.14`）解析抛错，每日追踪静默 fallback 到 price_snapshot 最低跨平台价口径，与悠悠口径混用且无任何标记——抽出共享 `parse_money()`（剥 ¥/千分位/空白），tracker 与 collector 统一使用；fallback 发生时在 `daily_tracker.notes` 写入 `valuation_source=snapshot` 标记并告警 / **Valuation parse crash mixed methodologies**: '¥'-prefixed valuations crashed parsing, silently falling back to the price-snapshot methodology with no marker — extracted shared `parse_money()` used by both tracker and collector; fallback now writes a `valuation_source=snapshot` marker to notes
+- **历史回填覆盖真实数据**：`POST /api/analysis/backfill` 的合成日线（均价插值 + 随机噪声）曾以 `on_conflict_do_update` 覆盖真实 ALL 聚合行——改为 `do_nothing`，合成数据只允许填补完全没有记录的日期 / **Backfill overwrote real history**: synthetic daily rows (avg interpolation + noise) overwrote real ALL aggregate rows via upsert — now `do_nothing`, synthetic data fills empty dates only
+- **0 价占位行拖垮 ALL 聚合**：停用平台/抓取失败写入的 0 价行被 `MIN` 聚合纳入，导致历史上 ~20% 的 ALL 日线为 0（窗口前 30 天高达 64%）——日聚合与 ALL 行生成均加 `> 0` 过滤，0 价快照不再产生平台行 / **Zero-price placeholder rows dragged ALL aggregates to 0** (~20% of ALL rows historically): daily aggregation and ALL-row generation now filter `> 0`; zero-price snapshots no longer produce platform rows
+
+### 新增 / Added
+- `scripts/restore_all_rows.py`：重放 aggregate_daily 的跨平台聚合逻辑，恢复 2026-06-08 回填事故覆盖的 45 天 ALL 行；无源可恢复的纯合成行删除；默认 dry-run / restore script replaying the cross-platform aggregation to recover the 45 days of ALL rows overwritten by the 2026-06-08 backfill; pure-synthetic rows with no source are deleted; dry-run by default
+- 14 个新测试（parse_money 特征用例 / fallback 标记 / backfill 防覆盖 / 恢复脚本），全量 323 通过 / 14 new tests, 323 total passing
+
 ## [0.9.2] - 2026-06-10
 
 ### 新增 / Added

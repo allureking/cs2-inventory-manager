@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.constants import ACTIVE_STATUSES
 from app.core.database import AsyncSessionLocal
+from app.core.utils import parse_money
 from app.models.db_models import InventoryItem, PortfolioSnapshot, PriceHistory, PriceSnapshot
 
 logger = logging.getLogger(__name__)
@@ -140,6 +141,8 @@ async def aggregate_daily(target_date: Optional[str] = None) -> int:
     async with AsyncSessionLocal() as db:
         # Aggregate: for each (market_hash_name, platform), compute OHLC
         # Using raw SQL for efficiency — GROUP BY with MIN/MAX/first/last
+        # sell_price > 0 过滤：0 价快照是「无报价/抓取失败」占位，不是真实价格,
+        # 混入会产生 0 价平台行并把 ALL 行的 MIN 聚合拖成 0（历史上 ~20% ALL 行为 0）
         stmt = text("""
             SELECT
                 market_hash_name,
@@ -149,14 +152,14 @@ async def aggregate_daily(target_date: Optional[str] = None) -> int:
                  WHERE ps2.market_hash_name = ps.market_hash_name
                    AND ps2.platform = ps.platform
                    AND ps2.snapshot_minute LIKE :prefix || '%'
-                   AND ps2.sell_price IS NOT NULL
+                   AND ps2.sell_price > 0
                  ORDER BY ps2.snapshot_minute ASC LIMIT 1) AS open_price,
                 -- Close: sell_price of latest snapshot
                 (SELECT ps3.sell_price FROM price_snapshot ps3
                  WHERE ps3.market_hash_name = ps.market_hash_name
                    AND ps3.platform = ps.platform
                    AND ps3.snapshot_minute LIKE :prefix || '%'
-                   AND ps3.sell_price IS NOT NULL
+                   AND ps3.sell_price > 0
                  ORDER BY ps3.snapshot_minute DESC LIMIT 1) AS close_price,
                 MAX(ps.sell_price) AS high_price,
                 MIN(ps.sell_price) AS low_price,
@@ -173,7 +176,7 @@ async def aggregate_daily(target_date: Optional[str] = None) -> int:
                  ORDER BY ps5.snapshot_minute DESC LIMIT 1) AS bidding_count
             FROM price_snapshot ps
             WHERE ps.snapshot_minute LIKE :prefix || '%'
-              AND ps.sell_price IS NOT NULL
+              AND ps.sell_price > 0
             GROUP BY ps.market_hash_name, ps.platform
         """)
 
@@ -214,13 +217,15 @@ async def aggregate_daily(target_date: Optional[str] = None) -> int:
         logger.info("aggregate_daily: upserted %d rows for %s", count, target_date)
 
         # Also generate a synthetic "ALL" row per item (cross-platform minimum sell)
+        # close_price > 0 过滤：跳过 0 价占位平台行（停用平台/抓取失败的遗留），
+        # 否则 MIN 聚合把 ALL 行拖成 0（与 scripts/restore_all_rows.py 口径一致）
         all_stmt = text("""
             SELECT market_hash_name,
                    MIN(open_price), MIN(close_price),
                    MAX(high_price), MIN(low_price),
                    SUM(sell_count), SUM(bidding_count)
             FROM price_history
-            WHERE record_date = :date AND platform != 'ALL'
+            WHERE record_date = :date AND platform != 'ALL' AND close_price > 0
             GROUP BY market_hash_name
         """)
         all_rows = (await db.execute(all_stmt, {"date": target_date})).fetchall()
@@ -371,15 +376,12 @@ async def backfill_avg_prices() -> None:
                         "low_price": round(price * 0.99, 2),
                         "record_date": d,
                     }
+                    # 合成数据只允许填补完全没有记录的日期，绝不覆盖真实聚合行
+                    # （2026-06-08 曾因 do_update 覆盖了 45 天真实 ALL 行,见
+                    #   scripts/restore_all_rows.py 恢复脚本）
                     ins = sqlite_insert(PriceHistory).values(values)
-                    ins = ins.on_conflict_do_update(
+                    ins = ins.on_conflict_do_nothing(
                         index_elements=["market_hash_name", "platform", "record_date"],
-                        set_={
-                            "close_price": ins.excluded.close_price,
-                            "open_price": ins.excluded.open_price,
-                            "high_price": ins.excluded.high_price,
-                            "low_price": ins.excluded.low_price,
-                        },
                     )
                     await db.execute(ins)
                     generated += 1
@@ -472,7 +474,7 @@ async def snapshot_portfolio() -> None:
             if token:
                 try:
                     _, _, stock_valuation = await fetch_stock_records(page=1, page_size=1)
-                    in_steam_value = float(str(stock_valuation).replace(",", "").replace("¥", "")) if stock_valuation else 0.0
+                    in_steam_value = parse_money(stock_valuation)
                 except Exception as e:
                     logger.warning("snapshot_portfolio: 获取库存估值失败: %s", e)
                 try:

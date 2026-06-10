@@ -30,6 +30,17 @@
 
     const _CHANGELOG = Object.freeze([
           {
+            version: '0.9.3', date: '2026-06-10', major: false,
+            title_cn: '数据质量：估值解析修复 + 历史数据防污染',
+            title_en: 'Data Quality: Valuation Parse Fix + History Anti-Pollution',
+            fixed: [
+              ['修复悠悠估值带 ¥ 前缀时解析崩溃导致每日追踪静默混用两套估值口径；fallback 发生时在备注写入 valuation_source=snapshot 标记', "Fixed valuation parse crash on '¥'-prefixed strings that silently mixed two valuation methodologies in daily tracker; fallback now writes a valuation_source=snapshot marker to notes"],
+              ['历史回填的合成数据不再覆盖真实日线，只允许填补完全没有记录的日期；新增脚本恢复被覆盖的 45 天 ALL 聚合行', 'Backfill synthetic data can no longer overwrite real daily rows (fills empty dates only); new script restores the 45 days of overwritten ALL aggregate rows'],
+              ['0 价占位行（停用平台/抓取失败）不再拖垮跨平台 ALL 聚合——历史上 ~20% 的 ALL 日线因此为 0', 'Zero-price placeholder rows (disused platforms / failed fetches) no longer drag the cross-platform ALL aggregate to 0 (~20% of ALL rows historically)'],
+            ],
+            commits: [],
+          },
+          {
             version: '0.9.2', date: '2026-06-10', major: false,
             title_cn: '安全加固：写操作 API Key 鉴权',
             title_en: 'Security Hardening: API-Key Auth for Write Operations',

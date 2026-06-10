@@ -25,6 +25,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.constants import ACTIVE_STATUSES
+from app.core.utils import parse_money
 from app.models.db_models import DailyTracker, InventoryItem, PriceSnapshot, TrackerConfig
 from app.services.pricing import get_latest_prices
 
@@ -147,12 +148,14 @@ async def snapshot_daily(is_vip: bool = True) -> dict:
             try:
                 from app.services.youpin import fetch_stock_records
                 _, _, stock_valuation = await fetch_stock_records(page=1, page_size=1)
-                in_steam_value = float(str(stock_valuation).replace(",", "")) if stock_valuation else 0.0
+                in_steam_value = parse_money(stock_valuation)
             except Exception as e:
                 logger.warning("tracker snapshot_daily: 获取库存估值失败: %s", e)
 
         # fallback: 如果悠悠 API 不可用，从 price_snapshot 计算
-        if in_steam_value == 0.0:
+        # （snapshot 口径与悠悠口径是两套度量体系，发生时必须在 notes 留标记）
+        used_snapshot_fallback = in_steam_value == 0.0
+        if used_snapshot_fallback:
             steam_name_rows = (await db.execute(
                 select(InventoryItem.market_hash_name, func.count(InventoryItem.id).label("cnt"))
                 .where(InventoryItem.status == "in_steam")
@@ -202,6 +205,21 @@ async def snapshot_daily(is_vip: bool = True) -> dict:
             "cost_basis": cost_basis,
             "price_change": round(price_change, 8),
         }
+
+        # fallback 口径标记：写入 notes，保留已有备注（set_ 按 row keys 构建，
+        # 非 fallback 时 notes 不进 row，不会覆盖既有备注）
+        if used_snapshot_fallback:
+            marker = "valuation_source=snapshot"
+            existing_notes = (await db.execute(
+                select(DailyTracker.notes).where(DailyTracker.date == today)
+            )).scalar()
+            if existing_notes and marker not in existing_notes:
+                row["notes"] = f"{existing_notes} | {marker}"
+            elif not existing_notes:
+                row["notes"] = marker
+            else:
+                row["notes"] = existing_notes
+            logger.warning("snapshot_daily: 悠悠估值不可用，使用 price_snapshot 口径 — date=%s", today)
 
         stmt = sqlite_insert(DailyTracker).values([row])
         stmt = stmt.on_conflict_do_update(
