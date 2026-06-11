@@ -33,6 +33,26 @@
 
     const _CHANGELOG = Object.freeze([
           {
+            version: '0.13.0', date: '2026-06-11', major: true,
+            title_cn: '可靠性与数据资产大修：凭证哨兵 + 租赁实绩 + 成本找回',
+            title_en: 'Reliability & Data Overhaul: Credential Sentinel + Lease Attribution + Cost Recovery',
+            added: [
+              ['凭证哨兵：每日自动探测悠悠 Token,失效立即在预警中心告警(支持 Server酱/Telegram 推送,.env 配置即生效),恢复后自动愈合——数据停更不再静默', 'Credential sentinel: daily YouPin token probe with in-app critical alert (optional ServerChan/Telegram push), auto-heals on recovery'],
+              ['单品租赁实绩归因：每日记录每件饰品的实际出租与日租金,单品分析页新增「租赁实绩」卡(有租天数/实收租金/实际年化)+ 实绩排行 API——回答「该卖谁、该续谁」', 'Per-item lease income attribution: daily per-commodity rent recording, new "Actual Lease Income" card + rankings API'],
+              ['GitHub Actions CI：每次 push/PR 云端跑全量回归(360+ 用例),与本地 pre-commit 双闸', 'GitHub Actions CI running the full regression suite on every push/PR'],
+            ],
+            fixed: [
+              ['成本找回：532 件活跃持仓从僵尸行继承回 ¥652,704 购入成本(磨损值精确指纹,零歧义才迁移);PnL 覆盖 +532 件', 'Cost recovery: 532 active items inherited ¥652,704 purchase costs from zombie rows via exact-wear fingerprint matching'],
+              ['僵尸行源头根治：租赁导入改为按磨损指纹复用旧行(此前每个租赁周期都新建行,成本断链、每月净增 ~15k 死行)', 'Zombie-row root fix: lease import now reuses rows by wear fingerprint instead of creating new ones every cycle'],
+              ['监控修真：/status 不再永远 degraded(新鲜度阈值改 26h),调度任务列表改为实时读取', 'Monitoring fixed: /status no longer permanently degraded (26h threshold), live scheduler job list'],
+            ],
+            changed: [
+              ['数据库瘦身:VACUUM 489→77MB;备份改 VACUUM INTO+gzip(单份 468→25MB),并完成首次恢复演练;归档清理 24.4 万死行(item 字典/停用平台历史/旧告警/快照降采样,先归档后删)', 'DB slimmed 489→77MB; backups now VACUUM INTO+gzip (468→25MB) with restore drill done; 244k dead rows archived & pruned'],
+              ['SteamDT 采价 4005 限速自动等窗重试;新增多个查询索引', 'SteamDT 4005 rate-limit retry; new query indexes'],
+            ],
+            commits: [],
+          },
+          {
             version: '0.12.0', date: '2026-06-10', major: true,
             title_cn: '性能提速：刷新不再卡顿 + 数据自动保鲜',
             title_en: 'Performance: No More Slow Refreshes + Auto-Fresh Data',

@@ -1,5 +1,22 @@
 # Changelog / 更新日志
 
+## [0.13.0] - 2026-06-11
+
+### 新增 / Added
+- **凭证哨兵**（提案6）：每日 23:55 PT + 启动时探测悠悠 Token，失效 → 预警中心 critical 告警（去重不刷屏）+ 日志 ERROR + 可选外推（`SERVERCHAN_KEY` / `TELEGRAM_BOT_TOKEN`+`TELEGRAM_CHAT_ID`，.env 配置即生效）；恢复后未读告警自动愈合 / **Credential sentinel** with in-app alert, optional push channels, auto-heal
+- **单品租赁实绩归因**（提案9a）：新表 `lease_income_daily`，每日 00:01 PT + 租赁导入时落库每件在租饰品的日租金；API `/api/analysis/lease-income`（单品曲线+实际年化）与 `/lease-income/rankings`；单品分析页新增「租赁实绩·近30天」卡 / **Per-item lease income attribution**: daily recording, item curve + actual annualized + rankings API, new UI card
+- **GitHub Actions CI**：push/PR 云端全量回归，与本地 pre-commit 双闸 / CI running full regression on push/PR
+
+### 修复 / Fixed
+- **成本找回**（提案5①）：磨损值精确指纹匹配（受赠侧唯一+捐赠侧同价才迁移，dry-run+CSV 审计后执行），532 件活跃持仓继承回 **¥652,704** 购入成本 / **Cost recovery**: 532 items inherited ¥652,704 via exact-wear zero-ambiguity matching
+- **僵尸行源头根治**（提案5②）：租赁导入按 hash+磨损指纹复用 unknown 旧行（成本自然跟随），不再每个租赁周期建新行（此前每月净增 ~15k 死行） / Lease import reuses rows by wear fingerprint, ending per-cycle row creation
+- **监控修真**（提案6②）：`/api/monitoring/status` 新鲜度阈值 60min→26h（采价为每日节奏，旧值导致永远 degraded）；`scheduler_jobs` 改实时读取 / Monitoring status fixed (26h threshold, live job list)
+
+### 变更 / Changed
+- **数据库与备份瘦身**（提案4/8）：`VACUUM` 489→140MB；归档清理 244,338 死行（item 字典 38.8k / item_avg_price 44.4k / 停用平台历史 140.8k / 旧告警 16.7k / 快照降采样 3.6k，先 `VACUUM INTO` 归档快照后删）→ 最终 **77MB**；`backup.sh` 改 `VACUUM INTO`+gzip（单份 468→**25MB**），完成首次**恢复演练**（integrity ok + 5 表行数一致）；清理 diag 临时 cron / DB & backups slimmed, 244k dead rows archived & pruned, restore drill done
+- 红线遵守：`price_history` 202601 ALL-only 行原封未动（5,284 行）；合成数据修复确认 v0.9.3 已完成（ALL=分平台 MIN 聚合抽查通过） / 202601 ALL-row red line respected
+- 新增索引 `lease_income_daily(name,date)`；`requirements-dev` 配合 CI / New index; dev deps for CI
+
 ## [0.12.0] - 2026-06-10
 
 ### 新增 / Added
