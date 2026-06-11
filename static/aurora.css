@@ -348,3 +348,39 @@ h1, h2, h3, .cv-chart-title { text-wrap: balance; }
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ── 骨架屏 (v0.12):首屏数据未到位前的 shimmer 占位,数据渲染后自动消失 ── */
+.aur-skel-card, .aur-skel-tile {
+  position: relative;
+  overflow: hidden;
+  background: var(--aur-surface-2, rgba(13, 22, 41, 0.46));
+  border: 1px solid rgba(148, 163, 184, 0.08);
+  border-radius: 16px;
+}
+.aur-skel-card { min-height: 132px; }
+.aur-skel-tile { height: 118px; border-radius: 10px; }
+.aur-skel-chart { position: relative; overflow: hidden; }
+.aur-skel-card::after, .aur-skel-tile::after, .aur-skel-chart::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent 30%, rgba(148, 163, 184, 0.10) 50%, transparent 70%);
+  transform: translateX(-100%);
+  animation: aurShimmer 1.6s ease infinite;
+}
+html.light .aur-skel-card, html.light .aur-skel-tile {
+  background: rgba(255, 255, 255, 0.55);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+html.light .aur-skel-card::after, html.light .aur-skel-tile::after, html.light .aur-skel-chart::after {
+  background: linear-gradient(100deg, transparent 30%, rgba(96, 165, 250, 0.12) 50%, transparent 70%);
+}
+/* topGrid 骨架期临时网格(JS 设置列数前) */
+#topGrid:has(.aur-skel-tile) {
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+}
+@keyframes aurShimmer { to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) {
+  .aur-skel-card::after, .aur-skel-tile::after, .aur-skel-chart::after { animation: none; }
+}

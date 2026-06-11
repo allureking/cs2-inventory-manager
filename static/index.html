@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CS2 库存管理系统 — CS2 Inventory Manager</title>
   <!-- 本地资源带版本查询串做缓存破坏：每次发版同步更新 ?v=（与版本号一致），普通刷新即生效 -->
-  <link rel="stylesheet" href="/static/style.css?v=0.11.0">
+  <link rel="stylesheet" href="/static/style.css?v=0.12.0">
   <script defer src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script defer src="/static/app.js?v=0.11.0"></script>
+  <script defer src="/static/app.js?v=0.12.0"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
   <style>
     /* ── Base ────────────────────────────────────────────────────────── */
@@ -363,7 +363,7 @@
     }
   </style>
   <!-- AURORA 设计系统层:必须在内联样式之后加载(同特异性后者胜) -->
-  <link rel="stylesheet" href="/static/aurora.css?v=0.11.0">
+  <link rel="stylesheet" href="/static/aurora.css?v=0.12.0">
 </head>
 
 <body x-data="app()" class="text-slate-300 antialiased">
@@ -768,8 +768,8 @@
         <span class="text-slate-500/60 ml-auto">PT</span>
       </div>
 
-      <!-- Stat cards (rendered by JS) -->
-      <div id="statCards" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"></div>
+      <!-- Stat cards (rendered by JS;初始为骨架占位,renderStatCards 覆写后消失) -->
+      <div id="statCards" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"><div class="aur-skel-card" aria-hidden="true"></div><div class="aur-skel-card" aria-hidden="true"></div><div class="aur-skel-card" aria-hidden="true"></div><div class="aur-skel-card" aria-hidden="true"></div></div>
 
       <!-- Portfolio Value Trend Chart -->
       <div class="mt-4 mb-2">
@@ -804,7 +804,7 @@
             </template>
           </div>
         </div>
-        <div style="position:relative; width:100%; height:280px; overflow:hidden;"><canvas id="portfolioChart"></canvas></div>
+        <div class="aur-skel-chart" style="position:relative; width:100%; height:280px; overflow:hidden;"><canvas id="portfolioChart"></canvas></div>
         <div x-show="portfolioCategory==='value' && !portfolioData.length" class="flex items-center justify-center py-12">
           <p class="text-slate-600 text-sm" x-text="t('portfolio_no_data')"></p>
         </div>
@@ -825,21 +825,21 @@
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
         <div class="glass-chart cv-chart-wrap">
           <div class="cv-chart-title" x-text="nameLang==='cn'?'持仓构成（按类型市值）':'Holdings by Type (Market Value)'"></div>
-          <div style="position:relative; height:300px;"><canvas id="doughnutChart"></canvas></div>
+          <div class="aur-skel-chart" style="position:relative; height:300px;"><canvas id="doughnutChart"></canvas></div>
         </div>
         <div class="glass-chart cv-chart-wrap">
           <div class="cv-chart-title" x-text="nameLang==='cn'?'盈亏排名 — Top 涨/跌':'P&L Ranking — Top Gainers/Losers'"></div>
-          <div style="position:relative; height:300px;"><canvas id="rankChart"></canvas></div>
+          <div class="aur-skel-chart" style="position:relative; height:300px;"><canvas id="rankChart"></canvas></div>
         </div>
         <div class="glass-chart cv-chart-wrap">
           <div class="cv-chart-title" x-text="nameLang==='cn'?'盈亏率分布':'P&L Rate Distribution'"></div>
-          <div style="position:relative; height:300px;"><canvas id="distChart"></canvas></div>
+          <div class="aur-skel-chart" style="position:relative; height:300px;"><canvas id="distChart"></canvas></div>
         </div>
       </div>
       <!-- Top 20 Holdings Grid -->
       <div class="glass-chart cv-chart-wrap mt-4">
         <div class="cv-chart-title" x-text="nameLang==='cn'?'持仓价值 Top 20':'Top 20 Holdings by Value'"></div>
-        <div id="topGrid"></div>
+        <div id="topGrid"><div class="aur-skel-tile" aria-hidden="true"></div><div class="aur-skel-tile" aria-hidden="true"></div><div class="aur-skel-tile" aria-hidden="true"></div><div class="aur-skel-tile" aria-hidden="true"></div><div class="aur-skel-tile" aria-hidden="true"></div><div class="aur-skel-tile" aria-hidden="true"></div><div class="aur-skel-tile" aria-hidden="true"></div><div class="aur-skel-tile" aria-hidden="true"></div><div class="aur-skel-tile" aria-hidden="true"></div><div class="aur-skel-tile" aria-hidden="true"></div></div>
       </div>
 
     </div>
@@ -2233,7 +2233,7 @@
         </div>
         <div class="text-xs text-slate-600">
           <span x-text="t('current_version')"></span>
-          <span class="text-blue-400 font-mono font-bold ml-1">v0.9.1</span>
+          <span class="text-blue-400 font-mono font-bold ml-1">v0.12.0</span>
         </div>
       </div>
 

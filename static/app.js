@@ -33,6 +33,27 @@
 
     const _CHANGELOG = Object.freeze([
           {
+            version: '0.12.0', date: '2026-06-10', major: true,
+            title_cn: '性能提速：刷新不再卡顿 + 数据自动保鲜',
+            title_en: 'Performance: No More Slow Refreshes + Auto-Fresh Data',
+            added: [
+              ['首屏骨架屏：数据到达前显示流光占位，告别空白闪烁', 'Loading skeletons: shimmer placeholders before data arrives, no more blank flash'],
+              ['数据自动保鲜：页面停留每 5 分钟静默刷新；切回标签页若数据过期立即更新，无需手动刷新', 'Auto-fresh data: silent refresh every 5 min while visible; instant update when returning to a stale tab'],
+            ],
+            fixed: [
+              ['「偶尔刷新很慢」根因修复：概览估值缓存过期时不再阻塞等待悠悠 API 1-3 秒，改为先返回现值、后台静默更新（stale-while-revalidate）', '"Occasionally slow refresh" root-caused: overview no longer blocks 1-3s on YouPin API at cache expiry — serves current value and revalidates in background'],
+              ['库存估值解析修复：dashboard 处理带 ¥ 符号的估值时不再静默失败（v0.9.3 漏网处）', 'Inventory valuation parse fix: dashboard no longer silently fails on ¥-prefixed values (spot missed in v0.9.3)'],
+              ['市价采集限速韧性：命中 SteamDT 4005 限速自动等窗重试，连续两晚价格停更的问题不再发生', 'Price collection resilience: auto-retry after SteamDT 4005 rate limit; fixes 2-night price staleness'],
+              ['量化分析搜索/排行在 SQLite 下的重复行隐患（DISTINCT ON 静默忽略）', 'Analysis search/rankings dedup correctness on SQLite (DISTINCT ON silently ignored)'],
+            ],
+            changed: [
+              ['量化总览/图表聚合加 5 分钟缓存（原每次 0.2-0.6 秒全表扫描），手动计算/标记已读后立即失效', 'Analysis overview / chart aggregations now cached 5 min (was 0.2-0.6s full scans); invalidated on compute / mark-read'],
+              ['全站盈亏口径统一：旧库存接口逐件盈亏从「仅 BUFF 价」改为「可得平台最低价」，与仪表盘一致', 'Sitewide P&L unification: legacy inventory per-item P&L now uses cheapest available platform price, matching dashboard'],
+              ['quant_signal/price_history 新增查询索引', 'New query indexes on quant_signal / price_history'],
+            ],
+            commits: [],
+          },
+          {
             version: '0.11.0', date: '2026-06-10', major: true,
             title_cn: 'AURORA 设计系统：全站 UI 升级',
             title_en: 'AURORA Design System: Sitewide UI Upgrade',
@@ -678,11 +699,40 @@
           // Apply saved theme
           if (this.theme === 'light') document.documentElement.classList.add('light');
           // 渲染概览统计卡 + 建立图表统一可见性/尺寸观察器（单一入口）
-          this.$nextTick(() => { this.renderStatCards(); this._setupChartObservers(); this._syncHeaderH(); });
+          this.$nextTick(() => {
+            this.renderStatCards(); this._setupChartObservers(); this._syncHeaderH();
+            this._clearSkeletons();   // 数据已到位:移除残留骨架(数据为空时显示干净空态)
+          });
           // 顶栏实际高度 → CSS 变量（移动端 token 横幅 top 跟随，避免重叠）
           setTimeout(() => this._syncHeaderH(), 300);
           window.addEventListener('resize', () => this._syncHeaderH());
           window.addEventListener('orientationchange', () => setTimeout(() => this._syncHeaderH(), 200));
+          this._setupAutoRefresh();   // 页面可见时定时静默刷新,切回标签页若数据过期立即刷新
+        },
+
+        // ── 数据保鲜（v0.12）────────────────────────────────────────────
+        // 用户停留/切回页面时数据自动更新,无需手动刷新;后端有 TTL 缓存,代价极小
+        _AUTO_REFRESH_MS: 5 * 60 * 1000,
+        _lastDataRefresh: 0,
+        _setupAutoRefresh() {
+          this._lastDataRefresh = Date.now();
+          const stale = () => Date.now() - this._lastDataRefresh >= this._AUTO_REFRESH_MS;
+          const refresh = async () => {
+            this._lastDataRefresh = Date.now();
+            try {
+              await Promise.all([this.loadOverview(), this.loadChartData(), this.loadPortfolioHistory()]);
+              this.renderStatCards();
+            } catch (e) { console.warn('auto refresh error:', e); }
+          };
+          setInterval(() => { if (!document.hidden && stale()) refresh(); }, 60 * 1000);
+          document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && stale()) refresh();
+          });
+        },
+
+        _clearSkeletons() {
+          document.querySelectorAll('.aur-skel-card, .aur-skel-tile').forEach(e => e.remove());
+          document.querySelectorAll('.aur-skel-chart').forEach(e => e.classList.remove('aur-skel-chart'));
         },
 
         _syncHeaderH() {

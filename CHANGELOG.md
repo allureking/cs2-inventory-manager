@@ -1,5 +1,23 @@
 # Changelog / 更新日志
 
+## [0.12.0] - 2026-06-10
+
+### 新增 / Added
+- **首屏骨架屏**：统计卡/图表/Top20 网格在数据到达前显示 shimmer 占位（AURORA 叠加层实现），消除空白闪烁 / **Loading skeletons** for stat cards / charts / Top-20 grid before data arrives
+- **数据自动保鲜**：页面可见时每 5 分钟静默刷新概览/图表；切回标签页若数据过期立即更新 / **Auto-fresh data**: silent 5-min refresh while visible; instant refresh when returning to a stale tab
+
+### 修复 / Fixed
+- **「偶尔刷新很慢」根因**：概览的悠悠估值缓存过期时改为 stale-while-revalidate——先返回现值、后台刷新，请求不再阻塞外部 API 1-3s；服务启动时预热缓存 / **Root cause of occasional slow refresh**: YouPin valuation caches now serve-stale-and-revalidate instead of blocking 1-3s at expiry; warmed at startup
+- **估值解析漏网**：dashboard `_get_cached_steam_value` 未用 `parse_money`，带 ¥ 估值时抛错被吞（v0.9.3 修复未覆盖此处） / Valuation parse miss in dashboard (¥-prefixed values silently failed)
+- **市价采集限速韧性**：SteamDT 4005 限速自动等窗重试一次；根因（双 worker 重复调度致 2 倍请求频率）已由 `--workers 1` 修复，本次补韧性 / collect_prices retries once after 4005 rate limit
+- **DISTINCT ON 修复**：analysis 三处 `.distinct(col)` 在 SQLite 被静默忽略（已弃用语法），改为 `GROUP BY + MIN` 正确去重 / 3x DISTINCT-ON replaced with GROUP BY for SQLite correctness
+- **弃用清理**：`datetime.utcfromtimestamp` → tz-aware；`Query(regex=)` → `pattern=` / Deprecation cleanups
+
+### 变更 / Changed
+- **聚合接口缓存**：`/api/analysis/overview`（原 ~0.6s）与 `/api/dashboard/chart-data`（原 ~0.2s）加 5 分钟 TTL 进程内缓存；compute-now / 标记已读 / 价格刷新后立即失效 / 5-min TTL caches on analysis overview & chart-data with proper invalidation
+- **口径统一**：`/api/inventory` 逐件盈亏与 summary 估值从「仅 BUFF 价」改为「可得平台最低价」，与 dashboard 全站口径一致（新增 `current_price` 字段，`buff_value` 键名保留兼容） / Legacy inventory P&L now uses cheapest available platform price, consistent sitewide
+- **索引**：`quant_signal(signal_date)`、`price_history(name, platform, record_date)` / New indexes
+
 ## [0.11.0] - 2026-06-10
 
 ### 新增 / Added
