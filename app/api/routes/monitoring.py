@@ -70,10 +70,23 @@ async def system_status(db: AsyncSession = Depends(get_db)):
     if latest_snap:
         try:
             snap_dt = datetime.strptime(latest_snap, "%Y%m%d%H%M").replace(tzinfo=timezone.utc)
-            minutes_ago = (now - snap_dt).total_seconds() / 60
-            data_fresh = minutes_ago < 60  # stale if > 1 hour
+            hours_ago = (now - snap_dt).total_seconds() / 3600
+            # v0.13 修真:采价是每日节奏(00:05 PT),旧 60 分钟阈值导致 /status 永远 degraded。
+            # 26h = 每日采集 + 2h 容差;超过即真有问题(任务链没跑/凭证失效)
+            data_fresh = hours_ago < 26
         except ValueError:
             data_fresh = False
+
+    # v0.13 修真:scheduler_jobs 动态读取(旧版硬编码 30min 文案早已失实)。
+    # 懒导入 main 避免循环依赖;测试环境(未导入 main)回退空列表
+    try:
+        from main import scheduler
+        scheduler_jobs = [
+            {"id": j.id, "next_run": j.next_run_time.isoformat() if j.next_run_time else None}
+            for j in scheduler.get_jobs()
+        ]
+    except Exception:
+        scheduler_jobs = []
 
     return {
         "status": "healthy" if data_fresh else "degraded",
@@ -91,13 +104,7 @@ async def system_status(db: AsyncSession = Depends(get_db)):
             "latest_portfolio_snapshot": latest_portfolio,
             "is_fresh": data_fresh,
         },
-        "scheduler_jobs": [
-            {"id": "price_collect", "interval": "30 min"},
-            {"id": "portfolio_snapshot", "interval": "30 min (offset +5)"},
-            {"id": "daily_aggregate", "cron": "00:05 UTC"},
-            {"id": "daily_signals", "cron": "00:10 UTC"},
-            {"id": "cleanup_snapshots", "cron": "01:00 UTC"},
-        ],
+        "scheduler_jobs": scheduler_jobs,
     }
 
 

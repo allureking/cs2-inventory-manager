@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     # 用户系统（v0.10.0）：session token 签名密钥（openssl rand -hex 32）
     # 未配置时进程内随机生成，重启后所有登录失效
     app_secret: str = ""
+
+    # 凭证哨兵外部推送渠道（v0.13.0,可选;不配则仅应用内告警+日志）
+    serverchan_key: str = ""
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
     # session cookie 的 Secure 标记（生产 https 保持 True；本地 http 调试可关）
     session_cookie_secure: bool = True
 

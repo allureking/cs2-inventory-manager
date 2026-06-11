@@ -140,6 +140,10 @@ async def startup():
     _PDT = "America/Los_Angeles"  # 自动处理 PDT/PST 夏令时切换
 
     # ── 每日任务链：美西时间 00:00 起依次执行 ──
+    # 23:55(前夜) 凭证哨兵：任务链开跑前探测悠悠 token,失效立即告警(提案6)
+    from app.services.sentinel import run_credential_sentinel
+    scheduler.add_job(run_credential_sentinel, "cron", hour=23, minute=55, id="credential_sentinel",
+                      timezone=_PDT, misfire_grace_time=600)
     # 00:00  记录每日追踪
     scheduler.add_job(snapshot_daily, "cron", hour=0, minute=0, id="daily_tracker",
                       timezone=_PDT, misfire_grace_time=600)
@@ -176,6 +180,8 @@ async def startup():
     from app.api.routes.dashboard import _get_cached_rented_value, _get_cached_steam_value
     asyncio.get_event_loop().create_task(_get_cached_rented_value())
     asyncio.get_event_loop().create_task(_get_cached_steam_value())
+    # 启动即跑一次凭证哨兵（部署/重启后第一时间发现 token 失效）
+    asyncio.get_event_loop().create_task(run_credential_sentinel())
 
 
 @app.on_event("shutdown")

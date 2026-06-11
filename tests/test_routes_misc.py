@@ -63,7 +63,8 @@ def test_status_row_counts_reflect_seed():
         async with asgi_client(seed=_seeder(objs), routers=ROUTERS) as (client, _):
             d = (await client.get("/api/monitoring/status")).json()
             assert d["database"]["row_counts"]["inventory_item"] == 3
-            assert "scheduler_jobs" in d and len(d["scheduler_jobs"]) > 0
+            # v0.13: scheduler_jobs 改为动态读取(测试环境 scheduler 未启动 → 空列表)
+            assert "scheduler_jobs" in d and isinstance(d["scheduler_jobs"], list)
             assert d["status"] in ("healthy", "degraded")
     _run(body())
 
