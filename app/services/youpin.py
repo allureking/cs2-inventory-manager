@@ -1141,23 +1141,53 @@ async def import_lease_records(db: AsyncSession) -> dict:
                 )).scalar()
                 icon_url = existing_icon
 
-            item = InventoryItem(
-                steam_id=steam_id,
-                asset_id=str(order_id),
-                class_id="YOUPIN",
-                instance_id=str(commodity_id),
-                market_hash_name=hash_name,
-                name=name_cn,
-                tradable=True,
-                marketable=True,
-                status="rented_out",
-                youpin_order_id=str(order_id) if order_id else None,
-                youpin_commodity_id=commodity_id,
-                abrade=abrade,
-                youpin_template_id=template_id,
-                icon_url=icon_url,
-            )
-            db.add(item)
+            # v0.13 身份复用(提案5②):同一物理饰品每个租赁周期生成新 commodity_id,
+            # 旧行(连同购入成本)滞留为 unknown,僵尸行每月净增 ~15k。
+            # abrade 是物理指纹:先在同体系(YOUPIN)的 unknown 行中按 hash+abrade
+            # 找「唯一」匹配复用——成本/购入日期自然跟随;歧义(0 或 ≥2)则按旧逻辑建新行。
+            reused = None
+            if abrade is not None:
+                candidates = (await db.execute(
+                    select(InventoryItem).where(
+                        InventoryItem.status == "unknown",
+                        InventoryItem.class_id == "YOUPIN",
+                        InventoryItem.market_hash_name == hash_name,
+                        InventoryItem.abrade == abrade,
+                    ).limit(2)
+                )).scalars().all()
+                if len(candidates) == 1:
+                    reused = candidates[0]
+
+            if reused is not None:
+                reused.status = "rented_out"
+                reused.youpin_commodity_id = commodity_id
+                reused.youpin_order_id = str(order_id) if order_id else None
+                reused.asset_id = str(order_id)
+                reused.instance_id = str(commodity_id)
+                reused.name = name_cn or reused.name
+                if template_id and not reused.youpin_template_id:
+                    reused.youpin_template_id = template_id
+                if icon_url and not reused.icon_url:
+                    reused.icon_url = icon_url
+                item = reused
+            else:
+                item = InventoryItem(
+                    steam_id=steam_id,
+                    asset_id=str(order_id),
+                    class_id="YOUPIN",
+                    instance_id=str(commodity_id),
+                    market_hash_name=hash_name,
+                    name=name_cn,
+                    tradable=True,
+                    marketable=True,
+                    status="rented_out",
+                    youpin_order_id=str(order_id) if order_id else None,
+                    youpin_commodity_id=commodity_id,
+                    abrade=abrade,
+                    youpin_template_id=template_id,
+                    icon_url=icon_url,
+                )
+                db.add(item)
 
         upserted.append({"commodity_id": commodity_id, "market_hash_name": hash_name,
                          "order_id": order_id})
