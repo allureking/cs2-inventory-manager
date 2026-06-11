@@ -742,6 +742,9 @@ async def bulk_refresh_market_prices(db: AsyncSession) -> None:
                 finished_at=datetime.now(timezone.utc).isoformat(),
                 price_updated_at=now_str,
             )
+            # 价格已更新:失效 overview/chart-data 缓存,刷新完页面立即看到新数据
+            from app.api.routes.dashboard import invalidate_overview_cache
+            invalidate_overview_cache()
 
         except TokenExpiredError as e:
             market_refresh_state.update(
