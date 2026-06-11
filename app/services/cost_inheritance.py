@@ -5,11 +5,16 @@
 旧行连同 purchase_price 滞留为 unknown。结果 ¥30M+ 成本挂在死行上,
 活跃持仓 PnL 覆盖率仅 ~51%。
 
-策略(零歧义才动):abrade(磨损值)是物理指纹。
-  - 受赠方:active(in_steam/rented_out)且无任何成本(purchase_price 与 manual 均空)
-  - 捐赠方:unknown 且有 purchase_price
-  - 仅当同 (market_hash_name, abrade) 下 受赠方恰 1 行 且 捐赠方恰 1 行 时配对
-  - abrade 为空的不参与(无指纹,歧义不可控)
+策略(零歧义才动):abrade(磨损值)是物理指纹,**精确相等**匹配——
+同款多件的磨损值彼此极接近(0.14995x 一串),任何 round/容差都会制造假碰撞;
+而同一物理件跨周期的 abrade 字符串完全一致。
+
+  - 受赠方:active(in_steam/rented_out)且无任何成本(purchase_price 与 manual 均空),
+    同 (hash, abrade) 受赠方必须恰 1 行
+  - 捐赠方:unknown 且有 purchase_price,同 key 允许多行(同一物理件的多周期轨迹),
+    但 **purchase_price 必须全部一致**(不一致=真歧义,跳过);
+    purchase_date 取最早(最初购买日)
+  - abrade 为空的不参与(无指纹)
 
 apply 幂等:受赠方获得成本后不再满足"无成本"条件,重跑自然跳过。
 """
@@ -62,7 +67,7 @@ async def find_inheritance_pairs(db: AsyncSession) -> list[InheritancePair]:
     )).all()
 
     def key(name: str, ab: float) -> tuple:
-        return (name, round(ab, 6))
+        return (name, ab)  # 精确相等:abrade 即物理指纹,round/容差会制造假碰撞
 
     a_map: dict[tuple, list] = {}
     for r in actives:
@@ -74,13 +79,18 @@ async def find_inheritance_pairs(db: AsyncSession) -> list[InheritancePair]:
     pairs: list[InheritancePair] = []
     for k, a_rows in a_map.items():
         d_rows = d_map.get(k)
-        if not d_rows or len(a_rows) != 1 or len(d_rows) != 1:
-            continue  # 任一侧不唯一 → 歧义,跳过
-        a, d = a_rows[0], d_rows[0]
+        if not d_rows or len(a_rows) != 1:
+            continue  # 受赠侧不唯一 → 歧义,跳过
+        prices = {d[3] for d in d_rows}
+        if len(prices) != 1:
+            continue  # 捐赠侧价格不一致 → 真歧义,跳过
+        # 多行同价 = 同一物理件的多周期轨迹;date 取最早(最初购买),platform 取该行
+        donor = min(d_rows, key=lambda d: (d[4] is None, d[4] or ""))
+        a = a_rows[0]
         pairs.append(InheritancePair(
-            active_id=a[0], donor_id=d[0],
+            active_id=a[0], donor_id=donor[0],
             market_hash_name=k[0], abrade=k[1],
-            purchase_price=d[3], purchase_date=d[4], purchase_platform=d[5],
+            purchase_price=donor[3], purchase_date=donor[4], purchase_platform=donor[5],
         ))
     return pairs
 

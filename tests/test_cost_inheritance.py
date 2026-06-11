@@ -69,16 +69,46 @@ def test_unique_pair_found_and_applied():
     _run(body())
 
 
-def test_ambiguous_donor_skipped():
+def test_donor_price_conflict_skipped():
     async def body():
         async with memory_db() as Session:
             await _seed(Session, [
                 inv("AK", "in_steam", abrade=0.5),
                 inv("AK", "unknown", abrade=0.5, price=100.0),
-                inv("AK", "unknown", abrade=0.5, price=200.0),  # 两个捐赠方 → 歧义
+                inv("AK", "unknown", abrade=0.5, price=200.0),  # 捐赠侧价格不一致 → 真歧义
             ])
             async with Session() as db:
                 assert await find_inheritance_pairs(db) == []
+    _run(body())
+
+
+def test_multi_donor_same_price_pairs():
+    # 同一物理件的多周期轨迹:多条 unknown 同 hash+abrade+同价 → 安全配对,date 取最早
+    async def body():
+        async with memory_db() as Session:
+            d1 = inv("AK", "unknown", abrade=0.5, price=100.0)
+            d1.purchase_date = "2026-03-01"
+            d2 = inv("AK", "unknown", abrade=0.5, price=100.0)
+            d2.purchase_date = "2026-01-15"
+            await _seed(Session, [inv("AK", "in_steam", abrade=0.5), d1, d2])
+            async with Session() as db:
+                pairs = await find_inheritance_pairs(db)
+                assert len(pairs) == 1
+                assert pairs[0].purchase_price == 100.0
+                assert pairs[0].purchase_date == "2026-01-15"  # 最初购买日
+    _run(body())
+
+
+def test_exact_abrade_no_false_collision():
+    # 同款不同物理件磨损极接近(0.1499926 vs 0.1499925)→ 精确相等下互不串扰
+    async def body():
+        async with memory_db() as Session:
+            await _seed(Session, [
+                inv("AK", "in_steam", abrade=0.1499926),
+                inv("AK", "unknown", abrade=0.1499925, price=100.0),  # 不同物理件
+            ])
+            async with Session() as db:
+                assert await find_inheritance_pairs(db) == []  # 不配对(不是同一件)
     _run(body())
 
 
