@@ -395,9 +395,14 @@ async def get_inventory_with_prices(
         youpin_price = prices.get("YOUPIN")
         steam_price = prices.get("STEAM")
 
+        # 口径统一(v0.12)：盈亏基于「可得平台最低价」,与 dashboard overview/chart-data 一致
+        # （此前只看 BUFF,缺 BUFF 报价时盈亏为空、与全站其它口径不符）
+        available = [p for p in (buff_price, youpin_price, steam_price) if p]
+        current_price = min(available) if available else None
+
         profit_loss = profit_pct = None
-        if item.purchase_price and buff_price:
-            profit_loss = round(buff_price - item.purchase_price, 2)
+        if item.purchase_price and current_price:
+            profit_loss = round(current_price - item.purchase_price, 2)
             profit_pct = round(profit_loss / item.purchase_price * 100, 2)
 
         result.append({
@@ -420,6 +425,7 @@ async def get_inventory_with_prices(
             "buff_sell_price": buff_price,
             "youpin_sell_price": youpin_price,
             "steam_sell_price": steam_price,
+            "current_price": current_price,
             "snapshot_minute": prices.get("_minute"),
             "profit_loss": profit_loss,
             "profit_pct": profit_pct,
@@ -444,13 +450,14 @@ async def get_portfolio_summary(db: AsyncSession, steam_id: Optional[str] = None
 
     def _group(status_list: List[str]) -> dict:
         subset = [i for i in all_active if i["status"] in status_list]
-        buff_vals = [i["buff_sell_price"] for i in subset if i["buff_sell_price"]]
+        # 口径统一(v0.12)：估值用「可得平台最低价」(键名 buff_value 保留以兼容既有消费方)
+        vals = [i["current_price"] for i in subset if i.get("current_price")]
         costs = [i["purchase_price"] for i in subset if i["purchase_price"]]
         return {
             "count": len(subset),
-            "priced_count": len(buff_vals),
+            "priced_count": len(vals),
             "costed_count": len(costs),
-            "buff_value": round(sum(buff_vals), 2),
+            "buff_value": round(sum(vals), 2),
             "total_cost": round(sum(costs), 2),
         }
 

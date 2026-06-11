@@ -298,5 +298,69 @@ def test_chart_data_excludes_inactive():
     _run(body())
 
 
+# ── 悠悠估值缓存 SWR（v0.12 性能修复:过期返回旧值+后台刷新,请求不阻塞外部 API）──
+
+
+def test_swr_fresh_cache_returned_directly(monkeypatch):
+    import time as _t
+    monkeypatch.setattr(dashboard, "_rented_value_cache",
+                        {"value": 123.0, "ts": _t.monotonic(), "refreshing": False})
+
+    async def body():
+        assert await dashboard._get_cached_rented_value() == 123.0
+    _run(body())
+
+
+def test_swr_stale_returns_old_value_without_blocking(monkeypatch):
+    # 过期+有旧值：立即返回旧值；绝不同步调用外部 API（无 token → 连后台任务都不 kick）
+    monkeypatch.setattr(dashboard, "_rented_value_cache",
+                        {"value": 456.0, "ts": 0.0, "refreshing": False})
+    called = {"n": 0}
+
+    async def boom():
+        called["n"] += 1
+        raise AssertionError("不应同步调用外部 API")
+    monkeypatch.setattr(dashboard, "_fetch_rented_value", boom)
+
+    async def body():
+        assert await dashboard._get_cached_rented_value() == 456.0
+        assert called["n"] == 0
+    _run(body())
+
+
+def test_swr_background_refresh_updates_cache(monkeypatch):
+    # 有 token + 过期：kick 后台任务,新值落缓存并失效 overview 缓存
+    cache = {"value": 1.0, "ts": 0.0, "refreshing": False}
+    monkeypatch.setattr(dashboard, "_steam_value_cache", cache)
+
+    import app.services.youpin as yp
+    monkeypatch.setattr(yp, "get_active_token", lambda: "tok")
+
+    async def fake_fetch():
+        return 999.0
+    monkeypatch.setattr(dashboard, "_fetch_steam_value", fake_fetch)
+
+    async def body():
+        v = await dashboard._get_cached_steam_value()
+        assert v == 1.0            # 旧值立即返回,不阻塞
+        await asyncio.sleep(0.05)  # 让后台任务完成
+        assert cache["value"] == 999.0
+        assert cache["refreshing"] is False
+    _run(body())
+
+
+def test_fetch_steam_value_uses_parse_money(monkeypatch):
+    # 回归锁：带 ¥/千分位 的估值必须解析成功（此前 float() 抛错被吞 → 旧值/0）
+    import app.services.youpin as yp
+
+    async def fake_stock_records(page=1, page_size=1):
+        return [], 0, "¥425,194.14"
+    monkeypatch.setattr(yp, "fetch_stock_records", fake_stock_records)
+
+    async def body():
+        assert await dashboard._fetch_steam_value() == pytest.approx(425194.14)
+    _run(body())
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

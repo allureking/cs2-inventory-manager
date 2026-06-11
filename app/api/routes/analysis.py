@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import time
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -43,9 +44,21 @@ router = APIRouter()
 
 # ── Overview ──────────────────────────────────────────────────────────────
 
+# 总览缓存：5 个聚合查询 ~0.5s；信号一天才计算一次,5 分钟新鲜度足够。
+# compute-now 手动触发后会失效,保证「立即计算」后看到的就是新数据。
+_ao_cache: dict = {"data": None, "ts": 0.0}
+_AO_TTL = 300
+
+
+def invalidate_analysis_cache() -> None:
+    _ao_cache["ts"] = 0.0
+
+
 @router.get("/overview")
 async def analysis_overview(db: AsyncSession = Depends(get_db)):
     """量化分析总览：评分分布、Top10 卖出信号、分类趋势、未读预警数"""
+    if _ao_cache["data"] is not None and time.monotonic() - _ao_cache["ts"] < _AO_TTL:
+        return _ao_cache["data"]
 
     # Latest signal_date
     latest_date_r = await db.execute(
@@ -138,11 +151,11 @@ async def analysis_overview(db: AsyncSession = Depends(get_db)):
         inv_r = await db.execute(
             select(
                 InventoryItem.market_hash_name,
-                InventoryItem.name,
-                InventoryItem.icon_url,
+                func.min(InventoryItem.name),
+                func.min(InventoryItem.icon_url),
             )
             .where(InventoryItem.market_hash_name.in_(top_names))
-            .distinct(InventoryItem.market_hash_name)
+            .group_by(InventoryItem.market_hash_name)
         )
         for row in inv_r.all():
             inv_info[row[0]] = {"name": row[1], "icon_url": row[2]}
@@ -163,7 +176,7 @@ async def analysis_overview(db: AsyncSession = Depends(get_db)):
     # Category trends — using market_hash_name patterns
     cat_trends = await _get_category_trends(db, latest_date)
 
-    return {
+    result = {
         "signal_date": latest_date,
         "unread_alerts": unread_count,
         "avg_sell_score": avg_sell,
@@ -173,6 +186,9 @@ async def analysis_overview(db: AsyncSession = Depends(get_db)):
         "category_trends": cat_trends,
         "collector": collector_state,
     }
+    _ao_cache["data"] = result
+    _ao_cache["ts"] = time.monotonic()
+    return result
 
 
 async def _get_category_trends(db: AsyncSession, signal_date: str) -> list[dict]:
@@ -476,6 +492,7 @@ async def mark_alert_read(alert_id: int, db: AsyncSession = Depends(get_db)):
         update(QuantAlert).where(QuantAlert.id == alert_id).values(is_read=True)
     )
     await db.commit()
+    invalidate_analysis_cache()  # 未读数变化,总览缓存立即失效
     return {"ok": True}
 
 
@@ -485,6 +502,7 @@ async def mark_all_read(db: AsyncSession = Depends(get_db)):
         update(QuantAlert).where(QuantAlert.is_read == False).values(is_read=True)
     )
     await db.commit()
+    invalidate_analysis_cache()
     return {"ok": True, "count": result.rowcount}
 
 
@@ -563,11 +581,11 @@ async def signal_rankings(
         inv_r = await db.execute(
             select(
                 InventoryItem.market_hash_name,
-                InventoryItem.name,
-                InventoryItem.icon_url,
+                func.min(InventoryItem.name),
+                func.min(InventoryItem.icon_url),
             )
             .where(InventoryItem.market_hash_name.in_(rank_names))
-            .distinct(InventoryItem.market_hash_name)
+            .group_by(InventoryItem.market_hash_name)
         )
         for row in inv_r.all():
             rank_inv[row[0]] = {"name": row[1], "icon_url": row[2]}
@@ -850,6 +868,7 @@ async def compute_now():
         # Also run quick PnL alerts
         from app.services.quant_engine import compute_quick_pnl_alerts
         alert_count = await compute_quick_pnl_alerts()
+        invalidate_analysis_cache()  # 新信号立即可见
         return {"ok": True, "message": f"信号计算完成, 生成 {alert_count} 条预警"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -899,8 +918,8 @@ async def search_items(
     result = await db.execute(
         select(
             InventoryItem.market_hash_name,
-            InventoryItem.name,
-            InventoryItem.icon_url,
+            func.min(InventoryItem.name),
+            func.min(InventoryItem.icon_url),
         )
         .where(
             InventoryItem.status.in_(ACTIVE_STATUSES),
@@ -909,7 +928,7 @@ async def search_items(
                 InventoryItem.name.ilike(f"%{q}%"),
             ),
         )
-        .distinct(InventoryItem.market_hash_name)
+        .group_by(InventoryItem.market_hash_name)
         .limit(limit)
     )
     return {"items": [{"market_hash_name": r[0], "name": r[1], "icon_url": r[2]} for r in result.all()]}

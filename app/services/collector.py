@@ -103,6 +103,17 @@ async def _do_collect_prices(steamdt_svc) -> None:
                 collector_state["batches_done"] += 1
             except Exception as e:
                 logger.warning("collect_prices batch error: %s", e)
+                # 4005 = 限速。等一个完整窗口后重试本批一次（不无限重试,避免拖死任务链）
+                if "4005" in str(e):
+                    await asyncio.sleep(65)
+                    try:
+                        async with AsyncSessionLocal() as db:
+                            await steamdt_svc.fetch_batch_prices(chunk, db)
+                        collector_state["items_collected"] += len(chunk)
+                        collector_state["batches_done"] += 1
+                        logger.info("collect_prices: 4005 重试成功")
+                    except Exception as e2:
+                        logger.warning("collect_prices 4005 重试仍失败: %s", e2)
             if chunk is not chunks[-1]:
                 await asyncio.sleep(62)
 

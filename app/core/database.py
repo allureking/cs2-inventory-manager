@@ -66,6 +66,9 @@ async def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS ix_ps_name_minute ON price_snapshot (market_hash_name, snapshot_minute)",
             "CREATE INDEX IF NOT EXISTS ix_ps_platform_name_minute ON price_snapshot (market_hash_name, platform, snapshot_minute)",
             "CREATE INDEX IF NOT EXISTS ix_ps_snapshot_minute ON price_snapshot (snapshot_minute)",
+            # analysis/* 端点全部按 signal_date 过滤；唯一约束 (name,date) 帮不上单列过滤
+            "CREATE INDEX IF NOT EXISTS ix_qs_signal_date ON quant_signal (signal_date)",
+            "CREATE INDEX IF NOT EXISTS ix_ph_name_platform_date ON price_history (market_hash_name, platform, record_date)",
         ]
         for sql in _indexes:
             await conn.execute(text(sql))

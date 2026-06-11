@@ -49,6 +49,14 @@ def _default_routers():
     return [(dashboard.router, "/api/dashboard")]
 
 
+def _reset_module_caches():
+    """重置各路由模块的进程内 TTL 缓存（overview/chart-data/analysis-overview）。"""
+    from app.api.routes import dashboard, analysis
+    dashboard._overview_cache.update(data=None, ts=0.0)
+    dashboard._chart_cache.update(data=None, ts=0.0)
+    analysis._ao_cache.update(data=None, ts=0.0)
+
+
 @asynccontextmanager
 async def asgi_client(seed=None, routers=None):
     """
@@ -64,6 +72,8 @@ async def asgi_client(seed=None, routers=None):
     from fastapi import FastAPI
 
     from app.core.database import get_db
+
+    _reset_module_caches()  # 模块级 TTL 缓存逐测重置,避免跨测试串数据
 
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",

@@ -875,7 +875,7 @@ def _parse_date(record: dict) -> Optional[str]:
         ms = record.get(key)
         if ms:
             try:
-                return datetime.utcfromtimestamp(int(ms) / 1000).strftime("%Y-%m-%d")
+                return datetime.fromtimestamp(int(ms) / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
             except (TypeError, ValueError, OSError):
                 pass
     return None

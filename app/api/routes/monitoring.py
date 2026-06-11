@@ -118,7 +118,7 @@ def _format_uptime(seconds: int) -> str:
 
 @router.get("/portfolio-history")
 async def portfolio_history(
-    range: str = Query("7d", regex="^(24h|7d|30d|90d|all)$"),
+    range: str = Query("7d", pattern="^(24h|7d|30d|90d|all)$"),
     db: AsyncSession = Depends(get_db),
 ):
     """

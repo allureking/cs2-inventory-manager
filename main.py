@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import sys
 import uvicorn
@@ -169,6 +170,12 @@ async def startup():
         await snapshot_portfolio()
     except Exception as e:
         logger.warning("Initial portfolio snapshot failed: %s", e)
+
+    # 预热悠悠估值缓存（fire-and-forget，不阻塞启动）——
+    # 否则重启后首个 overview 请求只能用 snapshot fallback 市值
+    from app.api.routes.dashboard import _get_cached_rented_value, _get_cached_steam_value
+    asyncio.get_event_loop().create_task(_get_cached_rented_value())
+    asyncio.get_event_loop().create_task(_get_cached_steam_value())
 
 
 @app.on_event("shutdown")

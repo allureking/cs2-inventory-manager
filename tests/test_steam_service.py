@@ -104,8 +104,8 @@ def test_profit_uses_buff_price():
     _run(body())
 
 
-def test_profit_none_without_buff_even_if_youpin_present():
-    # 观察3：盈亏只看 BUFF；仅有悠悠价时 profit_loss=None
+def test_profit_uses_cheapest_available_platform():
+    # 观察3 已修(v0.12 口径统一)：盈亏基于「可得平台最低价」,缺 BUFF 时用悠悠价照算
     async def body():
         async with memory_db() as Session:
             await _seed(Session, [item("A", purchase_price=100.0), snap("A", "YOUPIN", 150.0)])
@@ -113,7 +113,21 @@ def test_profit_none_without_buff_even_if_youpin_present():
                 rows = await get_inventory_with_prices(db, steam_id="", status_filter=["in_steam"])
                 assert rows[0]["youpin_sell_price"] == 150.0
                 assert rows[0]["buff_sell_price"] is None
-                assert rows[0]["profit_loss"] is None   # 锁定当前行为
+                assert rows[0]["current_price"] == 150.0
+                assert rows[0]["profit_loss"] == 50.0   # 新口径：有任一平台价即可算
+    _run(body())
+
+
+def test_profit_picks_min_across_platforms():
+    # 多平台并存时取最低价（与 dashboard 全站口径一致）
+    async def body():
+        async with memory_db() as Session:
+            await _seed(Session, [item("A", purchase_price=100.0),
+                                  snap("A", "BUFF", 160.0), snap("A", "YOUPIN", 150.0)])
+            async with Session() as db:
+                rows = await get_inventory_with_prices(db, steam_id="", status_filter=["in_steam"])
+                assert rows[0]["current_price"] == 150.0
+                assert rows[0]["profit_loss"] == 50.0
     _run(body())
 
 

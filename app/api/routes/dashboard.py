@@ -30,53 +30,74 @@ from app.services.pricing import get_latest_prices as _get_latest_prices
 router = APIRouter()
 
 # 悠悠 API 估值缓存（避免 overview 每次请求都调外部 API）
-_rented_value_cache: dict = {"value": 0.0, "ts": 0.0}
-_steam_value_cache: dict = {"value": 0.0, "ts": 0.0}
+# v0.12.0 stale-while-revalidate：过期时立即返回旧值并后台刷新，请求永不阻塞在外部 API 上
+# （此前缓存未命中会同步等悠悠 1-3s+，即「偶尔刷新很慢」的根因）。
+_rented_value_cache: dict = {"value": 0.0, "ts": 0.0, "refreshing": False}
+_steam_value_cache: dict = {"value": 0.0, "ts": 0.0, "refreshing": False}
 _CACHE_TTL = 300  # 5 分钟
 
 
-async def _get_cached_rented_value() -> float:
-    """获取缓存的租赁价值，过期时重新拉取"""
-    now = time.monotonic()
-    if now - _rented_value_cache["ts"] < _CACHE_TTL and _rented_value_cache["value"] > 0:
-        return _rented_value_cache["value"]
-
-    from app.services.youpin import fetch_lease_records, get_active_token
+async def _fetch_rented_value() -> float:
+    """实际拉取悠悠租赁估值（外部 API）。失败抛异常由调用方处理。"""
+    from app.services.youpin import fetch_lease_records
     from app.services.tracker import _parse_stats_desc
 
-    if not get_active_token():
-        return _rented_value_cache["value"]
+    _, _, stats_desc = await fetch_lease_records(page=1, page_size=1)
+    return _parse_stats_desc(stats_desc)["value"]
 
-    try:
-        _, _, stats_desc = await fetch_lease_records(page=1, page_size=1)
-        rental_stats = _parse_stats_desc(stats_desc)
-        _rented_value_cache["value"] = rental_stats["value"]
-        _rented_value_cache["ts"] = now
-        return rental_stats["value"]
-    except Exception:
-        return _rented_value_cache["value"]
+
+async def _fetch_steam_value() -> float:
+    """实际拉取悠悠库存估值（外部 API）。"""
+    from app.core.utils import parse_money
+    from app.services.youpin import fetch_stock_records
+
+    _, _, valuation = await fetch_stock_records(page=1, page_size=1)
+    return parse_money(valuation)
+
+
+def _kick_refresh(cache: dict, fetcher) -> None:
+    """后台刷新缓存（防并发：同一缓存同时只有一个刷新任务）。
+    刷新成功后失效 overview 缓存，让下一个请求用上新估值。"""
+    if cache["refreshing"]:
+        return
+    from app.services.youpin import get_active_token
+    if not get_active_token():
+        return
+    cache["refreshing"] = True
+
+    async def _job():
+        try:
+            val = await fetcher()
+            if val > 0:
+                cache["value"] = val
+                cache["ts"] = time.monotonic()
+                invalidate_overview_cache()
+        except Exception:
+            pass  # 外部失败保留旧值,下次再试
+        finally:
+            cache["refreshing"] = False
+
+    asyncio.create_task(_job())
+
+
+async def _get_cached_rented_value() -> float:
+    """租赁估值（SWR）：新鲜→直接返回；过期→返回旧值+后台刷新；无旧值→返回 0（走 snapshot fallback）。"""
+    now = time.monotonic()
+    c = _rented_value_cache
+    if now - c["ts"] < _CACHE_TTL and c["value"] > 0:
+        return c["value"]
+    _kick_refresh(c, _fetch_rented_value)
+    return c["value"]
 
 
 async def _get_cached_steam_value() -> float:
-    """获取缓存的库存估值（来自悠悠 API），过期时重新拉取"""
+    """库存估值（SWR），解析用 parse_money（修复：此前未剥 ¥ 符号导致解析失败吞错）。"""
     now = time.monotonic()
-    if now - _steam_value_cache["ts"] < _CACHE_TTL and _steam_value_cache["value"] > 0:
-        return _steam_value_cache["value"]
-
-    from app.services.youpin import fetch_stock_records, get_active_token
-
-    if not get_active_token():
-        return _steam_value_cache["value"]
-
-    try:
-        _, _, valuation = await fetch_stock_records(page=1, page_size=1)
-        val = float(str(valuation).replace(",", "")) if valuation else 0.0
-        if val > 0:
-            _steam_value_cache["value"] = val
-            _steam_value_cache["ts"] = now
-        return val if val > 0 else _steam_value_cache["value"]
-    except Exception:
-        return _steam_value_cache["value"]
+    c = _steam_value_cache
+    if now - c["ts"] < _CACHE_TTL and c["value"] > 0:
+        return c["value"]
+    _kick_refresh(c, _fetch_steam_value)
+    return c["value"]
 
 # CS2 物品分类（参考悠悠有品筛选）
 _CATEGORY_PATTERNS: dict[str, list[str]] = {
@@ -252,6 +273,12 @@ _OVERVIEW_TTL = 4 * 3600  # 4 hours — price data only changes once/day
 def invalidate_overview_cache() -> None:
     """Called after daily price collection / portfolio snapshot to force refresh on next request."""
     _overview_cache["ts"] = 0.0
+    _chart_cache["ts"] = 0.0
+
+
+# chart-data 聚合缓存（全表 group-by ~0.2s/次；价格一天一更,5 分钟新鲜度足够）
+_chart_cache: dict = {"data": None, "ts": 0.0}
+_CHART_TTL = 300
 
 
 @router.get("/overview")
@@ -622,6 +649,9 @@ async def chart_data(db: AsyncSession = Depends(get_db)):
     """Read-only aggregation for visualization charts (type composition, PnL distribution, top items)."""
     from app.services.pricing import get_all_latest_prices
 
+    if _chart_cache["data"] is not None and time.monotonic() - _chart_cache["ts"] < _CHART_TTL:
+        return _chart_cache["data"]
+
     cost_expr = func.coalesce(InventoryItem.purchase_price_manual, InventoryItem.purchase_price)
     has_price = or_(InventoryItem.purchase_price.isnot(None), InventoryItem.purchase_price_manual.isnot(None))
 
@@ -683,10 +713,13 @@ async def chart_data(db: AsyncSession = Depends(get_db)):
     losers = sorted([i for i in items if i["pnl"] is not None and i["pnl"] < 0], key=lambda x: x["pnl"])[:10]
     type_list = sorted(type_agg.values(), key=lambda x: -x["market_value"])
 
-    return {
+    result = {
         "type_composition": type_list,
         "pnl_distribution": pnl_buckets,
         "top_value": top_value,
         "top_gainers": gainers,
         "top_losers": losers,
     }
+    _chart_cache["data"] = result
+    _chart_cache["ts"] = time.monotonic()
+    return result
