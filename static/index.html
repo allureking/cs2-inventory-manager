@@ -1801,6 +1801,28 @@
                   <div class="flex justify-between" x-show="itemSignals.ownership?.target_pnl_pct"><span class="text-slate-500" x-text="nameLang==='cn'?'目标收益':'Target'"></span><span class="font-mono text-slate-300" x-text="itemSignals.ownership?.target_pnl_pct?itemSignals.ownership.target_pnl_pct+'%':'—'"></span></div>
                 </div>
               </div>
+
+              <!-- 租赁实绩(v0.13 提案9a:实际出租数据,非市场估算) -->
+              <div class="card p-4">
+                <p class="text-[10px] text-slate-600 uppercase tracking-widest mb-2"
+                  x-text="nameLang==='cn'?'租赁实绩 · 近30天':'Actual Lease Income · 30d'"></p>
+                <template x-if="itemLeaseIncome && itemLeaseIncome.days_recorded > 0">
+                  <div class="space-y-1.5 text-xs">
+                    <div class="flex justify-between"><span class="text-slate-500" x-text="nameLang==='cn'?'有租天数':'Days rented'"></span>
+                      <span class="font-mono text-slate-300" x-text="itemLeaseIncome.days_recorded + ' / ' + itemLeaseIncome.days_window"></span></div>
+                    <div class="flex justify-between"><span class="text-slate-500" x-text="nameLang==='cn'?'实收租金':'Total rent'"></span>
+                      <span class="font-mono text-emerald-300" x-text="'¥' + itemLeaseIncome.total_rent"></span></div>
+                    <div class="flex justify-between"><span class="text-slate-500" x-text="nameLang==='cn'?'日均(全部件)':'Avg/day'"></span>
+                      <span class="font-mono text-slate-300" x-text="'¥' + itemLeaseIncome.avg_daily_rent"></span></div>
+                    <div class="flex justify-between"><span class="text-slate-500" x-text="nameLang==='cn'?'实际年化':'Actual annual'"></span>
+                      <span class="font-mono font-bold text-amber-300" x-text="itemLeaseIncome.actual_annual_pct != null ? itemLeaseIncome.actual_annual_pct + '%' : '—'"></span></div>
+                  </div>
+                </template>
+                <template x-if="!itemLeaseIncome || itemLeaseIncome.days_recorded === 0">
+                  <p class="text-[11px] text-slate-600"
+                    x-text="nameLang==='cn'?'暂无实绩数据 — 自 v0.13 起每日自动记录,数据将逐日累积':'No data yet — recorded daily since v0.13, accumulating'"></p>
+                </template>
+              </div>
             </div>
 
             <!-- Cross-platform prices -->

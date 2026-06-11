@@ -558,6 +558,7 @@
         analysisTab: 'overview',
         ao: {},                      // analysis overview data
         itemSignals: null,           // selected item signals
+        itemLeaseIncome: null,       // 单品租赁实绩(v0.13)
         analysisAlerts: { items: [], total: 0 },
         analysisSpreads: { items: [], total: 0 },
         analysisSearch: '',
@@ -2159,12 +2160,18 @@
 
         async loadItemSignals(name) {
           this.itemSignals = null;
+          this.itemLeaseIncome = null;
           try {
-            const r = await fetch(`/api/analysis/signals?market_hash_name=${encodeURIComponent(name)}&days=${this.chartDays}`);
+            // 信号 + 租赁实绩(v0.13)并行拉取
+            const [r, li] = await Promise.all([
+              fetch(`/api/analysis/signals?market_hash_name=${encodeURIComponent(name)}&days=${this.chartDays}`),
+              fetch(`/api/analysis/lease-income?market_hash_name=${encodeURIComponent(name)}&days=30`).catch(() => null),
+            ]);
             if (r.ok) {
               this.itemSignals = await r.json();
               this.$nextTick(() => this.renderPriceChart());
             }
+            if (li && li.ok) this.itemLeaseIncome = await li.json();
           } catch (e) { this.showToast(e.message || '加载信号数据失败', 'error'); }
         },
 

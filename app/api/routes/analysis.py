@@ -960,3 +960,57 @@ async def get_csqaq_status():
     """CSQAQ 同步状态（前端轮询用）"""
     from app.services.csqaq import csqaq_sync_state
     return csqaq_sync_state
+
+
+# ── 单品租赁实绩（v0.13.0 提案9a）─────────────────────────────────────────
+
+@router.get("/lease-income")
+async def item_lease_income(
+    market_hash_name: str = Query(...),
+    days: int = Query(30, ge=1, le=365),
+    db: AsyncSession = Depends(get_db),
+):
+    """单品近 N 天租赁实绩:逐日租金曲线 + 实际年化(基于当前市价)。"""
+    from app.services.lease_income import get_item_lease_income
+    from app.services.pricing import get_latest_prices
+
+    data = await get_item_lease_income(db, market_hash_name, days)
+
+    # 实际年化 = 窗口内日均租金(按日历天摊薄) × 365 / 当前市价
+    actual_annual_pct = None
+    price_map = await get_latest_prices([market_hash_name], db)
+    price = price_map.get(market_hash_name)
+    if price and data["days_recorded"] > 0:
+        calendar_days = max(data["days_recorded"], min(days, data["days_recorded"]))
+        # 按已记录天数计算"在租日年化",再给出窗口摊薄年化两种口径
+        per_unit_daily = data["avg_daily_rent"]
+        # 单件视角:series 里 rent 是该品全部在租件的合计;摊到单件
+        units = max((s["rented_count"] for s in data["series"]), default=1) or 1
+        per_unit_daily = per_unit_daily / units
+        actual_annual_pct = round(per_unit_daily * 365 / price * 100, 2)
+
+    data["current_price"] = price
+    data["actual_annual_pct"] = actual_annual_pct
+    return data
+
+
+@router.get("/lease-income/rankings")
+async def lease_income_rankings(
+    days: int = Query(30, ge=1, le=365),
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+):
+    """近 N 天单品实绩排行:在租天数/总租金/件均日租 + 实际年化(结合市价)。"""
+    from app.services.lease_income import get_lease_income_rankings
+    from app.services.pricing import get_latest_prices
+
+    rows = await get_lease_income_rankings(db, days, limit)
+    if rows:
+        price_map = await get_latest_prices([r["market_hash_name"] for r in rows], db)
+        for r in rows:
+            p = price_map.get(r["market_hash_name"])
+            r["current_price"] = p
+            r["actual_annual_pct"] = (
+                round(r["avg_rent_per_unit_day"] * 365 / p * 100, 2) if p else None
+            )
+    return {"days": days, "items": rows}

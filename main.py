@@ -147,6 +147,10 @@ async def startup():
     # 00:00  记录每日追踪
     scheduler.add_job(snapshot_daily, "cron", hour=0, minute=0, id="daily_tracker",
                       timezone=_PDT, misfire_grace_time=600)
+    # 00:01  单品租赁实绩落库(提案9a:谁在租、租金多少,逐件归因)
+    from app.services.lease_income import record_lease_income
+    scheduler.add_job(record_lease_income, "cron", hour=0, minute=1, id="lease_income",
+                      timezone=_PDT, misfire_grace_time=600, max_instances=1)
     # 00:02  CSQAQ 外部数据同步
     scheduler.add_job(csqaq_daily_sync, "cron", hour=0, minute=2, id="csqaq_sync",
                       timezone=_PDT, misfire_grace_time=600)

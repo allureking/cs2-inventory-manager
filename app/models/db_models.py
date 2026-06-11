@@ -283,6 +283,28 @@ class TrackerConfig(Base):
     value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
+class LeaseIncomeDaily(Base):
+    """
+    单品每日租赁实绩（v0.13.0,提案9a）。
+
+    每日哨点把「当天在租清单」逐件落库:谁在租、日租金多少。
+    据此可回答:每件饰品的实际出租率/实际年化——该卖谁、该续谁。
+    (此前这些数据在租赁导入时已经过手却被丢弃,只有账户级总收入)
+    """
+
+    __tablename__ = "lease_income_daily"
+    __table_args__ = (
+        UniqueConstraint("date", "commodity_id", name="uq_lease_income"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    date: Mapped[str] = mapped_column(String(10), nullable=False, index=True)  # YYYY-MM-DD (PT)
+    commodity_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    market_hash_name: Mapped[str] = mapped_column(String, index=True, nullable=False)
+    daily_rent: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)  # 元/天
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class DailyTracker(Base):
     """每日收益追踪记录（取代 Excel 手动记录）"""
 

@@ -1193,6 +1193,23 @@ async def import_lease_records(db: AsyncSession) -> dict:
         sum_rent_cents / 100 - api_stats["income"],
     )
 
+    # v0.13 提案9a:同步顺手落当日单品租赁实绩(这些数据此前过手即丢)
+    try:
+        from app.services.lease_income import upsert_lease_income, _today_pt, _rent_yuan
+        today = _today_pt()
+        li_rows: dict[int, dict] = {}
+        for rec in all_records:
+            info = rec.get("commodityInfo") or {}
+            cid, hn = info.get("commodityId"), info.get("commodityHashName")
+            if cid and hn:
+                li_rows[int(cid)] = {"date": today, "commodity_id": int(cid),
+                                     "market_hash_name": hn, "daily_rent": _rent_yuan(info)}
+        if li_rows:
+            await upsert_lease_income(db, list(li_rows.values()))
+            await db.commit()
+    except Exception as e:
+        logger.warning("lease_income 顺手落库失败(不影响导入): %s", e)
+
     return {
         "stats": stats_desc,
         "total_fetched": len(all_records),
