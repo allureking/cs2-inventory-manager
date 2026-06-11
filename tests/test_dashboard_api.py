@@ -329,7 +329,8 @@ def test_swr_stale_returns_old_value_without_blocking(monkeypatch):
 
 
 def test_swr_background_refresh_updates_cache(monkeypatch):
-    # 有 token + 过期：kick 后台任务,新值落缓存并失效 overview 缓存
+    # 有 token + 过期：立即返回旧值并 kick 后台任务(标记 refreshing);
+    # 刷新体 _refresh_now 单独确定性验证(不赌 create_task 在 CI 上的调度时机)
     cache = {"value": 1.0, "ts": 0.0, "refreshing": False}
     monkeypatch.setattr(dashboard, "_steam_value_cache", cache)
 
@@ -342,12 +343,25 @@ def test_swr_background_refresh_updates_cache(monkeypatch):
 
     async def body():
         v = await dashboard._get_cached_steam_value()
-        assert v == 1.0            # 旧值立即返回,不阻塞
-        for _ in range(60):        # 轮询等后台任务(CI 慢机上固定 sleep 会抖)
-            await asyncio.sleep(0.05)
-            if cache["value"] == 999.0 and not cache["refreshing"]:
-                break
+        assert v == 1.0                    # 旧值立即返回,不阻塞
+        assert cache["refreshing"] is True  # 后台任务已被 kick
+        # 确定性执行刷新体,验证语义:新值落缓存 + refreshing 复位
+        await dashboard._refresh_now(cache, fake_fetch)
         assert cache["value"] == 999.0
+        assert cache["refreshing"] is False
+    _run(body())
+
+
+def test_refresh_now_failure_keeps_old_value():
+    # 外部失败:保留旧值,refreshing 复位(下次再试)
+    cache = {"value": 42.0, "ts": 0.0, "refreshing": True}
+
+    async def boom():
+        raise RuntimeError("youpin down")
+
+    async def body():
+        await dashboard._refresh_now(cache, boom)
+        assert cache["value"] == 42.0
         assert cache["refreshing"] is False
     _run(body())
 

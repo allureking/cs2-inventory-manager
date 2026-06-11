@@ -55,29 +55,30 @@ async def _fetch_steam_value() -> float:
     return parse_money(valuation)
 
 
+async def _refresh_now(cache: dict, fetcher) -> None:
+    """实际刷新一个估值缓存(可直接 await,便于测试与复用)。
+    成功后失效 overview 缓存,让下一个请求用上新估值;失败保留旧值。"""
+    try:
+        val = await fetcher()
+        if val > 0:
+            cache["value"] = val
+            cache["ts"] = time.monotonic()
+            invalidate_overview_cache()
+    except Exception:
+        pass  # 外部失败保留旧值,下次再试
+    finally:
+        cache["refreshing"] = False
+
+
 def _kick_refresh(cache: dict, fetcher) -> None:
-    """后台刷新缓存（防并发：同一缓存同时只有一个刷新任务）。
-    刷新成功后失效 overview 缓存，让下一个请求用上新估值。"""
+    """后台刷新缓存（防并发：同一缓存同时只有一个刷新任务）。"""
     if cache["refreshing"]:
         return
     from app.services.youpin import get_active_token
     if not get_active_token():
         return
     cache["refreshing"] = True
-
-    async def _job():
-        try:
-            val = await fetcher()
-            if val > 0:
-                cache["value"] = val
-                cache["ts"] = time.monotonic()
-                invalidate_overview_cache()
-        except Exception:
-            pass  # 外部失败保留旧值,下次再试
-        finally:
-            cache["refreshing"] = False
-
-    asyncio.create_task(_job())
+    asyncio.create_task(_refresh_now(cache, fetcher))
 
 
 async def _get_cached_rented_value() -> float:
