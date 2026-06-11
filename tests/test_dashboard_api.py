@@ -313,8 +313,9 @@ def test_swr_fresh_cache_returned_directly(monkeypatch):
 
 def test_swr_stale_returns_old_value_without_blocking(monkeypatch):
     # 过期+有旧值：立即返回旧值；绝不同步调用外部 API（无 token → 连后台任务都不 kick）
+    import time as _t
     monkeypatch.setattr(dashboard, "_rented_value_cache",
-                        {"value": 456.0, "ts": 0.0, "refreshing": False})
+                        {"value": 456.0, "ts": _t.monotonic() - 9999, "refreshing": False})
     called = {"n": 0}
 
     async def boom():
@@ -331,7 +332,8 @@ def test_swr_stale_returns_old_value_without_blocking(monkeypatch):
 def test_swr_background_refresh_updates_cache(monkeypatch):
     # 有 token + 过期：立即返回旧值并 kick 后台任务(标记 refreshing);
     # 刷新体 _refresh_now 单独确定性验证(不赌 create_task 在 CI 上的调度时机)
-    cache = {"value": 1.0, "ts": 0.0, "refreshing": False}
+    import time as _t
+    cache = {"value": 1.0, "ts": _t.monotonic() - 9999, "refreshing": False}
     monkeypatch.setattr(dashboard, "_steam_value_cache", cache)
 
     import app.services.youpin as yp
