@@ -343,7 +343,10 @@ def test_swr_background_refresh_updates_cache(monkeypatch):
     async def body():
         v = await dashboard._get_cached_steam_value()
         assert v == 1.0            # 旧值立即返回,不阻塞
-        await asyncio.sleep(0.05)  # 让后台任务完成
+        for _ in range(60):        # 轮询等后台任务(CI 慢机上固定 sleep 会抖)
+            await asyncio.sleep(0.05)
+            if cache["value"] == 999.0 and not cache["refreshing"]:
+                break
         assert cache["value"] == 999.0
         assert cache["refreshing"] is False
     _run(body())
