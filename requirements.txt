@@ -1,6 +1,6 @@
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
-sqlalchemy==2.0.36
+sqlalchemy[asyncio]==2.0.36  # [asyncio] 带 greenlet(async 引擎必需;CI 干净环境缺它会全挂)
 aiosqlite==0.20.0
 httpx==0.28.1
 pydantic-settings==2.7.0
