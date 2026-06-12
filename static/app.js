@@ -729,6 +729,24 @@
           window.addEventListener('resize', () => this._syncHeaderH());
           window.addEventListener('orientationchange', () => setTimeout(() => this._syncHeaderH(), 200));
           this._setupAutoRefresh();   // 页面可见时定时静默刷新,切回标签页若数据过期立即刷新
+          this._purgeAutofill();      // 清除浏览器把保存的用户名误填进搜索框(凭证 autofill 无视 autocomplete=off)
+        },
+
+        // ── 自动填充清除安全网（v0.13.1）────────────────────────────────
+        // Chrome 密码管理器登录后会把用户名塞进它认定的"用户名候选框"(本站的搜索框),
+        // 且无视 autocomplete=off。特征:autofill 直接写 DOM 值、不触发 input 事件,
+        // 因此 Alpine 模型仍为空 —— 检测到该不一致即清除。前 3 秒多次检查(Chrome 可能延迟填)。
+        _purgeAutofill() {
+          const purge = () => {
+            for (const [sel, model] of [
+              ['input[name="item-filter"]', () => this.filters.search],
+              ['input[name="analysis-item-search"]', () => this.analysisSearch],
+            ]) {
+              const el = document.querySelector(sel);
+              if (el && el.value && !model()) el.value = '';
+            }
+          };
+          [200, 600, 1200, 2000, 3000].forEach(ms => setTimeout(purge, ms));
         },
 
         // ── 数据保鲜（v0.12）────────────────────────────────────────────

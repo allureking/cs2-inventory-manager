@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CS2 库存管理系统 — CS2 Inventory Manager</title>
   <!-- 本地资源带版本查询串做缓存破坏：每次发版同步更新 ?v=（与版本号一致），普通刷新即生效 -->
-  <link rel="stylesheet" href="/static/style.css?v=0.13.0">
+  <link rel="stylesheet" href="/static/style.css?v=0.13.1">
   <script defer src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script defer src="/static/app.js?v=0.13.0"></script>
+  <script defer src="/static/app.js?v=0.13.1"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
   <style>
     /* ── Base ────────────────────────────────────────────────────────── */
@@ -363,7 +363,7 @@
     }
   </style>
   <!-- AURORA 设计系统层:必须在内联样式之后加载(同特异性后者胜) -->
-  <link rel="stylesheet" href="/static/aurora.css?v=0.13.0">
+  <link rel="stylesheet" href="/static/aurora.css?v=0.13.1">
 </head>
 
 <body x-data="app()" class="text-slate-300 antialiased">
@@ -1609,7 +1609,7 @@
         <!-- Search bar -->
         <div class="flex gap-3 mb-4">
           <div class="relative flex-1">
-            <input type="search" name="analysis-item-search" autocomplete="off" x-model="analysisSearch" @input.debounce.300ms="searchAnalysisItems()"
+            <input type="search" name="analysis-item-search" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" x-model="analysisSearch" @input.debounce.300ms="searchAnalysisItems()"
               :placeholder="t('search_item_hint')" class="w-full px-4 py-2.5 rounded-xl text-sm text-white placeholder-slate-600"
               style="background:rgba(15,23,42,0.8); border:1px solid rgba(51,65,85,0.3)" />
             <div x-show="analysisSearchResults.length>0" x-cloak
@@ -2262,7 +2262,7 @@
         </div>
         <div class="text-xs text-slate-600">
           <span x-text="t('current_version')"></span>
-          <span class="text-blue-400 font-mono font-bold ml-1">v0.13.0</span>
+          <span class="text-blue-400 font-mono font-bold ml-1">v0.13.1</span>
         </div>
       </div>
 
@@ -2393,7 +2393,7 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
             </svg>
-            <input type="search" name="item-filter" autocomplete="off" x-model="filters.search"
+            <input type="search" name="item-filter" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" x-model="filters.search"
               @input.debounce.400ms="page=1; loadItems()"
               :placeholder="t('search_placeholder')"
               class="w-full pl-9 pr-3 py-2 rounded-xl text-sm border" />
