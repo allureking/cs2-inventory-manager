@@ -123,12 +123,28 @@ async def snapshot_daily(is_vip: bool = True) -> dict:
     logger.info("snapshot_daily: START — date=%s", today)
 
     # 1) 租赁统计
+    #
+    # v0.13.3：这里此前只 log 一条 warning 就带着全零 rental 往下走，写出一行
+    # rented_count=0 / daily_income=0 / 年化=0 的"当日数据"——看上去就是真的一天没
+    # 租出去。更糟的是 inv_value = rental.value + in_steam_value，租赁侧一挂，
+    # 总市值直接塌成只剩 in_steam（约整体一成），price_change 随之算出一根凭空的
+    # 暴跌。库存估值那边早就有 fallback + notes 标记，租赁侧却什么都没有。
+    #
+    # 改为：拿不到就**不写**这些字段（见下方 row 构造），并在 notes 留标记。
+    # 没测到的值宁可空着，也不能写成 0 混进收益曲线与年化。
     rental = {"count": 0, "value": 0.0, "income": 0.0}
+    rental_ok = False
     token = get_active_token()
     if token:
         try:
             _, _, stats_desc = await fetch_lease_records(page=1, page_size=1)
             rental = _parse_stats_desc(stats_desc)
+            # 摘要串解析不出任何一项（空串/改版）也算失败，不能当成"今天零收入"
+            rental_ok = bool(stats_desc) and any(
+                rental[k] for k in ("count", "value", "income")
+            )
+            if not rental_ok:
+                logger.warning("tracker snapshot_daily: 租赁统计摘要无法解析: %r", stats_desc)
         except Exception as e:
             logger.warning("tracker snapshot_daily: 获取租赁统计失败: %s", e)
     else:
@@ -144,17 +160,19 @@ async def snapshot_daily(is_vip: bool = True) -> dict:
 
         # in_steam 物品市值：直接使用悠悠 API 估值（与同步拉取一致）
         in_steam_value = 0.0
+        youpin_valuation_ok = False
         if token:
             try:
                 from app.services.youpin import fetch_stock_records
                 _, _, stock_valuation = await fetch_stock_records(page=1, page_size=1)
                 in_steam_value = parse_money(stock_valuation)
+                youpin_valuation_ok = in_steam_value > 0
             except Exception as e:
                 logger.warning("tracker snapshot_daily: 获取库存估值失败: %s", e)
 
         # fallback: 如果悠悠 API 不可用，从 price_snapshot 计算
         # （snapshot 口径与悠悠口径是两套度量体系，发生时必须在 notes 留标记）
-        used_snapshot_fallback = in_steam_value == 0.0
+        used_snapshot_fallback = not youpin_valuation_ok
         if used_snapshot_fallback:
             steam_name_rows = (await db.execute(
                 select(InventoryItem.market_hash_name, func.count(InventoryItem.id).label("cnt"))
@@ -190,36 +208,46 @@ async def snapshot_daily(is_vip: bool = True) -> dict:
         )
 
         # 5) 写入（upsert）
+        # 不依赖租赁接口的字段——任何情况下都可信
         row = {
             "date": today,
-            "rented_count": rental["count"],
-            "rented_value": round(rental["value"], 2),
-            "daily_income": round(rental["income"], 2),
-            "short_lease_annual": annuals["short"],
-            "long_lease_annual": annuals["long"],
-            "combined_annual": annuals["combined"],
-            "income_per_item": income_per_item,
             "is_vip": is_vip,
             "total_inventory": total_inv,
-            "inventory_value": round(inv_value, 2),
             "cost_basis": cost_basis,
-            "price_change": round(price_change, 8),
         }
+        # 依赖租赁接口的字段：拿不到就整组不写。upsert 的 set_ 是按 row 的 key 构建的，
+        # 不进 row 就既不会插入 0、也不会覆盖当天已有的（人工填的或早些时候采到的）值。
+        if rental_ok:
+            row.update({
+                "rented_count": rental["count"],
+                "rented_value": round(rental["value"], 2),
+                "daily_income": round(rental["income"], 2),
+                "short_lease_annual": annuals["short"],
+                "long_lease_annual": annuals["long"],
+                "combined_annual": annuals["combined"],
+                "income_per_item": income_per_item,
+                # inv_value / price_change 含 rental["value"]，租赁侧不可信时一并不写，
+                # 否则总市值会塌成只剩 in_steam，画出一根凭空的暴跌
+                "inventory_value": round(inv_value, 2),
+                "price_change": round(price_change, 8),
+            })
 
-        # fallback 口径标记：写入 notes，保留已有备注（set_ 按 row keys 构建，
-        # 非 fallback 时 notes 不进 row，不会覆盖既有备注）
+        # 口径标记：写入 notes，保留已有备注（set_ 按 row keys 构建，
+        # 无标记时 notes 不进 row，不会覆盖既有备注）
+        markers = []
         if used_snapshot_fallback:
-            marker = "valuation_source=snapshot"
+            markers.append("valuation_source=snapshot")
+            logger.warning("snapshot_daily: 悠悠估值不可用，使用 price_snapshot 口径 — date=%s", today)
+        if not rental_ok:
+            markers.append("rental_stats=unavailable")
+            logger.error("snapshot_daily: 租赁统计不可用，当日租赁/市值/涨跌字段已跳过写入 — date=%s", today)
+        if markers:
             existing_notes = (await db.execute(
                 select(DailyTracker.notes).where(DailyTracker.date == today)
             )).scalar()
-            if existing_notes and marker not in existing_notes:
-                row["notes"] = f"{existing_notes} | {marker}"
-            elif not existing_notes:
-                row["notes"] = marker
-            else:
-                row["notes"] = existing_notes
-            logger.warning("snapshot_daily: 悠悠估值不可用，使用 price_snapshot 口径 — date=%s", today)
+            parts = [existing_notes] if existing_notes else []
+            parts += [m for m in markers if not existing_notes or m not in existing_notes]
+            row["notes"] = " | ".join(parts)
 
         stmt = sqlite_insert(DailyTracker).values([row])
         stmt = stmt.on_conflict_do_update(

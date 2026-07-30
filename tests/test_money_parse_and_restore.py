@@ -81,24 +81,72 @@ def _today_la() -> str:
 
 
 def test_snapshot_daily_fallback_writes_notes_marker():
-    """无悠悠 token → fallback 到 snapshot 口径 → notes 写 valuation_source=snapshot。"""
+    """无悠悠 token → 估值走 snapshot 口径 **且** 租赁统计取不到 → 两个标记都写。
+
+    v0.13.3 起租赁侧也有标记（此前只 log 一条 warning 就写全零）。没 token 时两条
+    通路一起断，因此这里期望两个标记同时出现。
+    """
     async def body():
         async with memory_db() as Session:
             import app.core.database as core_db
             with mock.patch.object(core_db, "AsyncSessionLocal", Session), \
                  mock.patch("app.services.youpin.get_active_token", return_value=None):
                 row = await tracker.snapshot_daily()
-            assert row["notes"] == "valuation_source=snapshot"
+            assert row["notes"] == "valuation_source=snapshot | rental_stats=unavailable"
+            # 租赁侧不可信 → 这些字段整组不写，绝不能落成 0
+            for k in ("rented_count", "daily_income", "inventory_value", "price_change"):
+                assert k not in row
             async with Session() as db:
                 saved = (await db.execute(
                     select(DailyTracker).where(DailyTracker.date == _today_la())
                 )).scalar_one()
-                assert saved.notes == "valuation_source=snapshot"
+                assert saved.notes == "valuation_source=snapshot | rental_stats=unavailable"
+                assert saved.daily_income is None      # 不是 0.0
+                assert saved.rented_count is None
+    _run(body())
+
+
+def test_snapshot_daily_rental_failure_does_not_zero_out_existing_row():
+    """租赁接口挂掉，但当天已有数据 → 既有租赁/市值不得被清零覆盖。
+
+    这是修复前最伤的一种:inv_value = rental.value + in_steam_value，租赁侧一挂，
+    总市值就塌成只剩 in_steam（约整体一成），收益曲线上凭空多一根暴跌。
+    """
+    async def body():
+        async with memory_db() as Session:
+            import app.core.database as core_db
+            async with Session() as db:
+                db.add(DailyTracker(date=_today_la(), rented_count=3832,
+                                    rented_value=3_600_000.0, daily_income=2466.82,
+                                    inventory_value=4_000_000.0))
+                await db.commit()
+
+            async def fake_stock(page=1, page_size=1):
+                return [], 0, "¥425,194.14"
+
+            async def boom(page=1, page_size=1):
+                raise RuntimeError("simulated youpin timeout")
+
+            with mock.patch.object(core_db, "AsyncSessionLocal", Session), \
+                 mock.patch("app.services.youpin.get_active_token", return_value="tok"), \
+                 mock.patch("app.services.youpin.fetch_stock_records", fake_stock), \
+                 mock.patch("app.services.youpin.fetch_lease_records", boom):
+                await tracker.snapshot_daily()
+
+            async with Session() as db:
+                saved = (await db.execute(
+                    select(DailyTracker).where(DailyTracker.date == _today_la())
+                )).scalar_one()
+                assert saved.rented_count == 3832              # 原值保留
+                assert saved.daily_income == 2466.82
+                assert saved.inventory_value == 4_000_000.0    # 没塌成 42 万
+                assert "rental_stats=unavailable" in saved.notes
+                assert "valuation_source=snapshot" not in saved.notes  # 估值侧是好的
     _run(body())
 
 
 def test_snapshot_daily_fallback_preserves_existing_notes_and_idempotent():
-    """已有手工备注时 append 标记；重复 fallback 不重复追加。"""
+    """已有手工备注时 append 标记；重复 fallback 不重复追加（两个标记都不重复）。"""
     async def body():
         async with memory_db() as Session:
             import app.core.database as core_db
@@ -113,7 +161,8 @@ def test_snapshot_daily_fallback_preserves_existing_notes_and_idempotent():
                 saved = (await db.execute(
                     select(DailyTracker).where(DailyTracker.date == _today_la())
                 )).scalar_one()
-                assert saved.notes == "手工备注 | valuation_source=snapshot"
+                assert saved.notes == (
+                    "手工备注 | valuation_source=snapshot | rental_stats=unavailable")
     _run(body())
 
 
