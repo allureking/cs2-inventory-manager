@@ -623,7 +623,10 @@
         batchRepriceProgress: '',
 
         // 出租大会员等级 (由 header select 控制)
-        memberLevel: parseInt(localStorage.getItem('memberLevel') || '3'),
+        // 夹到 1..3（→ max_days 8/30/90）：这个值只存在于 localStorage、没有 UI 控件，
+        // 早期版本或手改可能留下 0/NaN 之类的遗留值，而后端 v0.13.3 起会以 422 拒绝，
+        // 会让智能上架整条流程失败。就地夹紧，后端契约保持严格。
+        memberLevel: Math.min(3, Math.max(1, parseInt(localStorage.getItem('memberLevel'), 10) || 3)),
         // 悠悠大会员开关：开启后租金年化按310天计算，默认188天
         youpinMembership: localStorage.getItem('youpinMembership') !== 'false',
 
