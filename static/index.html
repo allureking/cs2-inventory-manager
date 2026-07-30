@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CS2 库存管理系统 — CS2 Inventory Manager</title>
   <!-- 本地资源带版本查询串做缓存破坏：每次发版同步更新 ?v=（与版本号一致），普通刷新即生效 -->
-  <link rel="stylesheet" href="/static/style.css?v=0.13.2">
+  <link rel="stylesheet" href="/static/style.css?v=0.13.3">
   <script defer src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script defer src="/static/app.js?v=0.13.2"></script>
+  <script defer src="/static/app.js?v=0.13.3"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
   <style>
     /* ── Base ────────────────────────────────────────────────────────── */
@@ -385,7 +385,7 @@
     }
   </style>
   <!-- AURORA 设计系统层:必须在内联样式之后加载(同特异性后者胜) -->
-  <link rel="stylesheet" href="/static/aurora.css?v=0.13.2">
+  <link rel="stylesheet" href="/static/aurora.css?v=0.13.3">
 </head>
 
 <body x-data="app()" class="text-slate-300 antialiased">
@@ -2299,7 +2299,7 @@
         </div>
         <div class="text-xs text-slate-600">
           <span x-text="t('current_version')"></span>
-          <span class="text-blue-400 font-mono font-bold ml-1">v0.13.2</span>
+          <span class="text-blue-400 font-mono font-bold ml-1">v0.13.3</span>
         </div>
       </div>
 
@@ -2530,6 +2530,9 @@
 
       <!-- Table -->
       <div class="card overflow-hidden holdings-card">
+        <!-- v0.13.3：表格与下方卡片列表二选一渲染（此前两棵 DOM 都建、只用 CSS 藏一棵，
+             手机上白白构建并响应式追踪那张从不显示的桌面大表）。CSS 的 display 规则保留作兜底。 -->
+        <template x-if="!isNarrow">
         <div class="tbl-wrap holdings-table-wrap">
           <table class="w-full text-xs" style="border-collapse: separate; border-spacing: 0;">
             <thead>
@@ -2694,8 +2697,10 @@
             </tbody>
           </table>
         </div>
+        </template>
 
-        <!-- Mobile card list (≤640px only; desktop table hidden) — pure presentation, reuses items + openPanel -->
+        <!-- Mobile card list (≤640px only) — pure presentation, reuses items + openPanel -->
+        <template x-if="isNarrow">
         <div class="holdings-cards">
           <template x-if="loading">
             <div class="py-16 flex flex-col items-center gap-3" style="color:#334155">
@@ -2737,6 +2742,7 @@
             </div>
           </template>
         </div>
+        </template>
 
         <!-- Pagination -->
         <div class="px-5 py-3 flex items-center justify-between"

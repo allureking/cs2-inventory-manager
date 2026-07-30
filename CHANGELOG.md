@@ -1,5 +1,79 @@
 # Changelog / 更新日志
 
+## [0.13.3] - 2026-07-29
+
+四路审查（后端 / 前端移动端 / 数据口径 / 安全）的修复收口。这一版几乎全是**静默错误**：
+不报错、不崩溃，只是把错的数字端到你面前。
+
+### 修复 / Fixed
+- **「当前市价」口径静默漂移**（全站市值与 PnL）：写入侧有两条节奏不同的通路——日批把
+  BUFF/STEAM/YOUPIN 三行写在同一 `snapshot_minute`，而「刷新市价」只写 YOUPIN 且逐件
+  各 stamp 当前分钟。旧取价逻辑「取全局最新那一分钟再 MIN」于是在你点过一次刷新后，
+  该件的跨平台最低价静默退化成悠悠单价，同一张概览上两种口径混用。改为**每个平台各取
+  其最新报价再跨平台取 min**；陈旧报价用**相对**新鲜度窗（落后该件全平台最新 >72h 的
+  平台剔除），而非绝对时间窗——绝对窗会在采集中断时让所有价格一起消失、持仓市值瞬间
+  归零 / **Price basis drift**: "current price" is now per-platform-latest then cross-platform min, so a manual refresh no longer silently reduces it to YouPin-only
+- **导入对账完整性闸**：悠悠返回空列表（code 9004001 被视为正常）或分页中途失败时，旧
+  逻辑会无条件把全部 `rented_out` 置为 `unknown` 并提交——一次接口抖动就让 3800+ 件、
+  约 ¥360 万在租资产从全站市值与成本中消失，且无任何告警。现在空响应/分页截断/抓取量
+  显著少于 `totalCount` 时一律跳过对账并记录原因 / **Import reconcile guard** against wiping active leases on a flaky API response
+- **出售导入非幂等**（可反复触发的持仓蚕食）：出售记录接口每次返回全量历史且记录里没有
+  能定位到具体某一件的标识，旧实现「每条记录随手挑一件在库同名物品标 sold」又不留处理
+  记号，于是每点一次全量导入就再吞掉一批还在库的物品。改为按名收敛对账（已 sold 先抵扣、
+  只补差额、按 id 定序）。生产核查该 bug 尚未被触发，无需数据修复 / **Sell import is now idempotent** (converging per-name reconcile)
+- **租赁实绩年化口径**：拆为「在租日年化」（在租时的赚钱效率）与「真实年化·含闲置」（按
+  日历天摊薄的真实回报），并给出出租率；此前分母只数「有租记录的天数」，闲置期被自动
+  剔除 → 恒报高位，出租率越差虚高越多。排行榜的件数改用**单日在租峰值**（此前用
+  `COUNT(DISTINCT commodity_id)`，而同一物理饰品每个租赁周期都会换新 id，周转越快低估越狠）
+  / **Lease yield metrics** split into rented-day vs. calendar-day annualized + utilization
+- **收益追踪日快照的租赁侧失败**：此前只 log 一条 warning 就写出一行 `rented_count=0` /
+  `daily_income=0` / 年化=0 的「当日数据」——在收益曲线上就是真真切切一天没租出去；且
+  总市值 = 租赁价值 + 库存估值，租赁侧一挂总市值直接塌成只剩一成，画出一根凭空的暴跌。
+  现在取不到就整组不写（不插 0、不覆盖已有值）并在 `notes` 留 `rental_stats=unavailable`
+  / **Daily snapshot** no longer records a fake zero-income day when the lease API fails
+- **短信登录丢失会员等级**：`sms_login` 漏了 `_runtime_member_level` 的 `global` 声明，赋值
+  只写进函数局部；而返回值读的正是那个局部量、显示正确，于是持久化与后续读取一律为 0
+  且完全不可见 / `sms_login` member level now actually persists
+- **后台任务被 GC 静默吞掉**：CPython 对 `asyncio.create_task` 只持弱引用，任务可能在完成前
+  被回收，留下 `cache["refreshing"]=True` 永久卡死估值缓存。新增 `app/core/tasks.spawn()`
+  持强引用，替换全部 10 处裸调用 / Background tasks now hold strong refs
+- 若干假成功交互：「立即采集」按钮此前根本不发请求；告警已读/全部已读不校验响应；轮询与
+  回填无失败熔断（连续 5 次失败即停 + 20 分钟超时）；图片加载失败回落占位图 / Several fake-success UI actions fixed
+
+### 安全 / Security
+- **会话中间件改 fail-closed**：用户表为空时不再静默直通（`/api/*` 返回 503、页面 302），
+  需要开放访问时显式设 `ALLOW_ANONYMOUS=1` / Session middleware is now fail-closed
+- **上架/改价端点入参约束**：`/api/listing` 的 sell / lease / both / reprice / smart /
+  batch-smart-reprice 会把价格**直接推到悠悠线上**，此前请求模型全是裸 float/int——0、负数、
+  NaN、1e308 都能原样穿过去。现加 `gt=0` 与宽松上限、`max_days` 1–90、`mode` 枚举化、
+  批量 30 件上限 / Money-touching listing endpoints now validate their inputs
+
+### 移动端 / Mobile
+- **持仓列表不再渲染两棵 DOM**：此前桌面表格与手机卡片同时构建、只用 CSS `display:none`
+  藏掉一棵，手机上白白构建并持续响应式追踪那张从不显示的大表。改为 `x-if` 二选一（断点
+  跨越时实时切换）/ Holdings list now renders one tree, not both
+- 收益追踪表 7 个可编辑字段在手机上无法填写（只绑了 `@dblclick`，手机无可靠双击）→ 改为
+  触摸端单击进入编辑；同步修 iOS 键盘不弹（`$nextTick` 会逃出手势上下文，改为同步 focus）
+  与 <16px 输入框导致的整页放大 / Tracker's 7 editable cells are now editable on touch devices
+- 子标签栏可横向滚动而非被裁切；分页按钮与复选框放大到可点尺寸；密码弹窗可滚动
+
+### 测试 / Tests
+- 301 → **416** 用例。本版新增的每一处修复都配了回归锁，并逐一做**破坏性验证**（把修复
+  改回旧行为，确认对应用例精确变红），避免"空绿"
+
+## [0.13.2] - 2026-07-28
+
+### 修复 / Fixed
+- 手机端收益追踪表的 7 个字段（在租件数/在租价值/日收入/总件数/库存价值/成本基准/大盘指数）
+  完全无法填写：单元格只绑了 `@dblclick`，而手机浏览器没有可靠的双击事件 / Tracker cells were undeditable on mobile (dblclick-only)
+
+## [0.13.1] - 2026-07-28
+
+### 修复 / Fixed
+- 概览的饰品搜索框每次强制刷新后被 Chrome 密码管理器自动填入用户名：`type="search"` +
+  `autocomplete="off"` 挡不住，改为 readonly-until-focus + JS 兜底清除 / Search box no longer autofilled with the username
+- 右上角用户区收纳为 👤 图标下拉菜单（用户名/改密/退出），释放顶栏空间 / User area collapsed into a 👤 menu
+
 ## [0.13.0] - 2026-06-11
 
 ### 新增 / Added

@@ -37,6 +37,55 @@
 
     const _CHANGELOG = Object.freeze([
           {
+            version: '0.13.3', date: '2026-07-29', major: true,
+            title_cn: '静默错误清剿：市价口径 / 对账闸门 / 幂等导入 / 手机端',
+            title_en: 'Silent-Error Sweep: Price Basis, Reconcile Guards, Idempotent Imports, Mobile',
+            added: [
+              ['单品租赁卡新增「出租率」与「在租日年化」,与「真实年化(含闲置)」并列——分清"租出去时赚得多不多"和"这件全年到底回报多少"', 'Item lease card now shows utilization and rented-day annualized alongside actual (incl. idle) annualized'],
+              ['上架/改价端点全面加入参约束(售价 gt=0、租期 1-90 天、批量 30 件上限等)——这些接口会把价格直接推到悠悠线上', 'Input validation on all endpoints that push real prices to YouPin'],
+            ],
+            fixed: [
+              ['「当前市价」口径静默漂移:点过一次「刷新市价」后,该件的跨平台最低价会悄悄退化成悠悠单价(刷新只写悠悠一行,旧逻辑只认最新那一分钟),同一张概览上两种口径混用,全站市值与盈亏随"这件刷没刷过"跳档。改为每个平台各取最新再跨平台取最低', 'Price basis drift: cross-platform minimum silently degraded to YouPin-only after a manual refresh'],
+              ['导入对账完整性闸:悠悠返回空列表或分页中途失败时,旧逻辑会把全部在租物品置为 unknown——一次接口抖动就让 3800+ 件、约 ¥360 万在租资产从市值与成本里消失且无告警。现在数据不完整一律跳过对账', 'Reconcile guard: a flaky API response could wipe ~¥3.6M of active leases from the books'],
+              ['出售导入非幂等:出售记录接口每次返回全量历史,旧实现每条记录随手挑一件在库同名物品标 sold 且不留记号,每点一次全量导入就再吞掉一批在库物品。改为按名收敛对账(生产核查未被触发,无需数据修复)', 'Sell import was non-idempotent — each full import consumed another batch of in-stock items'],
+              ['租赁实绩年化虚高:分母只数"有租记录的天数",闲置期被自动剔除 → 恒报高位,出租率越差虚高越多;排行榜件数用 COUNT(DISTINCT commodity_id),而同一件饰品每个租赁周期都换新 id,周转越快低估越狠', 'Lease yield was inflated by excluding idle days, and rankings undercounted fast-turnover items'],
+              ['收益追踪日快照:租赁接口挂掉时会写出一行"当天零收入"——曲线上就是真真切切一天没租出去,且总市值塌成只剩一成、画出一根凭空的暴跌。现在取不到就不写,并在备注留标记', 'Daily snapshot no longer records a fake zero-income day when the lease API fails'],
+              ['短信登录后会员等级丢失(漏了一个 global 声明,赋值只写进函数局部,而返回值读的正是那个局部量、显示正确,于是完全不可见)', 'SMS login silently lost the membership level'],
+              ['后台任务可能被 GC 回收:估值缓存的刷新标记会永久卡在"刷新中",此后再不更新', 'Background tasks could be garbage-collected mid-flight, permanently freezing the valuation cache'],
+              ['「立即采集」按钮此前根本不发请求;告警已读不校验响应;轮询与回填无失败熔断', 'Several buttons reported success without doing anything'],
+            ],
+            changed: [
+              ['手机端持仓列表不再渲染两棵 DOM:此前桌面表格与手机卡片同时构建、只用 CSS 藏掉一棵,手机白白构建并持续追踪那张从不显示的大表', 'Holdings list now renders one DOM tree instead of building both and hiding one with CSS'],
+              ['会话中间件改 fail-closed:用户表为空时不再静默直通(需要开放访问请显式配置 ALLOW_ANONYMOUS)', 'Session middleware is now fail-closed'],
+              ['测试 301 → 416 用例;每处修复都配回归锁并逐一做破坏性验证(改回旧行为确认精确变红),避免"空绿"', 'Test suite 301 → 416, every fix sabotage-verified'],
+            ],
+            commits: [],
+          },
+          {
+            version: '0.13.2', date: '2026-07-28',
+            title_cn: '手机端收益追踪表可编辑',
+            title_en: 'Mobile: Tracker Cells Editable',
+            added: [],
+            fixed: [
+              ['手机上收益追踪的 7 个字段(在租件数/在租价值/日收入/总件数/库存价值/成本基准/大盘指数)完全填不进去——单元格只绑了双击,而手机浏览器没有可靠的双击事件', 'The 7 tracker fields were uneditable on mobile (cells were dblclick-only)'],
+            ],
+            changed: [],
+            commits: [],
+          },
+          {
+            version: '0.13.1', date: '2026-07-28',
+            title_cn: '搜索框自动填充修复 + 顶栏用户区收纳',
+            title_en: 'Search Autofill Fix + Collapsed User Menu',
+            added: [],
+            fixed: [
+              ['概览的饰品搜索框每次强制刷新后被浏览器密码管理器填入用户名', 'Search box was autofilled with the username on every hard refresh'],
+            ],
+            changed: [
+              ['右上角用户区收纳为 👤 图标下拉菜单(用户名/改密/退出),释放顶栏空间', 'User area collapsed into a 👤 dropdown menu'],
+            ],
+            commits: [],
+          },
+          {
             version: '0.13.0', date: '2026-06-11', major: true,
             title_cn: '可靠性与数据资产大修：凭证哨兵 + 租赁实绩 + 成本找回',
             title_en: 'Reliability & Data Overhaul: Credential Sentinel + Lease Attribution + Cost Recovery',
@@ -587,6 +636,12 @@
         // (手机浏览器无可靠 dblclick,此前 7 个字段在手机上全都改不了)
         isTouchDevice: (typeof window !== 'undefined') &&
           (('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0),
+        // v0.13.3 持仓列表窄屏走卡片、宽屏走表格,此前两棵 DOM 都渲染、只用 CSS
+        // display:none 藏掉一棵 —— 手机上仍然要构建并持续响应式追踪那张从不显示的
+        // 桌面大表(每行十几个单元格 × 每页 N 行),纯浪费。改成 x-if 二选一后
+        // 只存在一棵。断点与 CSS 的 max-width:640px 保持一致。
+        isNarrow: (typeof window !== 'undefined') &&
+          window.matchMedia('(max-width: 640px)').matches,
         analysisAlerts: { items: [], total: 0 },
         analysisSpreads: { items: [], total: 0 },
         analysisSearch: '',
@@ -735,6 +790,12 @@
           // 顶栏实际高度 → CSS 变量（移动端 token 横幅 top 跟随，避免重叠）
           setTimeout(() => this._syncHeaderH(), 300);
           window.addEventListener('resize', () => this._syncHeaderH());
+          // 断点跨越时切换持仓列表的渲染形态（用 matchMedia 而非 resize，
+          // 只在真正越过 640px 时触发一次，不会每像素重建列表）
+          const _mqNarrow = window.matchMedia('(max-width: 640px)');
+          const _onNarrow = (e) => { this.isNarrow = e.matches; };
+          _mqNarrow.addEventListener ? _mqNarrow.addEventListener('change', _onNarrow)
+                                     : _mqNarrow.addListener(_onNarrow);
           window.addEventListener('orientationchange', () => setTimeout(() => this._syncHeaderH(), 200));
           this._setupAutoRefresh();   // 页面可见时定时静默刷新,切回标签页若数据过期立即刷新
           this._purgeAutofill();      // 清除浏览器把保存的用户名误填进搜索框(凭证 autofill 无视 autocomplete=off)
