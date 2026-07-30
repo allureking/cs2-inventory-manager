@@ -148,3 +148,56 @@ class TestParseAbrade:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+# ── sms_login 会员等级持久化（v0.13.3 修复回归锁）─────────────────────────
+
+
+class TestSmsLoginMemberLevel:
+    """短信登录必须把会员等级写进**模块级**变量。
+
+    sms_login 早先只声明了 `global _runtime_token, _runtime_nickname`,漏了
+    _runtime_member_level → 那句赋值只写进函数局部,模块级仍是 0。而返回值读的是
+    局部变量、显示正确,于是 bug 完全不可见:_save_runtime_state() 持久化 0、
+    get_login_state() 报 0,重启后会员等级凭空丢失。
+    """
+
+    def _patch(self, monkeypatch, level):
+        import asyncio
+
+        import app.services.youpin as yp
+
+        class _Resp:
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return {"code": 0, "data": {"Token": "tok-abc"}}
+
+        class _Client:
+            async def post(self, *a, **kw):
+                return _Resp()
+
+        async def _check_token_status():
+            return {"valid": True, "nickname": "小明", "member_level": level}
+
+        monkeypatch.setattr(yp, "_get_http", lambda: _Client())
+        monkeypatch.setattr(yp, "check_token_status", _check_token_status)
+        monkeypatch.setattr(yp, "_save_runtime_state", lambda: None)  # 不落盘
+        monkeypatch.setattr(yp, "_runtime_member_level", 0, raising=False)
+        return yp, asyncio
+
+    def test_member_level_written_to_module_scope(self, monkeypatch):
+        yp, asyncio = self._patch(monkeypatch, 3)
+        r = asyncio.run(yp.sms_login("13800000000", "1234", "sess"))
+        assert r["member_level"] == 3
+        # 关键断言:模块级变量,而不是返回值里那个局部量
+        assert yp._runtime_member_level == 3
+        assert yp.get_login_state()["member_level"] == 3
+
+    def test_nickname_and_token_also_module_scope(self, monkeypatch):
+        yp, asyncio = self._patch(monkeypatch, 2)
+        asyncio.run(yp.sms_login("13800000000", "1234", "sess"))
+        assert yp._runtime_token == "tok-abc"
+        assert yp._runtime_nickname == "小明"
+        assert yp._runtime_member_level == 2

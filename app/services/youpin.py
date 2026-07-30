@@ -328,7 +328,10 @@ async def send_sms_code(phone: str) -> dict:
 
 async def sms_login(phone: str, code: str, session_id: str) -> dict:
     """验证码登录，获取 App 端 Token"""
-    global _runtime_token, _runtime_nickname
+    # _runtime_member_level 必须一并声明 global：漏了它的话下面那句赋值只写进函数局部，
+    # 模块级变量仍是 0 → _save_runtime_state() 持久化 member_level=0、get_login_state()
+    # 也报 0，而本函数返回值读的是局部变量、显示正确 —— 短信登录后会员等级静默丢失。
+    global _runtime_token, _runtime_nickname, _runtime_member_level
     client = _get_http()
     resp = await client.post(
         f"{YOUPIN_API}/api/user/Auth/SmsSignIn",
@@ -1431,37 +1434,68 @@ async def import_sell_records(db: AsyncSession) -> dict:
         page += 1
 
     logger.info("共拉取悠悠出售记录 %d 条", len(all_records))
-    updated, not_found = [], []
 
+    # ── 幂等对账（v0.13.3 修正）─────────────────────────────────────────────
+    # 出售记录里没有能定位到具体某一件的标识（无 assetId / 无本地 item id），只能按
+    # market_hash_name 匹配。旧实现是「每条记录随手挑一件在库的同名物品标 sold」，
+    # 没有任何"这条记录处理过了"的记号 —— 而悠悠这个接口每次都是**全量历史**出售记录，
+    # 且 /import/sell 与 /import/all 都是用户可反复点的按钮。于是每点一次全量导入，
+    # 就会再吞掉一批还在库的同名物品标成 sold，持仓被逐轮蚕食且不可逆。
+    #
+    # 改成按名收敛对账：目标 sold 件数 = 该名下出售记录条数；已是 sold 的先抵扣，
+    # 只补齐差额。第二次运行差额为 0 → 什么都不做。方向上偏保守（手工标过 sold 的
+    # 也算进已完成），宁可少标也不能多标 —— 多标会把在租/在库物品从资产里抹掉。
+    from collections import Counter
+    want = Counter()
     for rec in all_records:
         hash_name = _parse_hash_name(rec)
-        if not hash_name:
+        if hash_name:
+            want[hash_name] += 1
+
+    updated, not_found = [], []
+    already = 0
+
+    for hash_name, want_n in want.items():
+        have_n = (await db.execute(
+            select(func.count(InventoryItem.id)).where(
+                InventoryItem.market_hash_name == hash_name,
+                InventoryItem.status == "sold",
+                InventoryItem.class_id.notin_(["YOUPIN", "STEAM_PROTECTED"]),
+            )
+        )).scalar_one()
+
+        gap = want_n - (have_n or 0)
+        already += min(want_n, have_n or 0)
+        if gap <= 0:
             continue
 
-        result = await db.execute(
+        rows = (await db.execute(
             select(InventoryItem)
             .where(
                 InventoryItem.market_hash_name == hash_name,
                 InventoryItem.status.in_(ACTIVE_STATUSES),
                 InventoryItem.class_id.notin_(["YOUPIN", "STEAM_PROTECTED"]),
-            ).limit(1)
-        )
-        item = result.scalar_one_or_none()
+            )
+            .order_by(InventoryItem.id)      # 定序,避免同一份数据两次运行挑中不同件
+            .limit(gap)
+        )).scalars().all()
 
-        if not item:
-            not_found.append(hash_name)
-            continue
+        for item in rows:
+            old_status = item.status
+            item.status = "sold"
+            item.left_steam_at = item.left_steam_at or datetime.utcnow()
+            updated.append({"asset_id": item.asset_id, "market_hash_name": hash_name,
+                            "old_status": old_status})
 
-        old_status = item.status
-        item.status = "sold"
-        item.left_steam_at = item.left_steam_at or datetime.utcnow()
-        updated.append({"asset_id": item.asset_id, "market_hash_name": hash_name,
-                        "old_status": old_status})
+        if len(rows) < gap:
+            not_found.extend([hash_name] * (gap - len(rows)))
 
     await db.commit()
     return {
         "total_records": len(all_records),
         "updated": len(updated),
+        "already_sold": already,          # 本次无需改动（此前已对上账）的条数
         "not_found_in_db": len(not_found),
         "items": updated,
+        "not_found_names": list(dict.fromkeys(not_found))[:20],
     }
