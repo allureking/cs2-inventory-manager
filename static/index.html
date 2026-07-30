@@ -1843,8 +1843,16 @@
                       <span class="font-mono text-emerald-300" x-text="'¥' + itemLeaseIncome.total_rent"></span></div>
                     <div class="flex justify-between"><span class="text-slate-500" x-text="nameLang==='cn'?'日均(全部件)':'Avg/day'"></span>
                       <span class="font-mono text-slate-300" x-text="'¥' + itemLeaseIncome.avg_daily_rent"></span></div>
-                    <div class="flex justify-between"><span class="text-slate-500" x-text="nameLang==='cn'?'实际年化':'Actual annual'"></span>
+                    <div class="flex justify-between"><span class="text-slate-500" x-text="nameLang==='cn'?'出租率':'Utilization'"></span>
+                      <span class="font-mono text-slate-300" x-text="itemLeaseIncome.utilization_pct != null ? itemLeaseIncome.utilization_pct + '%' : '—'"></span></div>
+                    <div class="flex justify-between"><span class="text-slate-500" x-text="nameLang==='cn'?'在租日年化':'Annual (rented days)'"></span>
+                      <span class="font-mono text-slate-300" x-text="itemLeaseIncome.utilization_annual_pct != null ? itemLeaseIncome.utilization_annual_pct + '%' : '—'"></span></div>
+                    <div class="flex justify-between pt-1" style="border-top:1px solid rgba(51,65,85,0.35)">
+                      <span class="text-slate-400 font-medium" x-text="nameLang==='cn'?'真实年化(含闲置)':'Actual annual (incl. idle)'"></span>
                       <span class="font-mono font-bold text-amber-300" x-text="itemLeaseIncome.actual_annual_pct != null ? itemLeaseIncome.actual_annual_pct + '%' : '—'"></span></div>
+                    <p class="text-[10px] text-slate-600 pt-0.5" x-text="nameLang==='cn'
+                        ? '真实年化 = 在租日年化 × 出租率;均为税前、按当前市价'
+                        : 'Actual = rented-day annual x utilization; pre-fee, at current price'"></p>
                   </div>
                 </template>
                 <template x-if="!itemLeaseIncome || itemLeaseIncome.days_recorded === 0">
