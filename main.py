@@ -90,7 +90,20 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
         if path in self._PUBLIC or path.startswith("/static/"):
             return await call_next(request)
         if not await auth_svc.users_exist():
-            return await call_next(request)
+            # v0.13.3 fail-closed:用户表为空时不再静默直通。
+            # 旧行为的风险:恢复 v0.10.0 之前的备份、误删 app_user、或新机 init_db
+            # 建完空表就起服务 → 全站读端点(持仓/成本/逐件PnL/租赁明细)对公网敞开,
+            # 且无任何告警。本地开发用 ALLOW_ANONYMOUS=1 显式开启。
+            if settings.allow_anonymous:
+                return await call_next(request)
+            logger.error(
+                "门禁未初始化:app_user 表为空且未设 ALLOW_ANONYMOUS → 拒绝所有请求。"
+                "请运行 scripts/create_user.py 创建账号(path=%s)", path,
+            )
+            if path.startswith("/api/"):
+                return JSONResponse(status_code=503,
+                                    content={"detail": "用户系统未初始化 / Auth not initialized"})
+            return RedirectResponse(url="/login", status_code=302)
 
         token = request.cookies.get(auth_svc.SESSION_COOKIE, "")
         if token:

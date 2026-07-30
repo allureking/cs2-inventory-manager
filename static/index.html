@@ -365,6 +365,23 @@
 
       /* G .tbl-wrap 固定高度在移动端取消，改整页滚动（顶栏高度已变，calc 偏移失真） */
       .tbl-wrap { max-height: none; }
+
+      /* ── v0.13.3 移动端可用性补齐 ─────────────────────────────────── */
+      /* iOS 对 <16px 输入框会自动放大整页且不还原(无 maximum-scale 时不可逆)。
+         此前只覆盖了收益追踪表,其余弹窗/搜索/登录框仍是 12-14px。 */
+      input, select, textarea { font-size: 16px !important; }
+      /* 上架管理子 tab 栏:6 个胶囊 + 刷新按钮在无 wrap 的 flex 行里,
+         外层 .main-wrap 是 overflow-x:hidden → 超出部分被"裁掉且滚不到"。
+         给它自己的横向滚动,并阻止胶囊被压成一字一行。 */
+      .listing-subtabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .listing-subtabs::-webkit-scrollbar { height: 0; }
+      .listing-subtabs > * { flex-shrink: 0; }
+      .listing-subtabs button { white-space: nowrap; min-height: 40px; }
+      .listing-subtabs .subtab-note { display: none; }   /* 说明文字在手机上挤占空间 */
+      /* 分页按钮 28px → 40px(4000+ 行持仓在手机上主要靠它翻页) */
+      .pg-btn { min-width: 40px; height: 40px; font-size: 14px; }
+      /* 批量操作复选框 13px(UA 默认)→ 20px,可点区域也放大 */
+      input[type="checkbox"] { width: 20px; height: 20px; }
     }
   </style>
   <!-- AURORA 设计系统层:必须在内联样式之后加载(同特异性后者胜) -->
@@ -693,7 +710,7 @@
       class="fixed inset-0 z-50 flex items-center justify-center p-4"
       style="background:rgba(0,0,0,0.6);backdrop-filter:blur(4px)"
       @keydown.escape.window="pwModal.show=false">
-      <div class="w-full max-w-sm rounded-2xl p-6" style="background:#0f172a;border:1px solid rgba(51,65,85,0.5)">
+      <div class="w-full max-w-sm rounded-2xl p-6" style="background:#0f172a;border:1px solid rgba(51,65,85,0.5); max-height:90vh; overflow-y:auto">
         <p class="text-slate-200 font-medium mb-1" x-text="nameLang==='cn' ? '修改登录密码' : 'Change Password'"></p>
         <p class="text-[11px] text-slate-600 mb-4">
           👤 <span x-text="currentUser.username"></span> ·
@@ -859,8 +876,8 @@
     <!-- ════════════ LISTING TAB ════════════ -->
     <div x-show="activeTab==='listing'" class="fade-up">
 
-      <!-- Sub-tab bar -->
-      <div class="flex items-center gap-3 mb-4">
+      <!-- Sub-tab bar (v0.13.3: listing-subtabs 让它在手机上可横向滚动而非被裁掉) -->
+      <div class="flex items-center gap-3 mb-4 listing-subtabs">
         <div class="flex gap-0.5 p-1 rounded-xl" style="background: rgba(20,30,48,0.7); border: 1px solid rgba(51,65,85,0.3)">
           <button @click="shelfTab='sell'; selectedItems=[]; loadShelf()"
             class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
@@ -905,7 +922,7 @@
           <span x-text="t('btn_refresh')"></span>
         </button>
 
-        <div class="ml-auto text-[11px] text-slate-700" x-text="t('smart_listing_note')">
+        <div class="ml-auto text-[11px] text-slate-700 subtab-note" x-text="t('smart_listing_note')">
         </div>
       </div>
 
@@ -1614,7 +1631,7 @@
         <!-- Search bar -->
         <div class="flex gap-3 mb-4">
           <div class="relative flex-1">
-            <input type="search" name="analysis-item-search" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" x-model="analysisSearch" @input.debounce.300ms="searchAnalysisItems()"
+            <input type="search" name="analysis-item-search" autocomplete="off" readonly onpointerdown="this.removeAttribute('readonly')" onfocus="this.removeAttribute('readonly')" x-model="analysisSearch" @input.debounce.300ms="searchAnalysisItems()"
               :placeholder="t('search_item_hint')" class="w-full px-4 py-2.5 rounded-xl text-sm text-white placeholder-slate-600"
               style="background:rgba(15,23,42,0.8); border:1px solid rgba(51,65,85,0.3)" />
             <div x-show="analysisSearchResults.length>0" x-cloak
@@ -1677,13 +1694,13 @@
                 <p class="text-[10px] text-slate-600 mb-1"><span x-text="nameLang==='cn'?'7D 动量':'7D Momentum'"></span>
                   <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
                     <span class="tip-text" x-text="nameLang==='cn'?'7天价格变化率。(今价-7天前价)/7天前价×100%。正值=上涨趋势，负值=下跌趋势。':'7-day price change rate. Positive=uptrend, Negative=downtrend.'"></span></span></p>
-                <p class="text-xl font-bold font-mono" :class="pnlClass(itemSignals.signal?.momentum_7||0)" x-text="itemSignals.signal?.momentum_7!==null?(itemSignals.signal.momentum_7>0?'+':'')+itemSignals.signal.momentum_7+'%':'—'"></p>
+                <p class="text-xl font-bold font-mono" :class="pnlClass(itemSignals.signal?.momentum_7||0)" x-text="itemSignals.signal?.momentum_7!=null?(itemSignals.signal.momentum_7>0?'+':'')+itemSignals.signal.momentum_7+'%':'—'"></p>
               </div>
               <div class="card p-3 text-center">
                 <p class="text-[10px] text-slate-600 mb-1"><span x-text="nameLang==='cn'?'30D 动量':'30D Momentum'"></span>
                   <span class="info-tip"><span class="inline-block w-3 h-3 rounded-full text-[8px] leading-3 text-center bg-slate-800 text-slate-500 ml-0.5">i</span>
                     <span class="tip-text" x-text="nameLang==='cn'?'30天价格变化率。反映中期趋势方向和力度。>10% 强势上涨，<-10% 显著下跌。':'30-day price change rate. >10% strong rally, <-10% significant decline.'"></span></span></p>
-                <p class="text-xl font-bold font-mono" :class="pnlClass(itemSignals.signal?.momentum_30||0)" x-text="itemSignals.signal?.momentum_30!==null?(itemSignals.signal.momentum_30>0?'+':'')+itemSignals.signal.momentum_30+'%':'—'"></p>
+                <p class="text-xl font-bold font-mono" :class="pnlClass(itemSignals.signal?.momentum_30||0)" x-text="itemSignals.signal?.momentum_30!=null?(itemSignals.signal.momentum_30>0?'+':'')+itemSignals.signal.momentum_30+'%':'—'"></p>
               </div>
               <div class="card p-3 text-center">
                 <p class="text-[10px] text-slate-600 mb-1"><span x-text="nameLang==='cn'?'波动率':'Volatility'"></span>
@@ -1807,7 +1824,7 @@
                   <div class="flex justify-between"><span class="text-slate-500" x-text="t('ownership_current')"></span><span class="font-mono text-slate-300" x-text="itemSignals.ownership?.current_price?'¥'+itemSignals.ownership.current_price:'—'"></span></div>
                   <div class="flex justify-between"><span class="text-slate-500" x-text="t('ownership_pnl')"></span>
                     <span class="font-mono font-bold" :class="pnlClass(itemSignals.ownership?.pnl||0)"
-                      x-text="itemSignals.ownership?.pnl!==null?((itemSignals.ownership.pnl>=0?'+':'')+'¥'+itemSignals.ownership.pnl+' ('+itemSignals.ownership.pnl_pct+'%)'):'—'"></span>
+                      x-text="itemSignals.ownership?.pnl!=null?((itemSignals.ownership.pnl>=0?'+':'')+'¥'+itemSignals.ownership.pnl+' ('+itemSignals.ownership.pnl_pct+'%)'):'—'"></span>
                   </div>
                   <div class="flex justify-between"><span class="text-slate-500" x-text="nameLang==='cn'?'持有件数':'Held'"></span><span class="font-mono text-slate-300" x-text="itemSignals.ownership?.count??'—'"></span></div>
                   <div class="flex justify-between" x-show="itemSignals.ownership?.target_pnl_pct"><span class="text-slate-500" x-text="nameLang==='cn'?'目标收益':'Target'"></span><span class="font-mono text-slate-300" x-text="itemSignals.ownership?.target_pnl_pct?itemSignals.ownership.target_pnl_pct+'%':'—'"></span></div>
@@ -2159,7 +2176,7 @@
                     <td class="py-1.5 px-2 text-right text-white cursor-default"
                       :title="nameLang==='cn'?(isTouchDevice?'点击修改':'双击修改'):(isTouchDevice?'Tap to edit':'Dbl-click to edit')"
                       @dblclick="row._edit='rented_count'; $nextTick(()=>$el.querySelector('input')?.focus())"
-                      @click="if (isTouchDevice) { row._edit='rented_count'; $nextTick(()=>$el.querySelector('input')?.focus()) }">
+                      @click="if (isTouchDevice) { const _i=$el.querySelector('input'); row._edit='rented_count'; if (_i) { _i.style.removeProperty('display'); _i.focus(); _i.select?.(); } }">
                       <span x-show="row._edit!=='rented_count'" x-text="row.rented_count?.toLocaleString()??'—'"></span>
                       <input x-show="row._edit==='rented_count'" inputmode="numeric" class="w-16 bg-slate-700 rounded text-right text-xs font-mono text-white border border-slate-500 outline-none px-1 py-0.5"
                         :value="row.rented_count??''"
@@ -2171,7 +2188,7 @@
                     <td class="py-1.5 px-2 text-right text-white font-mono cursor-default"
                       :title="nameLang==='cn'?(isTouchDevice?'点击修改':'双击修改'):(isTouchDevice?'Tap to edit':'Dbl-click to edit')"
                       @dblclick="row._edit='rented_value'; $nextTick(()=>$el.querySelector('input')?.focus())"
-                      @click="if (isTouchDevice) { row._edit='rented_value'; $nextTick(()=>$el.querySelector('input')?.focus()) }">
+                      @click="if (isTouchDevice) { const _i=$el.querySelector('input'); row._edit='rented_value'; if (_i) { _i.style.removeProperty('display'); _i.focus(); _i.select?.(); } }">
                       <span x-show="row._edit!=='rented_value'" x-text="row.rented_value!=null?'¥'+Number(row.rented_value).toLocaleString('en-US',{maximumFractionDigits:0}):'—'"></span>
                       <input x-show="row._edit==='rented_value'" inputmode="decimal" class="w-24 bg-slate-700 rounded text-right text-xs font-mono text-white border border-slate-500 outline-none px-1 py-0.5"
                         :value="row.rented_value??''"
@@ -2183,7 +2200,7 @@
                     <td class="py-1.5 px-2 text-right text-amber-400 font-mono cursor-default"
                       :title="nameLang==='cn'?(isTouchDevice?'点击修改 (支持公式如 =2400+65)':'双击修改 (支持公式如 =2400+65)'):(isTouchDevice?'Tap to edit (formulas)':'Dbl-click to edit (formulas like =2400+65)')"
                       @dblclick="row._edit='daily_income'; $nextTick(()=>$el.querySelector('input')?.focus())"
-                      @click="if (isTouchDevice) { row._edit='daily_income'; $nextTick(()=>$el.querySelector('input')?.focus()) }">
+                      @click="if (isTouchDevice) { const _i=$el.querySelector('input'); row._edit='daily_income'; if (_i) { _i.style.removeProperty('display'); _i.focus(); _i.select?.(); } }">
                       <span x-show="row._edit!=='daily_income'" x-text="row.daily_income!=null?'¥'+Number(row.daily_income).toFixed(2):'—'"></span>
                       <input x-show="row._edit==='daily_income'" inputmode="decimal" class="w-24 bg-slate-700 rounded text-right text-xs font-mono text-white border border-slate-500 outline-none px-1 py-0.5"
                         :value="row.daily_income??''" placeholder="=2400+65"
@@ -2204,7 +2221,7 @@
                     <td class="py-1.5 px-2 text-right text-white cursor-default"
                       :title="nameLang==='cn'?(isTouchDevice?'点击修改':'双击修改'):(isTouchDevice?'Tap to edit':'Dbl-click to edit')"
                       @dblclick="row._edit='total_inventory'; $nextTick(()=>$el.querySelector('input')?.focus())"
-                      @click="if (isTouchDevice) { row._edit='total_inventory'; $nextTick(()=>$el.querySelector('input')?.focus()) }">
+                      @click="if (isTouchDevice) { const _i=$el.querySelector('input'); row._edit='total_inventory'; if (_i) { _i.style.removeProperty('display'); _i.focus(); _i.select?.(); } }">
                       <span x-show="row._edit!=='total_inventory'" x-text="row.total_inventory?.toLocaleString()??'—'"></span>
                       <input x-show="row._edit==='total_inventory'" inputmode="numeric" class="w-16 bg-slate-700 rounded text-right text-xs font-mono text-white border border-slate-500 outline-none px-1 py-0.5"
                         :value="row.total_inventory??''"
@@ -2216,7 +2233,7 @@
                     <td class="py-1.5 px-2 text-right text-white font-mono cursor-default"
                       :title="nameLang==='cn'?(isTouchDevice?'点击修改 (支持公式)':'双击修改 (支持公式)'):(isTouchDevice?'Tap to edit (formulas)':'Dbl-click to edit (formulas)')"
                       @dblclick="row._edit='inventory_value'; $nextTick(()=>$el.querySelector('input')?.focus())"
-                      @click="if (isTouchDevice) { row._edit='inventory_value'; $nextTick(()=>$el.querySelector('input')?.focus()) }">
+                      @click="if (isTouchDevice) { const _i=$el.querySelector('input'); row._edit='inventory_value'; if (_i) { _i.style.removeProperty('display'); _i.focus(); _i.select?.(); } }">
                       <span x-show="row._edit!=='inventory_value'" x-text="row.inventory_value!=null?'¥'+Number(row.inventory_value).toLocaleString('en-US',{maximumFractionDigits:0}):'—'"></span>
                       <input x-show="row._edit==='inventory_value'" inputmode="decimal" class="w-28 bg-slate-700 rounded text-right text-xs font-mono text-white border border-slate-500 outline-none px-1 py-0.5"
                         :value="row.inventory_value??''"
@@ -2229,7 +2246,7 @@
                       :class="row.price_change>0?'text-emerald-400':row.price_change<0?'text-red-400':'text-slate-500'"
                       :title="row.cost_basis ? ((nameLang==='cn'?'成本: ¥':'Cost: ¥') + Number(row.cost_basis).toLocaleString() + '\n' + (nameLang==='cn'?'双击修改成本':'Dbl-click to edit cost')) : (nameLang==='cn'?'双击设置成本':'Dbl-click to set cost')"
                       @dblclick="row._edit='cost_basis'; $nextTick(()=>$el.querySelector('input')?.focus())"
-                      @click="if (isTouchDevice) { row._edit='cost_basis'; $nextTick(()=>$el.querySelector('input')?.focus()) }">
+                      @click="if (isTouchDevice) { const _i=$el.querySelector('input'); row._edit='cost_basis'; if (_i) { _i.style.removeProperty('display'); _i.focus(); _i.select?.(); } }">
                       <span x-show="row._edit!=='cost_basis'" x-text="row.price_change!=null?(row.price_change*100).toFixed(2)+'%':'—'"></span>
                       <input x-show="row._edit==='cost_basis'" inputmode="decimal" class="w-24 bg-slate-700 rounded text-right text-xs font-mono text-white border border-slate-500 outline-none px-1 py-0.5"
                         :value="row.cost_basis??''" placeholder="成本"
@@ -2241,7 +2258,7 @@
                     <td class="py-1.5 px-2 text-right font-mono text-slate-400 cursor-default"
                       :title="nameLang==='cn'?(isTouchDevice?'点击修改':'双击修改'):(isTouchDevice?'Tap to edit':'Dbl-click to edit')"
                       @dblclick="row._edit='steamdt_index'; $nextTick(()=>$el.querySelector('input')?.focus())"
-                      @click="if (isTouchDevice) { row._edit='steamdt_index'; $nextTick(()=>$el.querySelector('input')?.focus()) }">
+                      @click="if (isTouchDevice) { const _i=$el.querySelector('input'); row._edit='steamdt_index'; if (_i) { _i.style.removeProperty('display'); _i.focus(); _i.select?.(); } }">
                       <span x-show="row._edit!=='steamdt_index'" x-text="row.steamdt_index!=null?Number(row.steamdt_index).toFixed(2):'—'"></span>
                       <input x-show="row._edit==='steamdt_index'" inputmode="decimal" class="w-16 bg-slate-700 rounded text-right text-xs font-mono text-white border border-slate-500 outline-none px-1 py-0.5"
                         :value="row.steamdt_index??''"
@@ -2405,7 +2422,7 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
             </svg>
-            <input type="search" name="item-filter" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" x-model="filters.search"
+            <input type="search" name="item-filter" autocomplete="off" readonly onpointerdown="this.removeAttribute('readonly')" onfocus="this.removeAttribute('readonly')" x-model="filters.search"
               @input.debounce.400ms="page=1; loadItems()"
               :placeholder="t('search_placeholder')"
               class="w-full pl-9 pr-3 py-2 rounded-xl text-sm border" />

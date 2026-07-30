@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from sqlalchemy import and_, func, or_, select, case, not_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.tasks import spawn
 from app.core.database import AsyncSessionLocal, get_db
 from app.models.db_models import InventoryItem, PriceSnapshot
 from app.core.constants import ACTIVE_STATUSES
@@ -78,7 +79,7 @@ def _kick_refresh(cache: dict, fetcher) -> None:
     if not get_active_token():
         return
     cache["refreshing"] = True
-    asyncio.create_task(_refresh_now(cache, fetcher))
+    spawn(_refresh_now(cache, fetcher), name="_refresh_now")
 
 
 async def _get_cached_rented_value() -> float:
@@ -256,7 +257,7 @@ async def trigger_refresh_prices():
     from app.services.youpin import market_refresh_state, bulk_refresh_market_prices
     if market_refresh_state["status"] == "running":
         return {"started": False, "message": "已有刷新任务正在运行", "state": market_refresh_state}
-    asyncio.create_task(bulk_refresh_market_prices(None))
+    spawn(bulk_refresh_market_prices(None), name="bulk_refresh_market_prices")
     return {"started": True, "message": "价格刷新已启动（悠悠有品官方价格）", "state": market_refresh_state}
 
 

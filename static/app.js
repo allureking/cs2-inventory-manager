@@ -1,7 +1,11 @@
     // ── AURORA 指针追光：卡片表面跟随光标的环境光斑（写入 CSS 变量,纯视觉）──
-    // 单个委托监听 + rAF 节流;触屏/降级动效环境零开销。
+    // 单个委托监听 + rAF 节流。
     (() => {
       if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      // v0.13.3：真正做到"触屏零开销"。此前只挡了 reduced-motion,而 pointermove
+      // 在触摸滚动时同样触发,每帧 closest() + getBoundingClientRect()(强制同步布局)
+      // 只为驱动 .card:hover::after —— 触摸设备永远看不到该效果,纯属滚动掉帧。
+      if (!matchMedia('(hover: hover) and (pointer: fine)').matches) return;
       let raf = 0;
       document.addEventListener('pointermove', (e) => {
         if (raf) return;
@@ -1587,7 +1591,16 @@
           if (p < 1 || p > max) return;
           this.page = p;
           this.loadItems();
-          document.querySelector('.tbl-wrap')?.scrollTo({ top: 0, behavior: 'smooth' });
+          // v0.13.3：此前用 querySelector('.tbl-wrap') 取到的是**上架页**的表格
+          // (文档中第一个匹配),持仓表在后面 → 桌面滚了个 display:none 的元素、
+          // 手机上 .tbl-wrap{max-height:none} 根本没有内部滚动 → 翻页后仍停在页尾。
+          // 改为滚动持仓区自身;移动端卡片列表没有内部滚动容器,退化为滚窗口。
+          const wrap = document.querySelector('.holdings-table-wrap');
+          if (wrap && wrap.scrollHeight > wrap.clientHeight) {
+            wrap.scrollTo({ top: 0, behavior: 'smooth' });
+          } else {
+            document.getElementById('statCards')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
         },
 
         // ── Sort ──────────────────────────────────────────────────────
@@ -1678,10 +1691,23 @@
 
         _startRefreshPoll() {
           clearInterval(this._refreshPollTimer);
+          // v0.13.3：加失败熔断。此前 !r.ok 直接 return、catch 里还在 setInterval 内
+          // 弹 toast → 后端一抖动就每 2.5 秒弹一次错误、永不停止,且 refreshing 永为 true
+          // 让「刷新市价」按钮直到刷新页面前一直不可用。
+          let fails = 0;
+          const giveUp = (msg) => {
+            clearInterval(this._refreshPollTimer);
+            this.refreshing = false;
+            this.showToast(msg, 'error');   // 只弹一次
+          };
           this._refreshPollTimer = setInterval(async () => {
             try {
               const r = await fetch('/api/youpin/market/status');
-              if (!r.ok) return;
+              if (!r.ok) {
+                if (++fails >= 5) giveUp('刷新状态查询持续失败,已停止轮询');
+                return;
+              }
+              fails = 0;
               const s = await r.json();
               this.refreshProgress = s.progress;
               if (s.status === 'done' || s.status === 'error' || s.status === 'token_expired') {
@@ -1697,7 +1723,9 @@
                   this.showToast('市价刷新失败：' + (s.error || '未知错误'), 'error');
                 }
               }
-            } catch (e) { this.showToast(e.message || '刷新轮询失败', 'error'); }
+            } catch (e) {
+              if (++fails >= 5) giveUp('刷新轮询失败：' + (e.message || e));
+            }
           }, 2500);
         },
 
@@ -2172,16 +2200,24 @@
           } catch (e) { this.showToast(e.message || '加载预警列表失败', 'error'); }
         },
 
+        // v0.13.3：此前无 ok 检查也无 catch —— 服务端 500 或断网时,本地照样把
+        // is_read 翻成 true 并扣角标(服务端根本没收到),刷新后"已读"又变回未读。
         async markAlertRead(a) {
-          await fetch(`/api/analysis/alerts/${a.id}/read`, { method: 'PATCH' });
-          a.is_read = true;
-          this.unreadAlertCount = Math.max(0, this.unreadAlertCount - 1);
+          try {
+            const r = await fetch(`/api/analysis/alerts/${a.id}/read`, { method: 'PATCH' });
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            a.is_read = true;
+            this.unreadAlertCount = Math.max(0, this.unreadAlertCount - 1);
+          } catch (e) { this.showToast('标记已读失败：' + (e.message || e), 'error'); }
         },
 
         async markAllAlertsRead() {
-          await fetch('/api/analysis/alerts/read-all', { method: 'POST' });
-          this.analysisAlerts.items.forEach(a => a.is_read = true);
-          this.unreadAlertCount = 0;
+          try {
+            const r = await fetch('/api/analysis/alerts/read-all', { method: 'POST' });
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            this.analysisAlerts.items.forEach(a => a.is_read = true);
+            this.unreadAlertCount = 0;
+          } catch (e) { this.showToast('全部已读失败：' + (e.message || e), 'error'); }
         },
 
         async loadSpreads(page) {
@@ -2268,26 +2304,36 @@
           this.backfillRunning = true;
           this.backfillProgress = '启动中…';
           try {
-            await fetch('/api/analysis/backfill', { method: 'POST' });
+            const start = await fetch('/api/analysis/backfill', { method: 'POST' });
+            if (!start.ok) throw new Error(`HTTP ${start.status}`);
+            // v0.13.3：加失败熔断 + 安全超时。此前无 r.ok 检查、bf 为 undefined 时
+            // 抛进 catch 只 console.warn,3s 轮询永不停 → 按钮永久卡在「回填中…」。
+            let fails = 0;
+            const stop = (msg, type) => {
+              clearInterval(poll); clearTimeout(guard);
+              this.backfillRunning = false;
+              if (msg) this.showToast(msg, type || 'error');
+            };
             const poll = setInterval(async () => {
               try {
                 const r = await fetch('/api/analysis/collector/status');
-                if (r.ok) {
-                  const d = await r.json();
-                  const bf = d.backfill;
-                  this.backfillProgress = `${bf.done}/${bf.total} ${bf.progress||''}`;
-                  if (bf.status !== 'running') {
-                    clearInterval(poll);
-                    this.backfillRunning = false;
-                    this.showToast(bf.status === 'done' ? '历史数据回填完成' : '回填异常: ' + bf.progress, bf.status === 'done' ? 'success' : 'error');
-                    this.loadAnalysis();
-                  }
+                if (!r.ok) { if (++fails >= 5) stop('回填状态查询持续失败,已停止轮询'); return; }
+                const d = await r.json();
+                const bf = d.backfill;
+                if (!bf) { if (++fails >= 5) stop('回填状态缺失,已停止轮询'); return; }
+                fails = 0;
+                this.backfillProgress = `${bf.done}/${bf.total} ${bf.progress||''}`;
+                if (bf.status !== 'running') {
+                  stop(bf.status === 'done' ? '历史数据回填完成' : '回填异常: ' + bf.progress,
+                       bf.status === 'done' ? 'success' : 'error');
+                  this.loadAnalysis();
                 }
-              } catch (e) { console.warn('Backfill poll error:', e.message); }
+              } catch (e) { if (++fails >= 5) stop('回填轮询失败：' + (e.message || e)); }
             }, 3000);
+            const guard = setTimeout(() => stop('回填超时(20 分钟),已停止轮询'), 20 * 60 * 1000);
           } catch (e) {
             this.backfillRunning = false;
-            this.showToast('回填启动失败', 'error');
+            this.showToast('回填启动失败：' + (e.message || e), 'error');
           }
         },
 
@@ -2307,9 +2353,15 @@
         },
 
         async collectNow() {
+          // v0.13.3：此前这里只弹一句成功提示、根本不发请求(端点也不存在),
+          // 用户以为采集已启动。现在真调 /api/analysis/collect-now 并如实反馈。
           try {
-            this.showToast('价格采集已触发，后台运行中（约8分钟）', 'success');
-          } catch (e) { this.showToast(e.message || '价格采集触发失败', 'error'); }
+            const r = await fetch('/api/analysis/collect-now', { method: 'POST' });
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(d.detail || `HTTP ${r.status}`);
+            this.showToast(d.message || (d.started ? '价格采集已启动（约 8 分钟）' : '采集已在运行中'),
+                           d.started === false ? 'warning' : 'success');
+          } catch (e) { this.showToast('价格采集触发失败：' + (e.message || e), 'error'); }
         },
 
         async triggerCsqaqSync() {
@@ -2444,7 +2496,7 @@
         // 货架图片 URL（优先用 imgUrl，fallback icon_url）
         shelfImgUrl(item) {
           const raw = item.imgUrl || item.imgurl || item.icon_url || item.IconUrl;
-          if (!raw) return '';
+          if (!raw) return '/static/placeholder.svg';   // 同上：避免空 src 触发整页重取
           // 悠悠自有 CDN 地址（非 steam 路径）直接返回
           if (raw.startsWith('http')) return raw;
           // Steam economy icon 路径
@@ -2561,7 +2613,9 @@
           return Math.round(part / total * 100);
         },
         iconUrl(url, size = 62) {
-          if (!url) return '';
+          // 返回占位图而非 ''：空 src 会解析成当前文档 URL,浏览器会为每个无图行
+          // 重新下载整个 HTML 页面(200 行 = 200 次文档请求),手机流量与解析开销都实打实。
+          if (!url) return '/static/placeholder.svg';
           if (url.startsWith('http')) return url;
           return `https://community.fastly.steamstatic.com/economy/image/${url}/${size}fx${size}f`;
         },

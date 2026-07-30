@@ -49,6 +49,7 @@ class ZeroCdRequest(BaseModel):
     order_ids: list[str] = Field(..., min_length=1)
 
 from app.core.config import settings
+from app.core.tasks import spawn
 from app.core.database import get_db
 from app.services import youpin as youpin_svc
 
@@ -171,7 +172,7 @@ async def sync_template_ids():
     _require_token()
     if _sync_tpl_state["status"] == "running":
         return {"started": False, "message": "同步正在进行中", "state": _sync_tpl_state}
-    asyncio.create_task(_run_sync_template_ids())
+    spawn(_run_sync_template_ids(), name="_run_sync_template_ids")
     return {"started": True, "message": "模板ID同步已启动"}
 
 
@@ -194,7 +195,7 @@ async def refresh_market_prices():
     if state["status"] == "running":
         return {"started": False, "message": "已有刷新任务正在运行", "state": state}
 
-    asyncio.create_task(youpin_svc.bulk_refresh_market_prices(None))
+    spawn(youpin_svc.bulk_refresh_market_prices(None), name="bulk_refresh_market_prices")
     return {"started": True, "message": "市价刷新已启动（使用悠悠有品官方价格）", "state": state}
 
 
@@ -458,7 +459,7 @@ async def import_all():
     if _import_state["status"] == "running":
         return {"started": False, "message": "导入正在进行中", "state": _import_state}
 
-    asyncio.create_task(_run_import(_STEPS_ALL))
+    spawn(_run_import(_STEPS_ALL), name="_run_import")
     return {"started": True, "message": "全量导入已启动", "state": _import_state}
 
 
@@ -469,7 +470,7 @@ async def import_quick():
     if _import_state["status"] == "running":
         return {"started": False, "message": "导入正在进行中", "state": _import_state}
 
-    asyncio.create_task(_run_import(_STEPS_QUICK))
+    spawn(_run_import(_STEPS_QUICK), name="_run_import")
     return {"started": True, "message": "快速同步已启动", "state": _import_state}
 
 
@@ -480,7 +481,7 @@ async def import_records():
     if _import_state["status"] == "running":
         return {"started": False, "message": "导入正在进行中", "state": _import_state}
 
-    asyncio.create_task(_run_import(_STEPS_RECORDS))
+    spawn(_run_import(_STEPS_RECORDS), name="_run_import")
     return {"started": True, "message": "记录匹配已启动", "state": _import_state}
 
 

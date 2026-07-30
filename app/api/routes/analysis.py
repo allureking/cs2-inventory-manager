@@ -29,6 +29,7 @@ from sqlalchemy import and_, func, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.constants import ACTIVE_STATUSES
+from app.core.tasks import spawn
 from app.core.database import AsyncSessionLocal, get_db
 from app.models.db_models import (
     InventoryItem,
@@ -848,8 +849,25 @@ async def trigger_backfill():
     if backfill_state["status"] == "running":
         return {"started": False, "message": "回填已在运行中", "state": backfill_state}
 
-    asyncio.create_task(backfill_avg_prices())
+    spawn(backfill_avg_prices(), name="backfill_avg_prices")
     return {"started": True, "message": "历史数据回填已启动", "state": backfill_state}
+
+
+@router.post("/collect-now")
+async def trigger_collect_now():
+    """
+    立即采集价格（后台任务）。
+
+    v0.13.3：此前前端「立即采集价格」按钮只弹一句成功提示、根本不发请求
+    （app.js collectNow 是空壳，也没有对应端点）——用户以为采集已启动。
+    """
+    from app.services.collector import collect_prices
+
+    if collector_state.get("status") == "running":
+        return {"started": False, "message": "采集已在运行中", "state": collector_state}
+
+    spawn(collect_prices(), name="collect_prices")
+    return {"started": True, "message": "价格采集已启动（约 8 分钟）", "state": collector_state}
 
 
 @router.post("/compute-now")
@@ -945,13 +963,13 @@ async def trigger_csqaq_sync(mode: str = Query("sync")):
         return {"started": False, "message": "CSQAQ 同步已在运行中", "state": csqaq_sync_state}
 
     if mode == "mapping":
-        asyncio.create_task(build_id_mapping())
+        spawn(build_id_mapping(), name="build_id_mapping")
         return {"started": True, "message": "CSQAQ ID 映射已启动"}
     else:
         async def _full_sync():
             await build_id_mapping()
             await sync_all_items()
-        asyncio.create_task(_full_sync())
+        spawn(_full_sync(), name="_full_sync")
         return {"started": True, "message": "CSQAQ 全量同步已启动（映射 + 数据拉取）"}
 
 

@@ -131,14 +131,37 @@ def test_token_roundtrip_tamper_expiry():
 # ── 中间件门禁 ────────────────────────────────────────────────────────────
 
 
-def test_middleware_passthrough_when_no_users():
-    """用户表为空 → 0.9.x 行为：一切直通（API key 规则除外）。"""
+def test_middleware_fail_closed_when_no_users():
+    """v0.13.3 行为变更(安全):用户表为空 → fail-closed,不再静默直通。
+
+    旧行为(0.9.x~0.13.2)是直通,风险:恢复 v0.10.0 之前的备份、误删 app_user、
+    或新机 init_db 建完空表就起服务 → 全站读端点(持仓/成本/逐件PnL/租赁明细)
+    对公网敞开且无告警。现在 API 返回 503、页面 302 → /login。
+    """
     async def body():
         async with memory_db() as Session:
             _reset_auth_state()
             app, get_db = _build_app()
             with mock.patch.object(core_db, "AsyncSessionLocal", Session), \
-                 mock.patch.object(settings, "app_api_key", ""):
+                 mock.patch.object(settings, "app_api_key", ""), \
+                 mock.patch.object(settings, "allow_anonymous", False):
+                async with _client_ctx(Session, app, get_db) as c:
+                    assert (await c.get("/api/data")).status_code == 503
+                    assert (await c.post("/api/write")).status_code == 503
+                    r = await c.get("/")
+                    assert r.status_code == 302 and "/login" in r.headers.get("location", "")
+    _run(body())
+
+
+def test_middleware_passthrough_when_allow_anonymous():
+    """本地开发逃生门:显式 ALLOW_ANONYMOUS=1 时保留旧的直通行为。"""
+    async def body():
+        async with memory_db() as Session:
+            _reset_auth_state()
+            app, get_db = _build_app()
+            with mock.patch.object(core_db, "AsyncSessionLocal", Session), \
+                 mock.patch.object(settings, "app_api_key", ""), \
+                 mock.patch.object(settings, "allow_anonymous", True):
                 async with _client_ctx(Session, app, get_db) as c:
                     assert (await c.get("/api/data")).status_code == 200
                     assert (await c.post("/api/write")).status_code == 200

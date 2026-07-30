@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     telegram_chat_id: str = ""
     # session cookie 的 Secure 标记（生产 https 保持 True；本地 http 调试可关）
     session_cookie_secure: bool = True
+    # v0.13.3：用户表为空时是否允许匿名访问（默认 False = fail-closed）。
+    # 仅供本地开发；生产绝不可设 True——否则误删 app_user 即全站数据裸奔。
+    allow_anonymous: bool = False
 
     # 采价平台白名单 — 只保存这些平台的价格快照，逗号分隔
     # 可选: YOUPIN,BUFF,STEAM,C5,HALOSKINS,SKINPORT,DMARKET,WAXPEER,CSMONEY
