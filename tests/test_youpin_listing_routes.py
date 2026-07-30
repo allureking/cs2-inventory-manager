@@ -113,3 +113,95 @@ def test_listing_snapshot_detail_404():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+# ── 上架/改价入参约束（v0.13.3）─────────────────────────────────────────────
+#
+# 这一组端点会把价格**直接推到悠悠线上**（真金白银），此前全部是裸 float/int：
+# 0、负数、NaN、1e308 都能原样穿到悠悠。下面只用纯 Pydantic 校验，不发任何请求。
+
+
+import pytest as _pytest
+from pydantic import ValidationError
+
+from app.api.routes.listing import (
+    BatchSmartRepriceRequest,
+    BothRequest,
+    LeaseRequest,
+    RepriceRequest,
+    SellRequest,
+    SmartListRequest,
+)
+
+NAN = float("nan")
+INF = float("inf")
+
+
+class TestListingInputGuards:
+    @_pytest.mark.parametrize("price", [0, -1, -0.01, NAN, INF, 1e308, 3_000_000])
+    def test_sell_price_rejected(self, price):
+        with _pytest.raises(ValidationError):
+            SellRequest(asset_id="a1", price=price)
+
+    def test_sell_price_accepted(self):
+        assert SellRequest(asset_id="a1", price=1234.56).price == 1234.56
+
+    def test_empty_asset_id_rejected(self):
+        with _pytest.raises(ValidationError):
+            SellRequest(asset_id="", price=10.0)
+
+    @_pytest.mark.parametrize("kw", [
+        {"lease_unit": 0}, {"lease_unit": -5}, {"lease_unit": NAN},
+        {"long_lease_unit": 0}, {"deposit": -1},
+        {"max_days": 0}, {"max_days": 91}, {"max_days": -30},
+    ])
+    def test_lease_bounds(self, kw):
+        base = dict(asset_id="a1", lease_unit=3.0, long_lease_unit=2.5, deposit=100.0)
+        base.update(kw)
+        with _pytest.raises(ValidationError):
+            LeaseRequest(**base)
+
+    def test_lease_accepted(self):
+        r = LeaseRequest(asset_id="a1", lease_unit=3.0, long_lease_unit=2.5,
+                         deposit=100.0, max_days=90)
+        assert r.max_days == 90 and r.deposit == 100.0
+
+    def test_both_sell_price_bounds(self):
+        base = dict(asset_id="a1", sell_price=100.0, lease_unit=3.0,
+                    long_lease_unit=2.5, deposit=100.0)
+        assert BothRequest(**base).sell_price == 100.0
+        with _pytest.raises(ValidationError):
+            BothRequest(**{**base, "sell_price": 0})
+
+    @_pytest.mark.parametrize("kw", [
+        {"commodity_id": 0}, {"commodity_id": -1},
+        {"sell_price": 0}, {"sell_price": -10}, {"sell_price": NAN},
+        {"lease_unit": 0}, {"deposit": -1},
+    ])
+    def test_reprice_bounds(self, kw):
+        with _pytest.raises(ValidationError):
+            RepriceRequest(**{"commodity_id": 123, **kw})
+
+    def test_reprice_none_fields_still_allowed(self):
+        """改价允许只传部分字段（None = 不改），约束不能把 None 也挡掉。"""
+        r = RepriceRequest(commodity_id=123, sell_price=50.0)
+        assert r.lease_unit is None and r.deposit is None
+
+    def test_smart_mode_is_enumerated(self):
+        assert SmartListRequest(asset_id="a", template_id=1, mode="both").mode == "both"
+        with _pytest.raises(ValidationError):
+            SmartListRequest(asset_id="a", template_id=1, mode="selll")
+
+    @_pytest.mark.parametrize("kw", [
+        {"template_id": 0}, {"member_level": 0}, {"member_level": 4},
+        {"abrade": 1.5}, {"abrade": -0.1}, {"buy_price": -1},
+    ])
+    def test_smart_bounds(self, kw):
+        with _pytest.raises(ValidationError):
+            SmartListRequest(**{"asset_id": "a", "template_id": 1, **kw})
+
+    def test_batch_size_capped_at_30(self):
+        item = {"commodity_id": 1, "template_id": 2}
+        assert len(BatchSmartRepriceRequest(items=[item] * 30).items) == 30
+        with _pytest.raises(ValidationError):
+            BatchSmartRepriceRequest(items=[item] * 31)

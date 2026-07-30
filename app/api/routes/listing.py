@@ -15,10 +15,10 @@ GET  /api/listing/preview          — 预览定价（仅查价不上架）
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 
 from app.core.database import AsyncSessionLocal
@@ -145,16 +145,23 @@ async def preview_price(
 
 # ── 智能上架 ────────────────────────────────────────────────────────────────
 
+# 入参约束（v0.13.3）：这一组端点会把价格**直接推到悠悠线上**，是全应用后果最重的
+# 输入。此前全部是裸 float/int，0、负数、NaN、1e308 都能穿过去。上限取得很宽松，
+# 只用于拦截"单位搞错 / 前端算歪 / 手滑多打几个零"这类明显错误，不干预正常定价。
+_MAX_PRICE = 2_000_000.0      # 元；CS2 最贵的刀/手套也远低于此
+_MAX_RENT = 100_000.0         # 元/天
+
+
 class SmartListRequest(BaseModel):
-    asset_id: str
-    template_id: int
-    abrade: Optional[float] = None
-    mode: str = "sell"              # "sell" | "lease" | "both"
-    buy_price: float = 0.0
-    take_profit_ratio: float = 0.0
-    fix_lease_ratio: float = 0.0
+    asset_id: str = Field(min_length=1)
+    template_id: int = Field(gt=0)
+    abrade: Optional[float] = Field(default=None, ge=0, le=1)
+    mode: Literal["sell", "lease", "both"] = "sell"
+    buy_price: float = Field(default=0.0, ge=0, le=_MAX_PRICE)
+    take_profit_ratio: float = Field(default=0.0, ge=-0.9, le=10)
+    fix_lease_ratio: float = Field(default=0.0, ge=-0.9, le=10)
     use_undercut: bool = True
-    member_level: int = 3           # 出租大会员等级 1/2/3 → max_days 8/30/90
+    member_level: int = Field(default=3, ge=1, le=3)  # → max_days 8/30/90
 
 
 @router.post("/smart")
@@ -177,16 +184,18 @@ async def smart_list_api(body: SmartListRequest):
 
 
 class BatchSmartRepriceItem(BaseModel):
-    commodity_id: int
-    template_id: int
-    abrade: Optional[float] = None
+    commodity_id: int = Field(gt=0)
+    template_id: int = Field(gt=0)
+    abrade: Optional[float] = Field(default=None, ge=0, le=1)
     is_can_lease: bool = False
 
 
 class BatchSmartRepriceRequest(BaseModel):
-    items: list[BatchSmartRepriceItem]
+    # max_length 与下面那句 len>30 的 400 双保险：前者挡住超大 body 被解析，
+    # 后者保留原有中文报错
+    items: list[BatchSmartRepriceItem] = Field(max_length=30)
     use_undercut: bool = True
-    take_profit_ratio: float = 0.0
+    take_profit_ratio: float = Field(default=0.0, ge=-0.9, le=10)
 
 
 @router.post("/batch-smart-reprice")
@@ -254,25 +263,25 @@ async def batch_smart_reprice_api(body: BatchSmartRepriceRequest):
 # ── 手动上架 ────────────────────────────────────────────────────────────────
 
 class SellRequest(BaseModel):
-    asset_id: str
-    price: float
+    asset_id: str = Field(min_length=1)
+    price: float = Field(gt=0, le=_MAX_PRICE)
 
 
 class LeaseRequest(BaseModel):
-    asset_id: str
-    lease_unit: float
-    long_lease_unit: float
-    deposit: float
-    max_days: int = 30
+    asset_id: str = Field(min_length=1)
+    lease_unit: float = Field(gt=0, le=_MAX_RENT)
+    long_lease_unit: float = Field(gt=0, le=_MAX_RENT)
+    deposit: float = Field(ge=0, le=_MAX_PRICE)
+    max_days: int = Field(default=30, ge=1, le=90)
 
 
 class BothRequest(BaseModel):
-    asset_id: str
-    sell_price: float
-    lease_unit: float
-    long_lease_unit: float
-    deposit: float
-    max_days: int = 30
+    asset_id: str = Field(min_length=1)
+    sell_price: float = Field(gt=0, le=_MAX_PRICE)
+    lease_unit: float = Field(gt=0, le=_MAX_RENT)
+    long_lease_unit: float = Field(gt=0, le=_MAX_RENT)
+    deposit: float = Field(ge=0, le=_MAX_PRICE)
+    max_days: int = Field(default=30, ge=1, le=90)
 
 
 @router.post("/sell")
@@ -312,11 +321,11 @@ async def list_both_api(body: BothRequest):
 # ── 改价 ────────────────────────────────────────────────────────────────────
 
 class RepriceRequest(BaseModel):
-    commodity_id: int
-    sell_price: Optional[float] = None
-    lease_unit: Optional[float] = None
-    long_lease_unit: Optional[float] = None
-    deposit: Optional[float] = None
+    commodity_id: int = Field(gt=0)
+    sell_price: Optional[float] = Field(default=None, gt=0, le=_MAX_PRICE)
+    lease_unit: Optional[float] = Field(default=None, gt=0, le=_MAX_RENT)
+    long_lease_unit: Optional[float] = Field(default=None, gt=0, le=_MAX_RENT)
+    deposit: Optional[float] = Field(default=None, ge=0, le=_MAX_PRICE)
     is_can_sold: bool = True
     is_can_lease: bool = False
 
