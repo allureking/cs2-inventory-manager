@@ -23,6 +23,7 @@ from sqlalchemy import delete, select
 
 from app.core.database import AsyncSessionLocal
 from app.models.db_models import ListingSnapshot, ListingSnapshotItem, InventoryItem
+from app.services import price_guard
 from app.services.youpin import TokenExpiredError
 from app.services.youpin_listing import (
     calc_lease_price,
@@ -260,11 +261,72 @@ async def batch_smart_reprice_api(body: BatchSmartRepriceRequest):
         _handle_token_error(e)
 
 
+# ── 手滑低价防线（v0.13.4）──────────────────────────────────────────────────
+#
+# 人工输入的价格若明显低于该件当前市价，回 409 + 结构化 detail，由前端弹二次确认、
+# 用户确认后带 confirm_below_market=true 重发。设计取舍（为何是确认而非拦截、为何
+# 查不到基准时放行）见 app/services/price_guard.py 顶部。
+#
+# 这层必须在服务端：前端弹窗只管体验，带 X-API-Key 的脚本会直接绕过它。
+
+
+async def _guard_low_price(
+    *,
+    confirmed: bool,
+    sell_price: Optional[float] = None,
+    lease_unit: Optional[float] = None,
+    market_hash_name: Optional[str] = None,
+    template_id: Optional[int] = None,
+    asset_id: Optional[str] = None,
+) -> None:
+    """触发即 raise 409；确认过、或查不到基准、或价格不低 → 静默通过。"""
+    if confirmed:
+        return
+
+    if sell_price is not None:
+        name = market_hash_name
+        if not name and asset_id:
+            name = await _hash_name_by_asset(asset_id)
+        basis = await _sell_basis_for(name)
+        if price_guard.is_below_market(sell_price, basis):
+            raise HTTPException(
+                status_code=409,
+                detail=price_guard.below_market_detail("售价", sell_price, basis),
+            )
+
+    if lease_unit is not None and template_id:
+        basis = await price_guard.lease_basis(template_id)
+        if price_guard.is_below_market(lease_unit, basis):
+            raise HTTPException(
+                status_code=409,
+                detail=price_guard.below_market_detail("日租金", lease_unit, basis),
+            )
+
+
+async def _sell_basis_for(market_hash_name: Optional[str]):
+    if not market_hash_name:
+        return price_guard.NO_BASIS
+    async with AsyncSessionLocal() as db:
+        return await price_guard.sell_basis(db, market_hash_name)
+
+
+async def _hash_name_by_asset(asset_id: str) -> Optional[str]:
+    """asset_id → market_hash_name。asset_id 无 unique 约束（租赁导入甚至往里写
+    order_id），所以只取一行、查不到就返回 None 走放行。"""
+    async with AsyncSessionLocal() as db:
+        return (await db.execute(
+            select(InventoryItem.market_hash_name)
+            .where(InventoryItem.asset_id == str(asset_id))
+            .limit(1)
+        )).scalars().first()
+
+
 # ── 手动上架 ────────────────────────────────────────────────────────────────
 
 class SellRequest(BaseModel):
     asset_id: str = Field(min_length=1)
     price: float = Field(gt=0, le=_MAX_PRICE)
+    confirm_below_market: bool = False
 
 
 class LeaseRequest(BaseModel):
@@ -273,6 +335,8 @@ class LeaseRequest(BaseModel):
     long_lease_unit: float = Field(gt=0, le=_MAX_RENT)
     deposit: float = Field(ge=0, le=_MAX_PRICE)
     max_days: int = Field(default=30, ge=1, le=90)
+    template_id: Optional[int] = Field(default=None, gt=0)  # 有则启用租金侧防线
+    confirm_below_market: bool = False
 
 
 class BothRequest(BaseModel):
@@ -282,11 +346,15 @@ class BothRequest(BaseModel):
     long_lease_unit: float = Field(gt=0, le=_MAX_RENT)
     deposit: float = Field(ge=0, le=_MAX_PRICE)
     max_days: int = Field(default=30, ge=1, le=90)
+    template_id: Optional[int] = Field(default=None, gt=0)  # 有则启用租金侧防线
+    confirm_below_market: bool = False
 
 
 @router.post("/sell")
 async def list_sell_api(body: SellRequest):
     """手动出售上架"""
+    await _guard_low_price(confirmed=body.confirm_below_market,
+                           sell_price=body.price, asset_id=body.asset_id)
     try:
         return await list_for_sell(body.asset_id, body.price)
     except Exception as e:
@@ -296,6 +364,8 @@ async def list_sell_api(body: SellRequest):
 @router.post("/lease")
 async def list_lease_api(body: LeaseRequest):
     """手动出租上架"""
+    await _guard_low_price(confirmed=body.confirm_below_market,
+                           lease_unit=body.lease_unit, template_id=body.template_id)
     try:
         return await list_for_lease(
             body.asset_id, body.lease_unit, body.long_lease_unit,
@@ -308,6 +378,9 @@ async def list_lease_api(body: LeaseRequest):
 @router.post("/both")
 async def list_both_api(body: BothRequest):
     """可租可售同时上架"""
+    await _guard_low_price(confirmed=body.confirm_below_market,
+                           sell_price=body.sell_price, lease_unit=body.lease_unit,
+                           asset_id=body.asset_id, template_id=body.template_id)
     try:
         return await list_for_both(
             body.asset_id, body.sell_price,
@@ -328,11 +401,23 @@ class RepriceRequest(BaseModel):
     deposit: Optional[float] = Field(default=None, ge=0, le=_MAX_PRICE)
     is_can_sold: bool = True
     is_can_lease: bool = False
+    # 低价防线用：拿基准需要名字（售价）/ 模板（租金）。都是货架条目上现成有的字段，
+    # 缺失时对应那一侧的防线自动降级为放行。
+    market_hash_name: Optional[str] = None
+    template_id: Optional[int] = Field(default=None, gt=0)
+    confirm_below_market: bool = False
 
 
 @router.put("/reprice")
 async def reprice_api(body: RepriceRequest):
     """修改已上架物品价格（使用 CommodityId）"""
+    await _guard_low_price(
+        confirmed=body.confirm_below_market,
+        sell_price=body.sell_price,
+        lease_unit=body.lease_unit,
+        market_hash_name=body.market_hash_name,
+        template_id=body.template_id,
+    )
     try:
         return await change_price(
             commodity_id=body.commodity_id,

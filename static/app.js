@@ -1994,6 +1994,19 @@
           }
         },
 
+        // 低价二次确认（v0.13.4）：服务端认定价格明显低于市价时回 409 + 结构化 detail，
+        // 这里翻成一句话弹原生 confirm（与项目其余 6 处二次确认同一范式,不引入新弹窗、
+        // 不改动任何外观）。用户点确认 → 带 confirm_below_market 重发一次。
+        _lowPriceConfirmText(d) {
+          const cn = this.nameLang === 'cn';
+          const gap = `${d.pct_below}%`;
+          return cn
+            ? `${d.field} ¥${d.price} 比${d.basis_detail} ¥${d.basis} 低了 ${gap}。\n\n`
+              + `确认要按这个价格提交吗？（低于市价 ${d.threshold_pct}% 即提示，防手滑）`
+            : `${d.field} ¥${d.price} is ${gap} below ${d.basis_detail} ¥${d.basis}.\n\n`
+              + `Submit anyway? (prompted when more than ${d.threshold_pct}% below market)`;
+        },
+
         async saveReprice() {
           const { item, newPrice, newLeaseUnit, newLongLeaseUnit, newDeposit } = this.repriceModal;
           if (!item || !item.commodityId) return;
@@ -2001,6 +2014,10 @@
           if (!isLease) {
             const p = parseFloat(newPrice);
             if (isNaN(p) || p <= 0) { this.showToast('请输入有效价格', 'error'); return; }
+          } else {
+            // 出租分支此前连 >0 都没校验,NaN 会被直接送出去
+            const u = parseFloat(newLeaseUnit);
+            if (isNaN(u) || u <= 0) { this.showToast('请输入有效日租金', 'error'); return; }
           }
           this.repriceModal.saving = true;
           try {
@@ -2008,17 +2025,33 @@
               commodity_id: item.commodityId,
               is_can_sold: !isLease,
               is_can_lease: isLease,
+              // 防线基准要用:名字取售价基准,模板取租金基准。货架条目上现成有,
+              // 缺失时后端对应那一侧自动放行。
+              market_hash_name: item.commodityHashName || undefined,
+              template_id: item.templateId || undefined,
               ...(isLease
                 ? { lease_unit: parseFloat(newLeaseUnit), long_lease_unit: parseFloat(newLongLeaseUnit) || undefined, deposit: parseFloat(newDeposit) }
                 : { sell_price: parseFloat(newPrice) }),
             };
-            const r = await fetch('/api/listing/reprice', {
+            const send = () => fetch('/api/listing/reprice', {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(body),
             });
-            const d = await r.json();
-            if (!r.ok) throw new Error(d.detail || '改价失败');
+
+            let r = await send();
+            let d = await r.json();
+            // 409 + below_market_price → 二次确认后原样重发
+            if (r.status === 409 && d.detail && d.detail.code === 'below_market_price') {
+              if (!confirm(this._lowPriceConfirmText(d.detail))) {
+                this.repriceModal.saving = false;
+                return;
+              }
+              body.confirm_below_market = true;
+              r = await send();
+              d = await r.json();
+            }
+            if (!r.ok) throw new Error((d.detail && d.detail.message) || d.detail || '改价失败');
             this.showToast('改价成功');
             this.repriceModal.show = false;
             await this.loadShelf();
