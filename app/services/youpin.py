@@ -916,17 +916,19 @@ async def import_stock_records(db: AsyncSession) -> dict:
     batch, total_count, valuation = await fetch_stock_records(page=1, page_size=PAGE_SIZE)
     all_records.extend(batch)
 
+    stock_fetch_complete = True
     for page in range(2, 50):
         try:
             batch, _, _ = await fetch_stock_records(page=page, page_size=PAGE_SIZE)
         except Exception as e:
             logger.error("拉取在库存第 %d 页失败: %s", page, e)
+            stock_fetch_complete = False   # 截断 → 不能据此对账
             break
         if not batch:
             break
         all_records.extend(batch)
 
-    logger.info("共拉取在库存物品 %d 条", len(all_records))
+    logger.info("共拉取在库存物品 %d 条（API totalCount=%d）", len(all_records), total_count)
     steam_id = cfg.steam_steam_id or "unknown"
     upserted, skipped = [], []
 
@@ -996,13 +998,28 @@ async def import_stock_records(db: AsyncSession) -> dict:
     await db.commit()
 
     # ── 对账：保护期已过的物品（状态改为 unknown，下次 stock sync 再确认）──
+    # v0.13.3 两处修复：
+    #  ① 完整性闸：分页截断/抓取量远少于 totalCount 时跳过对账
+    #     （否则未取到的那部分会被误判为"已离开保护期"而清成 unknown）
+    #  ② 只动 ACTIVE_STATUSES：旧逻辑无 status 过滤，会把已 sold / in_storage 的行
+    #     一并刷成 unknown，而 import_sell_records 排除了 STEAM_PROTECTED、永不标回，
+    #     导致人工标记的 sold 每次同步都被静默还原。
     reconciled_stock = 0
-    if upserted:
+    stock_reconcile_ok = bool(upserted) and stock_fetch_complete
+    if stock_reconcile_ok and total_count and len(all_records) < total_count * 0.8:
+        stock_reconcile_ok = False
+        logger.error("库存对账已跳过：抓取 %d 条显著少于 API totalCount=%d",
+                     len(all_records), total_count)
+    elif not stock_fetch_complete:
+        logger.error("库存对账已跳过：分页中断，仅取到 %d 条", len(all_records))
+
+    if stock_reconcile_ok:
         seen_instance_ids = [rec["asset_id"] for rec in upserted]
         r = await db.execute(
             sa_update(InventoryItem)
             .where(
                 InventoryItem.class_id == "STEAM_PROTECTED",
+                InventoryItem.status.in_(ACTIVE_STATUSES),   # ② 不碰 sold / in_storage
                 InventoryItem.instance_id.notin_(seen_instance_ids),
             )
             .values(status="unknown")
@@ -1048,6 +1065,7 @@ async def import_lease_records(db: AsyncSession) -> dict:
     all_records: list[dict] = []
     PAGE_SIZE = 30
     stats_desc = ""
+    fetch_complete = True   # 分页是否完整取回（决定能否做对账）
 
     batch, total_count, stats_desc = await fetch_lease_records(page=1, page_size=PAGE_SIZE)
     all_records.extend(batch)
@@ -1058,6 +1076,7 @@ async def import_lease_records(db: AsyncSession) -> dict:
             batch, _, _ = await fetch_lease_records(page=page, page_size=PAGE_SIZE)
         except Exception as e:
             logger.error("拉取租出记录第 %d 页失败: %s", page, e)
+            fetch_complete = False   # 中途失败 → 数据截断，绝不能据此对账
             break
         if not batch:
             break
@@ -1067,10 +1086,26 @@ async def import_lease_records(db: AsyncSession) -> dict:
     steam_id = cfg.steam_steam_id or "unknown"
     upserted, skipped = [], []
 
-    # ── 对账第一步：把旧的租出物品临时重置为 unknown ─────────────────────────
-    # 导入后，本次租出的物品会重新标回 rented_out；
-    # 没出现在本次导入中的（租约已到期/归还）留在 unknown，
-    # 等下次 import_stock 确认它们回到保护期后再变回 in_steam。
+    # ── 完整性闸（v0.13.3 高危修复）──────────────────────────────────────
+    # 背景：悠悠返回空列表（code=9004001 被视为正常）或分页中途失败时，
+    # 旧逻辑会无条件把全部 rented_out 置为 unknown 并 commit
+    # → 一次接口抖动就能让 3000+ 件在租资产从全站市值/成本中消失，且无告警。
+    # 对账（把未出现的租约标记为已归还）只有在「确信本次抓取是全量」时才成立。
+    reconcile_ok = True
+    reconcile_skip_reason = None
+    if not all_records:
+        reconcile_ok = False
+        reconcile_skip_reason = "本次未取到任何租出记录（空响应/限流），跳过对账以防误清空"
+    elif not fetch_complete:
+        reconcile_ok = False
+        reconcile_skip_reason = f"分页中断，仅取到 {len(all_records)} 条（totalCount={total_count}），跳过对账"
+    elif total_count and len(all_records) < total_count * 0.8:
+        # 容差 20%：租约在抓取期间到期属正常波动；缺口过大说明抓取不可信
+        reconcile_ok = False
+        reconcile_skip_reason = (
+            f"抓取量 {len(all_records)} 显著少于 API totalCount={total_count}，跳过对账"
+        )
+
     prev_rented_count_r = await db.execute(
         select(func.count()).where(
             InventoryItem.status == "rented_out",
@@ -1079,16 +1114,23 @@ async def import_lease_records(db: AsyncSession) -> dict:
     )
     prev_rented_count = prev_rented_count_r.scalar() or 0
 
-    await db.execute(
-        sa_update(InventoryItem)
-        .where(
-            InventoryItem.status == "rented_out",
-            InventoryItem.class_id == "YOUPIN",
+    if reconcile_ok:
+        # ── 对账第一步：把旧的租出物品临时重置为 unknown ─────────────────
+        # 导入后，本次租出的物品会重新标回 rented_out；
+        # 没出现在本次导入中的（租约已到期/归还）留在 unknown，
+        # 等下次 import_stock 确认它们回到保护期后再变回 in_steam。
+        await db.execute(
+            sa_update(InventoryItem)
+            .where(
+                InventoryItem.status == "rented_out",
+                InventoryItem.class_id == "YOUPIN",
+            )
+            .values(status="unknown")
         )
-        .values(status="unknown")
-    )
-    # flush 使后续 select 看到最新状态（不提交，保留事务）
-    await db.flush()
+        # flush 使后续 select 看到最新状态（不提交，保留事务）
+        await db.flush()
+    else:
+        logger.error("租赁导入：%s（本次仅做 upsert，不动既有 rented_out 状态）", reconcile_skip_reason)
 
     for rec in all_records:
         info = rec.get("commodityInfo") or {}
@@ -1194,10 +1236,15 @@ async def import_lease_records(db: AsyncSession) -> dict:
 
     await db.commit()
 
-    # 对账统计：之前有多少件已归还（不在本次导入中）
-    reconciled_returned = max(0, prev_rented_count - len(upserted))
-    logger.info("租出对账：之前 %d 件，本次 %d 件，%d 件租约归还 → 状态改回 in_steam",
-                prev_rented_count, len(upserted), reconciled_returned)
+    # 对账统计：之前有多少件已归还（不在本次导入中）。跳过对账时归还数无意义,记 0。
+    if reconcile_ok:
+        reconciled_returned = max(0, prev_rented_count - len(unique_upserted_cids := {u["commodity_id"] for u in upserted}))
+        logger.info("租出对账：之前 %d 件，本次 %d 件(唯一 %d)，%d 件租约到期 → 暂置 unknown，待库存同步确认",
+                    prev_rented_count, len(upserted), len(unique_upserted_cids), reconciled_returned)
+    else:
+        reconciled_returned = 0
+        logger.warning("租出对账已跳过（%s）：既有 rented_out 保持不变，本次仅 upsert %d 条",
+                       reconcile_skip_reason, len(upserted))
 
     # ── 诊断日志：API 聚合 vs 实际遍历对比 ──
     sum_rent_cents = 0
@@ -1246,6 +1293,10 @@ async def import_lease_records(db: AsyncSession) -> dict:
         "upserted": len(upserted),
         "skipped": len(skipped),
         "reconciled_returned": reconciled_returned,
+        # v0.13.3：抓取不完整时如实上报,调用方/日志不再误以为"一切正常、只是没货"
+        "reconciled": reconcile_ok,
+        "partial_reason": reconcile_skip_reason,
+        "api_total_count": total_count,
     }
 
 
