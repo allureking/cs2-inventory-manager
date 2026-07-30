@@ -579,6 +579,10 @@
         ao: {},                      // analysis overview data
         itemSignals: null,           // selected item signals
         itemLeaseIncome: null,       // 单品租赁实绩(v0.13)
+        // v0.13.2 触摸设备:收益追踪表格的可编辑单元格改单击进入编辑
+        // (手机浏览器无可靠 dblclick,此前 7 个字段在手机上全都改不了)
+        isTouchDevice: (typeof window !== 'undefined') &&
+          (('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0),
         analysisAlerts: { items: [], total: 0 },
         analysisSpreads: { items: [], total: 0 },
         analysisSearch: '',

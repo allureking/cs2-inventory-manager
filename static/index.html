@@ -350,10 +350,15 @@
       .holdings-table-wrap { display: none; }
       .holdings-cards { display: block; }
 
-      /* C2 收益追踪日表：触摸双击编辑可用 + sticky 层级加固 */
+      /* C2 收益追踪日表：触摸端单击即进入编辑(v0.13.2,手机无可靠 dblclick) + sticky 层级加固 */
       .tracker-daily { touch-action: manipulation; }
       .tracker-daily thead th.sticky { z-index: 6; }
       .tracker-daily tbody td.sticky  { z-index: 3; }
+      /* iOS Safari 对 <16px 输入框会自动放大整页且不还原 → 编辑态字体撑到 16px;
+         max-width 兜住列宽,避免撑破窄列 */
+      .tracker-daily input { font-size: 16px !important; max-width: 6.5rem; }
+      /* 可编辑单元格给出可点提示(手机看不到 title 悬浮提示) */
+      .tracker-daily td.cursor-default { cursor: pointer; -webkit-tap-highlight-color: rgba(59,130,246,0.25); }
 
       /* D3 数据新鲜度/时间戳条移动端隐藏 */
       .freshness-bar { display: none !important; }
@@ -2152,10 +2157,11 @@
 
                     <!-- 出租件数 (可编辑) -->
                     <td class="py-1.5 px-2 text-right text-white cursor-default"
-                      :title="nameLang==='cn'?'双击修改':'Dbl-click to edit'"
-                      @dblclick="row._edit='rented_count'; $nextTick(()=>$el.querySelector('input')?.focus())">
+                      :title="nameLang==='cn'?(isTouchDevice?'点击修改':'双击修改'):(isTouchDevice?'Tap to edit':'Dbl-click to edit')"
+                      @dblclick="row._edit='rented_count'; $nextTick(()=>$el.querySelector('input')?.focus())"
+                      @click="if (isTouchDevice) { row._edit='rented_count'; $nextTick(()=>$el.querySelector('input')?.focus()) }">
                       <span x-show="row._edit!=='rented_count'" x-text="row.rented_count?.toLocaleString()??'—'"></span>
-                      <input x-show="row._edit==='rented_count'" class="w-16 bg-slate-700 rounded text-right text-xs font-mono text-white border border-slate-500 outline-none px-1 py-0.5"
+                      <input x-show="row._edit==='rented_count'" inputmode="numeric" class="w-16 bg-slate-700 rounded text-right text-xs font-mono text-white border border-slate-500 outline-none px-1 py-0.5"
                         :value="row.rented_count??''"
                         @blur="row._edit=''; trackerEditField(row.date,'rented_count',$event.target.value)"
                         @keydown.enter="$event.target.blur()" @keydown.escape="row._edit=''">
@@ -2163,10 +2169,11 @@
 
                     <!-- 出租价值 (可编辑) -->
                     <td class="py-1.5 px-2 text-right text-white font-mono cursor-default"
-                      :title="nameLang==='cn'?'双击修改':'Dbl-click to edit'"
-                      @dblclick="row._edit='rented_value'; $nextTick(()=>$el.querySelector('input')?.focus())">
+                      :title="nameLang==='cn'?(isTouchDevice?'点击修改':'双击修改'):(isTouchDevice?'Tap to edit':'Dbl-click to edit')"
+                      @dblclick="row._edit='rented_value'; $nextTick(()=>$el.querySelector('input')?.focus())"
+                      @click="if (isTouchDevice) { row._edit='rented_value'; $nextTick(()=>$el.querySelector('input')?.focus()) }">
                       <span x-show="row._edit!=='rented_value'" x-text="row.rented_value!=null?'¥'+Number(row.rented_value).toLocaleString('en-US',{maximumFractionDigits:0}):'—'"></span>
-                      <input x-show="row._edit==='rented_value'" class="w-24 bg-slate-700 rounded text-right text-xs font-mono text-white border border-slate-500 outline-none px-1 py-0.5"
+                      <input x-show="row._edit==='rented_value'" inputmode="decimal" class="w-24 bg-slate-700 rounded text-right text-xs font-mono text-white border border-slate-500 outline-none px-1 py-0.5"
                         :value="row.rented_value??''"
                         @blur="row._edit=''; trackerEditField(row.date,'rented_value',$event.target.value)"
                         @keydown.enter="$event.target.blur()" @keydown.escape="row._edit=''">
@@ -2174,10 +2181,11 @@
 
                     <!-- 日租金 (可编辑) -->
                     <td class="py-1.5 px-2 text-right text-amber-400 font-mono cursor-default"
-                      :title="nameLang==='cn'?'双击修改 (支持公式如 =2400+65)':'Dbl-click to edit (formulas like =2400+65)'"
-                      @dblclick="row._edit='daily_income'; $nextTick(()=>$el.querySelector('input')?.focus())">
+                      :title="nameLang==='cn'?(isTouchDevice?'点击修改 (支持公式如 =2400+65)':'双击修改 (支持公式如 =2400+65)'):(isTouchDevice?'Tap to edit (formulas)':'Dbl-click to edit (formulas like =2400+65)')"
+                      @dblclick="row._edit='daily_income'; $nextTick(()=>$el.querySelector('input')?.focus())"
+                      @click="if (isTouchDevice) { row._edit='daily_income'; $nextTick(()=>$el.querySelector('input')?.focus()) }">
                       <span x-show="row._edit!=='daily_income'" x-text="row.daily_income!=null?'¥'+Number(row.daily_income).toFixed(2):'—'"></span>
-                      <input x-show="row._edit==='daily_income'" class="w-24 bg-slate-700 rounded text-right text-xs font-mono text-white border border-slate-500 outline-none px-1 py-0.5"
+                      <input x-show="row._edit==='daily_income'" inputmode="decimal" class="w-24 bg-slate-700 rounded text-right text-xs font-mono text-white border border-slate-500 outline-none px-1 py-0.5"
                         :value="row.daily_income??''" placeholder="=2400+65"
                         @blur="row._edit=''; trackerEditField(row.date,'daily_income',$event.target.value)"
                         @keydown.enter="$event.target.blur()" @keydown.escape="row._edit=''">
@@ -2194,10 +2202,11 @@
 
                     <!-- 总库存件数 (可编辑) -->
                     <td class="py-1.5 px-2 text-right text-white cursor-default"
-                      :title="nameLang==='cn'?'双击修改':'Dbl-click to edit'"
-                      @dblclick="row._edit='total_inventory'; $nextTick(()=>$el.querySelector('input')?.focus())">
+                      :title="nameLang==='cn'?(isTouchDevice?'点击修改':'双击修改'):(isTouchDevice?'Tap to edit':'Dbl-click to edit')"
+                      @dblclick="row._edit='total_inventory'; $nextTick(()=>$el.querySelector('input')?.focus())"
+                      @click="if (isTouchDevice) { row._edit='total_inventory'; $nextTick(()=>$el.querySelector('input')?.focus()) }">
                       <span x-show="row._edit!=='total_inventory'" x-text="row.total_inventory?.toLocaleString()??'—'"></span>
-                      <input x-show="row._edit==='total_inventory'" class="w-16 bg-slate-700 rounded text-right text-xs font-mono text-white border border-slate-500 outline-none px-1 py-0.5"
+                      <input x-show="row._edit==='total_inventory'" inputmode="numeric" class="w-16 bg-slate-700 rounded text-right text-xs font-mono text-white border border-slate-500 outline-none px-1 py-0.5"
                         :value="row.total_inventory??''"
                         @blur="row._edit=''; trackerEditField(row.date,'total_inventory',$event.target.value)"
                         @keydown.enter="$event.target.blur()" @keydown.escape="row._edit=''">
@@ -2205,10 +2214,11 @@
 
                     <!-- 库存价值 (可编辑) -->
                     <td class="py-1.5 px-2 text-right text-white font-mono cursor-default"
-                      :title="nameLang==='cn'?'双击修改 (支持公式)':'Dbl-click to edit (formulas)'"
-                      @dblclick="row._edit='inventory_value'; $nextTick(()=>$el.querySelector('input')?.focus())">
+                      :title="nameLang==='cn'?(isTouchDevice?'点击修改 (支持公式)':'双击修改 (支持公式)'):(isTouchDevice?'Tap to edit (formulas)':'Dbl-click to edit (formulas)')"
+                      @dblclick="row._edit='inventory_value'; $nextTick(()=>$el.querySelector('input')?.focus())"
+                      @click="if (isTouchDevice) { row._edit='inventory_value'; $nextTick(()=>$el.querySelector('input')?.focus()) }">
                       <span x-show="row._edit!=='inventory_value'" x-text="row.inventory_value!=null?'¥'+Number(row.inventory_value).toLocaleString('en-US',{maximumFractionDigits:0}):'—'"></span>
-                      <input x-show="row._edit==='inventory_value'" class="w-28 bg-slate-700 rounded text-right text-xs font-mono text-white border border-slate-500 outline-none px-1 py-0.5"
+                      <input x-show="row._edit==='inventory_value'" inputmode="decimal" class="w-28 bg-slate-700 rounded text-right text-xs font-mono text-white border border-slate-500 outline-none px-1 py-0.5"
                         :value="row.inventory_value??''"
                         @blur="row._edit=''; trackerEditField(row.date,'inventory_value',$event.target.value)"
                         @keydown.enter="$event.target.blur()" @keydown.escape="row._edit=''">
@@ -2218,9 +2228,10 @@
                     <td class="py-1.5 px-2 text-right font-mono relative cursor-default"
                       :class="row.price_change>0?'text-emerald-400':row.price_change<0?'text-red-400':'text-slate-500'"
                       :title="row.cost_basis ? ((nameLang==='cn'?'成本: ¥':'Cost: ¥') + Number(row.cost_basis).toLocaleString() + '\n' + (nameLang==='cn'?'双击修改成本':'Dbl-click to edit cost')) : (nameLang==='cn'?'双击设置成本':'Dbl-click to set cost')"
-                      @dblclick="row._edit='cost_basis'; $nextTick(()=>$el.querySelector('input')?.focus())">
+                      @dblclick="row._edit='cost_basis'; $nextTick(()=>$el.querySelector('input')?.focus())"
+                      @click="if (isTouchDevice) { row._edit='cost_basis'; $nextTick(()=>$el.querySelector('input')?.focus()) }">
                       <span x-show="row._edit!=='cost_basis'" x-text="row.price_change!=null?(row.price_change*100).toFixed(2)+'%':'—'"></span>
-                      <input x-show="row._edit==='cost_basis'" class="w-24 bg-slate-700 rounded text-right text-xs font-mono text-white border border-slate-500 outline-none px-1 py-0.5"
+                      <input x-show="row._edit==='cost_basis'" inputmode="decimal" class="w-24 bg-slate-700 rounded text-right text-xs font-mono text-white border border-slate-500 outline-none px-1 py-0.5"
                         :value="row.cost_basis??''" placeholder="成本"
                         @blur="row._edit=''; trackerEditField(row.date,'cost_basis',$event.target.value)"
                         @keydown.enter="$event.target.blur()" @keydown.escape="row._edit=''">
@@ -2228,10 +2239,11 @@
 
                     <!-- 大盘指数 (双击编辑) -->
                     <td class="py-1.5 px-2 text-right font-mono text-slate-400 cursor-default"
-                      :title="nameLang==='cn'?'双击修改':'Dbl-click to edit'"
-                      @dblclick="row._edit='steamdt_index'; $nextTick(()=>$el.querySelector('input')?.focus())">
+                      :title="nameLang==='cn'?(isTouchDevice?'点击修改':'双击修改'):(isTouchDevice?'Tap to edit':'Dbl-click to edit')"
+                      @dblclick="row._edit='steamdt_index'; $nextTick(()=>$el.querySelector('input')?.focus())"
+                      @click="if (isTouchDevice) { row._edit='steamdt_index'; $nextTick(()=>$el.querySelector('input')?.focus()) }">
                       <span x-show="row._edit!=='steamdt_index'" x-text="row.steamdt_index!=null?Number(row.steamdt_index).toFixed(2):'—'"></span>
-                      <input x-show="row._edit==='steamdt_index'" class="w-16 bg-slate-700 rounded text-right text-xs font-mono text-white border border-slate-500 outline-none px-1 py-0.5"
+                      <input x-show="row._edit==='steamdt_index'" inputmode="decimal" class="w-16 bg-slate-700 rounded text-right text-xs font-mono text-white border border-slate-500 outline-none px-1 py-0.5"
                         :value="row.steamdt_index??''"
                         @blur="row._edit=''; trackerEditField(row.date,'steamdt_index',$event.target.value)"
                         @keydown.enter="$event.target.blur()" @keydown.escape="row._edit=''">
