@@ -994,21 +994,45 @@ async def item_lease_income(
 
     data = await get_item_lease_income(db, market_hash_name, days)
 
-    # 实际年化 = 窗口内日均租金(按日历天摊薄) × 365 / 当前市价
-    actual_annual_pct = None
+    # v0.13.3 修正：此前 actual_annual 用 avg_daily_rent（分母=**有租记录的天数**，
+    # 空租日根本不落库 → 闲置期被自动剔除），且 calendar_days 算完没用（死变量），
+    # 结果出租率越差虚高越多——恰好抵消"实绩归因"这个功能存在的意义。
+    # 现给出两个口径，都按单件视角：
+    #   utilization_annual_pct —— 只算在租日（"租出去时的赚钱效率"）
+    #   actual_annual_pct      —— 按整个窗口的日历天摊薄（含闲置，真实持有回报）
     price_map = await get_latest_prices([market_hash_name], db)
     price = price_map.get(market_hash_name)
-    if price and data["days_recorded"] > 0:
-        calendar_days = max(data["days_recorded"], min(days, data["days_recorded"]))
-        # 按已记录天数计算"在租日年化",再给出窗口摊薄年化两种口径
-        per_unit_daily = data["avg_daily_rent"]
-        # 单件视角:series 里 rent 是该品全部在租件的合计;摊到单件
-        units = max((s["rented_count"] for s in data["series"]), default=1) or 1
-        per_unit_daily = per_unit_daily / units
-        actual_annual_pct = round(per_unit_daily * 365 / price * 100, 2)
+
+    actual_annual_pct = None
+    utilization_annual_pct = None
+    utilization_pct = None
+
+    series = data["series"]
+    if series:
+        # 单件视角：series[i].rent 是该品当日全部在租件的合计租金，除以当日在租件数
+        per_unit_daily_by_day = [
+            s["rent"] / s["rented_count"] for s in series if s["rented_count"]
+        ]
+        if per_unit_daily_by_day:
+            # 在租日均（逐日先算单件、再平均，避免件数波动时被除大/除小）
+            util_daily = sum(per_unit_daily_by_day) / len(per_unit_daily_by_day)
+            # 日历摊薄：窗口天数取 min(请求天数, 有数据以来的天数)——数据刚开始积累时
+            # 不该用 30 天做分母把年化压成假低
+            calendar_days = min(days, max(data["days_recorded"], 1)) \
+                if data["days_recorded"] >= days else days
+            calendar_days = max(calendar_days, 1)
+            utilization_pct = round(len(per_unit_daily_by_day) / calendar_days * 100, 1)
+            if price:
+                utilization_annual_pct = round(util_daily * 365 / price * 100, 2)
+                # 摊薄 = 在租日年化 × 出租率
+                actual_annual_pct = round(
+                    util_daily * len(per_unit_daily_by_day) / calendar_days * 365 / price * 100, 2
+                )
 
     data["current_price"] = price
-    data["actual_annual_pct"] = actual_annual_pct
+    data["actual_annual_pct"] = actual_annual_pct              # 含闲置（真实回报）
+    data["utilization_annual_pct"] = utilization_annual_pct    # 仅在租日
+    data["utilization_pct"] = utilization_pct                  # 出租率 %
     return data
 
 

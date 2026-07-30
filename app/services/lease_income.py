@@ -142,26 +142,43 @@ async def get_lease_income_rankings(db: AsyncSession, days: int = 30, limit: int
         return []
     min_date = min(cutoff)
 
-    rows = (await db.execute(
+    # v0.13.3 修正：units 曾用 COUNT(DISTINCT commodity_id)，但**同一物理饰品每个
+    # 租赁周期都会拿到新的 commodity_id**（见 youpin.py 身份复用改造的说明）。
+    # 30 天里周转 5 次的一件饰品会被算成 5 件 → avg_rent_per_unit_day 及其
+    # 驱动的"实际年化"低估约 5 倍，且**周转越快（越优质的租赁资产）低估越狠**，
+    # 与单品弹窗给出的数字自相矛盾。
+    # 正确口径：件数 = 单日在租件数的峰值（典型持有量），逐日单件租金再平均。
+    per_day = (await db.execute(
         select(
-            LeaseIncomeDaily.market_hash_name,
-            func.count(func.distinct(LeaseIncomeDaily.date)).label("days_rented"),
-            func.count(func.distinct(LeaseIncomeDaily.commodity_id)).label("units"),
-            func.sum(LeaseIncomeDaily.daily_rent).label("total_rent"),
+            LeaseIncomeDaily.market_hash_name.label("name"),
+            LeaseIncomeDaily.date.label("d"),
+            func.count(LeaseIncomeDaily.commodity_id).label("cnt"),
+            func.sum(LeaseIncomeDaily.daily_rent).label("rent"),
         )
         .where(LeaseIncomeDaily.date >= min_date)
-        .group_by(LeaseIncomeDaily.market_hash_name)
-        .order_by(func.sum(LeaseIncomeDaily.daily_rent).desc())
-        .limit(limit)
+        .group_by(LeaseIncomeDaily.market_hash_name, LeaseIncomeDaily.date)
     )).all()
 
-    return [
+    agg: dict[str, dict] = {}
+    for name, _d, cnt, rent in per_day:
+        a = agg.setdefault(name, {"days": 0, "total": 0.0, "peak_units": 0, "unit_daily": []})
+        a["days"] += 1
+        a["total"] += rent or 0.0
+        a["peak_units"] = max(a["peak_units"], cnt or 0)
+        if cnt:
+            a["unit_daily"].append((rent or 0.0) / cnt)
+
+    out = [
         {
-            "market_hash_name": r[0],
-            "days_rented": r[1],
-            "units": r[2],
-            "total_rent": round(r[3] or 0, 2),
-            "avg_rent_per_unit_day": round((r[3] or 0) / r[1] / r[2], 4) if r[1] and r[2] else 0.0,
+            "market_hash_name": name,
+            "days_rented": a["days"],
+            "units": a["peak_units"],                       # 峰值同时在租件数
+            "total_rent": round(a["total"], 2),
+            # 逐日单件租金取平均（件数波动时不会被除歪）
+            "avg_rent_per_unit_day": round(
+                sum(a["unit_daily"]) / len(a["unit_daily"]), 4) if a["unit_daily"] else 0.0,
         }
-        for r in rows
+        for name, a in agg.items()
     ]
+    out.sort(key=lambda x: -x["total_rent"])
+    return out[:limit]

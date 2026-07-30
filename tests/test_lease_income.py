@@ -134,6 +134,36 @@ def test_rankings_aggregation():
     _run(body())
 
 
+def test_rankings_units_not_inflated_by_commodity_id_churn():
+    """回归锁：同一物理饰品每个租赁周期换新 commodity_id,不得被算成多件。
+
+    2 件饰品满租 10 天,每 5 天换约 → 出现 4 个不同 commodity_id。
+    旧实现 units=COUNT(DISTINCT commodity_id)=4 → 件均日租被除大 2 倍、
+    实际年化同比例低估,且周转越快低估越狠(与单品弹窗自相矛盾)。
+    正确:units = 单日在租件数的峰值 = 2。
+    """
+    async def body():
+        async with memory_db() as Session:
+            rows = []
+            for day in range(1, 6):            # 前 5 天:cid 1,2
+                for cid in (1, 2):
+                    rows.append(dict(date=f"2026-06-{day:02d}", commodity_id=cid,
+                                     market_hash_name="AK", daily_rent=1.5))
+            for day in range(6, 11):           # 后 5 天:换约 → cid 3,4
+                for cid in (3, 4):
+                    rows.append(dict(date=f"2026-06-{day:02d}", commodity_id=cid,
+                                     market_hash_name="AK", daily_rent=1.5))
+            await _seed_income(Session, rows)
+            async with Session() as db:
+                r = (await li.get_lease_income_rankings(db, days=30))[0]
+                assert r["units"] == 2                    # 不是 4
+                assert r["days_rented"] == 10
+                assert r["total_rent"] == pytest.approx(30.0)   # 2 件 × 1.5 × 10 天
+                # 件均日租应回到 1.5,而非被 4 件除成 0.75
+                assert r["avg_rent_per_unit_day"] == pytest.approx(1.5)
+    _run(body())
+
+
 def test_rankings_empty():
     async def body():
         async with memory_db() as Session:
@@ -162,8 +192,33 @@ def test_api_item_income_with_actual_annual():
             d = (await client.get("/api/analysis/lease-income", params={"market_hash_name": "AK"})).json()
             assert d["days_recorded"] == 1
             assert d["current_price"] == 365.0
-            # 单件日租 1.0 × 365 / 365 = 100%/年
-            assert d["actual_annual_pct"] == pytest.approx(100.0)
+            # v0.13.3 口径修正：区分「在租日年化」与「按日历天摊薄的真实回报」。
+            # 1 件、日租 1.0、市价 365 → 在租日年化 = 1.0×365/365 = 100%
+            assert d["utilization_annual_pct"] == pytest.approx(100.0)
+            # 但 30 天窗口里只租出去 1 天 → 出租率 1/30,真实回报 ≈ 3.33%
+            # (旧实现分母只数"有租记录的天数",闲置期被自动剔除 → 恒报 100%,
+            #  出租率越差虚高越多,恰好抵消实绩归因的意义)
+            assert d["utilization_pct"] == pytest.approx(3.3, abs=0.1)
+            assert d["actual_annual_pct"] == pytest.approx(3.33, abs=0.01)
+    _run(body())
+
+
+def test_api_item_income_full_utilization_matches_both_metrics():
+    """满租(窗口内每天都在租) → 两个口径应当一致,证明摊薄公式没有系统性偏移。"""
+    async def body():
+        async def seed(db):
+            for i in range(1, 31):        # 30 天窗口全部有租
+                db.add(LeaseIncomeDaily(date=f"2026-06-{i:02d}", commodity_id=i,
+                                        market_hash_name="AK", daily_rent=1.0))
+            db.add(PriceSnapshot(market_hash_name="AK", platform="YOUPIN",
+                                 sell_price=365.0, snapshot_minute="202606300000"))
+            await db.commit()
+        async with asgi_client(seed=seed, routers=ROUTERS) as (client, _):
+            d = (await client.get("/api/analysis/lease-income",
+                                  params={"market_hash_name": "AK", "days": 30})).json()
+            assert d["utilization_pct"] == pytest.approx(100.0, abs=0.1)
+            assert d["actual_annual_pct"] == pytest.approx(d["utilization_annual_pct"], abs=0.01)
+            assert d["actual_annual_pct"] == pytest.approx(100.0, abs=0.01)
     _run(body())
 
 
