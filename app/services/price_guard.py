@@ -72,6 +72,7 @@ class Basis:
 
 
 NO_BASIS = Basis(value=None, source="none", detail="无可用基准")
+NO_BASIS_PLACEHOLDER = NO_BASIS
 
 
 def is_below_market(price: Optional[float], basis: Basis) -> bool:
@@ -99,59 +100,123 @@ async def sell_basis(db: AsyncSession, market_hash_name: Optional[str]) -> Basis
     return Basis(value=float(px), source="snapshot", detail="本地快照·跨平台最低价")
 
 
-async def lease_basis(template_id: Optional[int]) -> Basis:
-    """日租金基准 = 悠悠市场挂租列表里的最低日租。无 token / 冷门品 → 无基准。"""
+@dataclass(frozen=True)
+class LeaseBases:
+    """出租侧的三个基准。改价弹窗里这三个字段挨在一起、同一次提交，
+    所以一次 fetch 就把它们全算出来——同一份 payload 里本来就带着这三个字段。"""
+
+    lease_unit: Basis = NO_BASIS_PLACEHOLDER  # type: ignore[assignment]
+    long_lease_unit: Basis = NO_BASIS_PLACEHOLDER  # type: ignore[assignment]
+    deposit: Basis = NO_BASIS_PLACEHOLDER  # type: ignore[assignment]
+
+
+def _min_of(rows: list, *keys: str) -> Optional[float]:
+    vals: list[float] = []
+    for it in rows:
+        raw = None
+        for k in keys:
+            raw = it.get(k)
+            if raw is not None:
+                break
+        if raw is None:
+            continue
+        try:
+            v = float(raw)
+        except (TypeError, ValueError):
+            continue
+        if v > 0:
+            vals.append(v)
+    return min(vals) if vals else None
+
+
+async def lease_bases(template_id: Optional[int]) -> LeaseBases:
+    """一次请求同时给出短租/长租/押金三个基准。取不到的那一项为 NO_BASIS。"""
     if not template_id:
-        return NO_BASIS
+        return LeaseBases(NO_BASIS, NO_BASIS, NO_BASIS)
     from app.services.youpin import fetch_market_lease_price, get_active_token
 
     if not get_active_token():
-        return NO_BASIS
+        return LeaseBases(NO_BASIS, NO_BASIS, NO_BASIS)
 
     try:
-        market_list = await asyncio.wait_for(
+        rows = await asyncio.wait_for(
             fetch_market_lease_price(int(template_id)), timeout=LEASE_BASIS_TIMEOUT_S
         )
     except asyncio.TimeoutError:
         logger.info("price_guard: 租金基准查询超时(%.1fs) template=%s，放行",
                     LEASE_BASIS_TIMEOUT_S, template_id)
-        return NO_BASIS
+        return LeaseBases(NO_BASIS, NO_BASIS, NO_BASIS)
     except Exception as e:  # 限流/token 失效都只是"拿不到基准"，不是错误
         logger.info("price_guard: 租金基准查询失败 template=%s: %s", template_id, e)
-        return NO_BASIS
+        return LeaseBases(NO_BASIS, NO_BASIS, NO_BASIS)
 
-    units: list[float] = []
-    for it in (market_list or [])[:20]:
-        u = it.get("leaseUnitPrice") or it.get("LeaseUnitPrice")
-        if u is None:
-            continue
-        try:
-            u = float(u)
-        except (TypeError, ValueError):
-            continue
-        if u > 0:
-            units.append(u)
+    rows = (rows or [])[:20]
 
-    if not units:
-        return NO_BASIS
-    # min 而非 [0]：出租查询没带排序参数，不能假定列表有序
-    return Basis(value=min(units), source="youpin_lease", detail="悠悠市场·最低日租")
+    def mk(v: Optional[float], detail: str) -> Basis:
+        # min 而非 [0]：出租查询没带排序参数，不能假定列表有序
+        return Basis(value=v, source="youpin_lease", detail=detail) if v else NO_BASIS
+
+    return LeaseBases(
+        lease_unit=mk(_min_of(rows, "leaseUnitPrice", "LeaseUnitPrice"), "悠悠市场·最低日租"),
+        long_lease_unit=mk(_min_of(rows, "longLeaseUnitPrice", "LongLeaseUnitPrice"),
+                           "悠悠市场·最低长租日租"),
+        deposit=mk(_min_of(rows, "leaseDeposit", "LeaseDeposit"), "悠悠市场·最低押金"),
+    )
 
 
-def below_market_detail(field: str, price: float, basis: Basis) -> dict:
-    """构造 409 的 detail，前端据此渲染确认文案。"""
-    pct_below = round((1 - float(price) / basis.value) * 100, 1)
+async def lease_basis(template_id: Optional[int]) -> Basis:
+    """兼容旧签名：只要短租日租金基准。"""
+    return (await lease_bases(template_id)).lease_unit
+
+
+# 字段的机器可读键 → 前端据此本地化（服务端不再把中文塞进弹窗文案）
+FIELD_LABELS = {
+    "sell_price":      ("售价", "Sell price"),
+    "lease_unit":      ("日租金", "Daily rent"),
+    "long_lease_unit": ("长租日租金", "Long-lease daily rent"),
+    "deposit":         ("押金", "Deposit"),
+}
+SOURCE_LABELS = {
+    "snapshot":     ("本地快照·跨平台最低价", "local snapshot · lowest across platforms"),
+    "youpin_lease": ("悠悠市场·最低报价", "YouPin market · lowest listed"),
+    "none":         ("无可用基准", "no basis"),
+}
+
+
+def violation(field_key: str, price: float, basis: Basis) -> dict:
+    """一条越线记录。前端拿 field_key / basis_source 去本地化，不吃服务端的中文。"""
     return {
-        "code": BELOW_MARKET_CODE,
-        "field": field,
+        "field_key": field_key,
+        "field": FIELD_LABELS.get(field_key, (field_key, field_key))[0],
         "price": round(float(price), 2),
         "basis": round(basis.value, 2),
         "basis_source": basis.source,
         "basis_detail": basis.detail,
-        "pct_below": pct_below,
+        "pct_below": round((1 - float(price) / basis.value) * 100, 1),
+    }
+
+
+def below_market_detail(violations: list[dict]) -> dict:
+    """构造 409 的 detail。
+
+    **一次列全所有越线字段**：confirm_below_market 是一次性全局豁免，若只报第一条，
+    用户确认的是"售价低"，却连带把他从没看见的"日租金也低"一起放行了。
+    """
+    worst = max(violations, key=lambda v: v["pct_below"])
+    return {
+        "code": BELOW_MARKET_CODE,
         "threshold_pct": round((1 - LOW_PRICE_CONFIRM_RATIO) * 100, 1),
-        "message": (
-            f"{field} ¥{float(price):.2f} 比{basis.detail} ¥{basis.value:.2f} "
-            f"低 {pct_below}%，请确认不是手滑"
-        ),
+        "violations": violations,
+        # 下面这些是"最严重的那条"的平铺，保持旧字段名以免前端/脚本读不到
+        "field_key": worst["field_key"],
+        "field": worst["field"],
+        "price": worst["price"],
+        "basis": worst["basis"],
+        "basis_source": worst["basis_source"],
+        "basis_detail": worst["basis_detail"],
+        "pct_below": worst["pct_below"],
+        "message": "；".join(
+            f'{v["field"]} ¥{v["price"]:.2f} 比{v["basis_detail"]} ¥{v["basis"]:.2f} 低 {v["pct_below"]}%'
+            for v in violations
+        ) + "，请确认不是手滑",
     }

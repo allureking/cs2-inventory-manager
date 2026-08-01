@@ -1997,14 +1997,41 @@
         // 低价二次确认（v0.13.4）：服务端认定价格明显低于市价时回 409 + 结构化 detail，
         // 这里翻成一句话弹原生 confirm（与项目其余 6 处二次确认同一范式,不引入新弹窗、
         // 不改动任何外观）。用户点确认 → 带 confirm_below_market 重发一次。
+        // 文案完全在前端本地化：服务端只给 field_key / basis_source 这类机器可读键，
+        // 不再把中文塞进弹窗（否则 EN 界面会弹出「售价 ¥1 is 99% below 本地快照…」这种混排）
+        _LP_FIELD: {
+          sell_price:      ['售价', 'Sell price'],
+          lease_unit:      ['日租金', 'Daily rent'],
+          long_lease_unit: ['长租日租金', 'Long-lease daily rent'],
+          deposit:         ['押金', 'Deposit'],
+        },
+        _LP_SOURCE: {
+          snapshot:     ['本地快照·跨平台最低价', 'local snapshot (lowest across platforms)'],
+          youpin_lease: ['悠悠市场·最低报价', 'YouPin market (lowest listed)'],
+        },
         _lowPriceConfirmText(d) {
-          const cn = this.nameLang === 'cn';
-          const gap = `${d.pct_below}%`;
-          return cn
-            ? `${d.field} ¥${d.price} 比${d.basis_detail} ¥${d.basis} 低了 ${gap}。\n\n`
-              + `确认要按这个价格提交吗？（低于市价 ${d.threshold_pct}% 即提示，防手滑）`
-            : `${d.field} ¥${d.price} is ${gap} below ${d.basis_detail} ¥${d.basis}.\n\n`
+          const i = this.nameLang === 'cn' ? 0 : 1;
+          const lbl = (m, k, fb) => (m[k] ? m[k][i] : (fb || k));
+          const list = (d.violations && d.violations.length ? d.violations : [d]);
+          const lines = list.map(v => i === 0
+            ? `· ${lbl(this._LP_FIELD, v.field_key, v.field)} ¥${v.price}，比${lbl(this._LP_SOURCE, v.basis_source, v.basis_detail)} ¥${v.basis} 低了 ${v.pct_below}%`
+            : `· ${lbl(this._LP_FIELD, v.field_key, v.field)} ¥${v.price} — ${v.pct_below}% below ${lbl(this._LP_SOURCE, v.basis_source, v.basis_detail)} ¥${v.basis}`);
+          return i === 0
+            ? `以下价格明显低于市价：\n\n${lines.join('\n')}\n\n`
+              + `确认要按这些价格提交吗？（低于市价 ${d.threshold_pct}% 即提示，防手滑）`
+            : `The following are well below market:\n\n${lines.join('\n')}\n\n`
               + `Submit anyway? (prompted when more than ${d.threshold_pct}% below market)`;
+        },
+
+        // 响应可能不是 JSON（502 网关 HTML 错误页）→ 别让 r.json() 的异常盖住真实状态
+        async _json(r) { try { return await r.json(); } catch (e) { return {}; } },
+        _errText(d) {
+          const x = d && d.detail;
+          if (!x) return '';
+          if (typeof x === 'string') return x;
+          if (x.message) return x.message;
+          if (Array.isArray(x)) return x.map(e => e.msg || JSON.stringify(e)).join('; ');
+          return JSON.stringify(x);
         },
 
         async saveReprice() {
@@ -2040,18 +2067,24 @@
             });
 
             let r = await send();
-            let d = await r.json();
+            let d = await this._json(r);
             // 409 + below_market_price → 二次确认后原样重发
             if (r.status === 409 && d.detail && d.detail.code === 'below_market_price') {
+              // 请求在途时用户可能已经关掉弹窗（取消按钮/Esc 都不会中止在途请求）,
+              // 那就别再弹确认、更别替他提交
+              if (!this.repriceModal.show || this.repriceModal.item !== item) return;
               if (!confirm(this._lowPriceConfirmText(d.detail))) {
-                this.repriceModal.saving = false;
+                // 明确给个回执:浏览器可能已被勾选"阻止此页面创建更多对话框",
+                // 此时 confirm() 直接返回 false,用户根本没看见框,不提示就成了"按钮坏了"
+                this.showToast(this.nameLang === 'cn' ? '已取消（价格低于市价）'
+                                                      : 'Cancelled (below market price)');
                 return;
               }
               body.confirm_below_market = true;
               r = await send();
-              d = await r.json();
+              d = await this._json(r);
             }
-            if (!r.ok) throw new Error((d.detail && d.detail.message) || d.detail || '改价失败');
+            if (!r.ok) throw new Error(this._errText(d) || '改价失败');
             this.showToast('改价成功');
             this.repriceModal.show = false;
             await this.loadShelf();

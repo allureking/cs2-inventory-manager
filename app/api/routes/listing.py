@@ -22,7 +22,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 
 from app.core.database import AsyncSessionLocal
-from app.models.db_models import ListingSnapshot, ListingSnapshotItem, InventoryItem
+from app.models.db_models import (InventoryItem, LeaseIncomeDaily,
+                                  ListingSnapshot, ListingSnapshotItem)
 from app.services import price_guard
 from app.services.youpin import TokenExpiredError
 from app.services.youpin_listing import (
@@ -275,32 +276,49 @@ async def _guard_low_price(
     confirmed: bool,
     sell_price: Optional[float] = None,
     lease_unit: Optional[float] = None,
+    long_lease_unit: Optional[float] = None,
+    deposit: Optional[float] = None,
     market_hash_name: Optional[str] = None,
     template_id: Optional[int] = None,
+    commodity_id: Optional[int] = None,
     asset_id: Optional[str] = None,
 ) -> None:
-    """触发即 raise 409；确认过、或查不到基准、或价格不低 → 静默通过。"""
+    """触发即 raise 409（列全所有越线字段）；确认过、或查不到基准、或价格不低 → 通过。
+
+    标识符能自己查就自己查：调用方漏传 market_hash_name / template_id 时，防线绝不能
+    静默变成空转——那比没有防线更糟（用户以为有保护）。
+    """
     if confirmed:
         return
 
+    violations: list[dict] = []
+
+    # ── 售价侧 ──
     if sell_price is not None:
-        name = market_hash_name
-        if not name and asset_id:
-            name = await _hash_name_by_asset(asset_id)
+        name = market_hash_name or await _resolve_hash_name(
+            commodity_id=commodity_id, asset_id=asset_id)
         basis = await _sell_basis_for(name)
         if price_guard.is_below_market(sell_price, basis):
-            raise HTTPException(
-                status_code=409,
-                detail=price_guard.below_market_detail("售价", sell_price, basis),
-            )
+            violations.append(price_guard.violation("sell_price", sell_price, basis))
 
-    if lease_unit is not None and template_id:
-        basis = await price_guard.lease_basis(template_id)
-        if price_guard.is_below_market(lease_unit, basis):
-            raise HTTPException(
-                status_code=409,
-                detail=price_guard.below_market_detail("日租金", lease_unit, basis),
-            )
+    # ── 出租侧：三个字段挨在一起、同一次提交，一次 fetch 全查 ──
+    lease_inputs = {"lease_unit": lease_unit, "long_lease_unit": long_lease_unit,
+                    "deposit": deposit}
+    if any(v is not None for v in lease_inputs.values()):
+        tid = template_id or await _resolve_template_id(
+            commodity_id=commodity_id, asset_id=asset_id,
+            market_hash_name=market_hash_name)
+        bases = await price_guard.lease_bases(tid)
+        for key, val in lease_inputs.items():
+            if val is None:
+                continue
+            b = getattr(bases, key)
+            if price_guard.is_below_market(val, b):
+                violations.append(price_guard.violation(key, val, b))
+
+    if violations:
+        raise HTTPException(status_code=409,
+                            detail=price_guard.below_market_detail(violations))
 
 
 async def _sell_basis_for(market_hash_name: Optional[str]):
@@ -310,15 +328,86 @@ async def _sell_basis_for(market_hash_name: Optional[str]):
         return await price_guard.sell_basis(db, market_hash_name)
 
 
-async def _hash_name_by_asset(asset_id: str) -> Optional[str]:
-    """asset_id → market_hash_name。asset_id 无 unique 约束（租赁导入甚至往里写
-    order_id），所以只取一行、查不到就返回 None 走放行。"""
+async def _resolve_hash_name(
+    *, commodity_id: Optional[int] = None, asset_id: Optional[str] = None
+) -> Optional[str]:
+    """commodity_id / asset_id → market_hash_name。查不到返回 None（放行）。
+
+    逐级兜底：inventory_item 只有租赁导入会写 youpin_commodity_id，出售货架上的件
+    多半是 NULL，所以还要落到货架快照与租赁实绩表。
+    """
     async with AsyncSessionLocal() as db:
-        return (await db.execute(
-            select(InventoryItem.market_hash_name)
-            .where(InventoryItem.asset_id == str(asset_id))
-            .limit(1)
-        )).scalars().first()
+        if commodity_id:
+            name = (await db.execute(
+                select(InventoryItem.market_hash_name)
+                .where(InventoryItem.youpin_commodity_id == commodity_id)
+                .limit(1)
+            )).scalars().first()
+            if name:
+                return name
+            name = (await db.execute(
+                select(ListingSnapshotItem.commodity_hash_name)
+                .where(ListingSnapshotItem.commodity_id == commodity_id)
+                .order_by(ListingSnapshotItem.id.desc())
+                .limit(1)
+            )).scalars().first()
+            if name:
+                return name
+            name = (await db.execute(
+                select(LeaseIncomeDaily.market_hash_name)
+                .where(LeaseIncomeDaily.commodity_id == commodity_id)
+                .order_by(LeaseIncomeDaily.date.desc())
+                .limit(1)
+            )).scalars().first()
+            if name:
+                return name
+        if asset_id:
+            # asset_id 无 unique 约束（租赁导入甚至往里写 order_id）→ 只取一行
+            return (await db.execute(
+                select(InventoryItem.market_hash_name)
+                .where(InventoryItem.asset_id == str(asset_id))
+                .limit(1)
+            )).scalars().first()
+    return None
+
+
+async def _resolve_template_id(
+    *, commodity_id: Optional[int] = None, asset_id: Optional[str] = None,
+    market_hash_name: Optional[str] = None,
+) -> Optional[int]:
+    """→ youpin_template_id。template_id 是"按名字"的属性，所以名字也能查到。"""
+    async with AsyncSessionLocal() as db:
+        if commodity_id:
+            tid = (await db.execute(
+                select(ListingSnapshotItem.template_id)
+                .where(ListingSnapshotItem.commodity_id == commodity_id,
+                       ListingSnapshotItem.template_id.isnot(None))
+                .order_by(ListingSnapshotItem.id.desc()).limit(1)
+            )).scalars().first()
+            if tid:
+                return tid
+            tid = (await db.execute(
+                select(InventoryItem.youpin_template_id)
+                .where(InventoryItem.youpin_commodity_id == commodity_id,
+                       InventoryItem.youpin_template_id.isnot(None)).limit(1)
+            )).scalars().first()
+            if tid:
+                return tid
+        if asset_id:
+            tid = (await db.execute(
+                select(InventoryItem.youpin_template_id)
+                .where(InventoryItem.asset_id == str(asset_id),
+                       InventoryItem.youpin_template_id.isnot(None)).limit(1)
+            )).scalars().first()
+            if tid:
+                return tid
+        if market_hash_name:
+            return (await db.execute(
+                select(InventoryItem.youpin_template_id)
+                .where(InventoryItem.market_hash_name == market_hash_name,
+                       InventoryItem.youpin_template_id.isnot(None)).limit(1)
+            )).scalars().first()
+    return None
 
 
 # ── 手动上架 ────────────────────────────────────────────────────────────────
@@ -365,7 +454,9 @@ async def list_sell_api(body: SellRequest):
 async def list_lease_api(body: LeaseRequest):
     """手动出租上架"""
     await _guard_low_price(confirmed=body.confirm_below_market,
-                           lease_unit=body.lease_unit, template_id=body.template_id)
+                           lease_unit=body.lease_unit,
+                           long_lease_unit=body.long_lease_unit, deposit=body.deposit,
+                           template_id=body.template_id, asset_id=body.asset_id)
     try:
         return await list_for_lease(
             body.asset_id, body.lease_unit, body.long_lease_unit,
@@ -380,6 +471,7 @@ async def list_both_api(body: BothRequest):
     """可租可售同时上架"""
     await _guard_low_price(confirmed=body.confirm_below_market,
                            sell_price=body.sell_price, lease_unit=body.lease_unit,
+                           long_lease_unit=body.long_lease_unit, deposit=body.deposit,
                            asset_id=body.asset_id, template_id=body.template_id)
     try:
         return await list_for_both(
@@ -415,8 +507,11 @@ async def reprice_api(body: RepriceRequest):
         confirmed=body.confirm_below_market,
         sell_price=body.sell_price,
         lease_unit=body.lease_unit,
+        long_lease_unit=body.long_lease_unit,
+        deposit=body.deposit,
         market_hash_name=body.market_hash_name,
         template_id=body.template_id,
+        commodity_id=body.commodity_id,
     )
     try:
         return await change_price(
