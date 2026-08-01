@@ -37,6 +37,30 @@
 
     const _CHANGELOG = Object.freeze([
           {
+            version: '0.13.4', date: '2026-07-31', major: true,
+            title_cn: '手滑低价防线：价格明显低于市价时先问一句',
+            title_en: 'Fat-Finger Guard: Confirm Before Listing Well Below Market',
+            added: [
+              ['人工输入的价格低于该件当前市价 5% 以上时,先弹二次确认,确认后才提交。覆盖改价弹窗的四个价格字段(售价/日租金/长租日租金/押金)与三条人工路径(出售货架、出租货架、转租)', 'Confirmation step when a manually entered price is more than 5% below market, across all four price fields and all three manual paths'],
+              ['基准来源:售价取本地快照的跨平台最低价(覆盖 99% 持仓,不额外请求);租金三项取悠悠市场挂租的最低报价(一次请求同时算出三个,4 秒超时)', 'Basis: local cross-platform low for sell price (99% coverage); YouPin market lows for the three rent fields, fetched in one request'],
+              ['拦在服务端而不只是前端 —— 前端弹窗只管体验,脚本用 API Key 会直接绕过去', 'Enforced server-side, not just in the dialog — scripts with an API key would bypass the frontend'],
+              ['所有越线字段一次列全:确认是一次性豁免,只报第一条会让你在不知情的情况下把另一项也放行了', 'All offending fields listed at once — the confirmation is a blanket waiver'],
+            ],
+            fixed: [
+              ['出租改价此前连「日租金 > 0」都没校验,NaN 会被直接送到悠悠', 'Lease reprice had no positivity check; NaN could reach YouPin'],
+              ['英文界面下确认文案中英混排(字段名与基准来源是服务端写死的中文)', 'Confirmation text mixed Chinese into the English UI'],
+              ['请求还在路上时关掉改价弹窗(取消/Esc 都不会中止在途请求),结果返回后仍会弹确认并真的提交出去', 'Closing the modal while the request was in flight could still pop a confirm and submit'],
+              ['浏览器「阻止此页面创建更多对话框」被勾选后,低价改价会变成无提示的死路 —— 看起来就是保存按钮坏了', 'Once the browser suppressed dialogs, low-price saves became a silent dead end'],
+            ],
+            changed: [
+              ['查不到市价基准时**放行**而不是拦截:缺基准最集中的就是"刚买入、第一次上架"的品,恰恰最需要能挂出去。极端值另有硬闸兜底', 'Fails open when no basis is available — newly bought items are exactly the ones that must remain listable'],
+              ['是二次确认不是硬拦截:同名饰品不区分档内磨损与图案(蓝宝石/渐变/印花本),真实价值可差数倍,用一个已知会偏的基准做硬拦截是错配', 'A confirmation rather than a hard block — same-name items can differ several-fold in real value'],
+              ['沿用项目既有的原生确认框范式,不新增弹窗、不改动任何外观', 'Uses the existing native confirm pattern — no new dialogs, no visual changes'],
+              ['测试 416 → 456 例,补上端点接线覆盖(此前把四个端点的防线调用全删掉也照样全绿),6 次破坏性验证全部精确打红', 'Tests 416 → 456, including endpoint wiring coverage that was previously absent'],
+            ],
+            commits: [],
+          },
+          {
             version: '0.13.3', date: '2026-07-29', major: true,
             title_cn: '静默错误清剿：市价口径 / 对账闸门 / 幂等导入 / 手机端',
             title_en: 'Silent-Error Sweep: Price Basis, Reconcile Guards, Idempotent Imports, Mobile',

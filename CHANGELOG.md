@@ -1,5 +1,46 @@
 # Changelog / 更新日志
 
+## [0.13.4] - 2026-07-31
+
+### 新增 / Added
+- **手滑低价防线**：人工输入的价格低于该件当前市价 5% 以上时，先弹二次确认，确认后才
+  提交。覆盖改价弹窗的四个价格字段（售价 / 日租金 / 长租日租金 / 押金）与三条人工路径
+  （出售货架、出租货架、转租），以及 API 侧的手动上架端点 / **Fat-finger low-price guard**:
+  a confirmation step when a manually entered price is more than 5% below market
+
+  - 判据 `price < 基准 × 0.95`，由单一常数 `LOW_PRICE_CONFIRM_RATIO` 决定
+  - 基准：售价取本地 `price_snapshot` 的跨平台最低价（免 token、免 HTTP，生产实测覆盖
+    4282/4323 = **99.05%** 活跃持仓）；租金三项取悠悠市场挂租列表的最低报价（一次请求
+    同时算出三个基准，4s 超时）
+  - **拦在服务端**：前端弹窗只管体验，带 `X-API-Key` 的脚本会直接绕过前端。四个端点
+    共用同一层校验，越线回 409 + 结构化 `violations`，带 `confirm_below_market=true`
+    重发即放行
+  - **一次列全所有越线字段**：确认是一次性全局豁免，只报第一条会让用户在不知情的情况下
+    把另一项也放行了
+  - **查不到基准就放行（fail-open）**：缺基准最集中的是「刚买入、当天还没进采价名单、
+    第一次上架」的品，恰恰最需要能挂出去；这道防线没有安全属性，fail-closed 换不来
+    保障只换来不可用。极端值另有硬闸兜底（`gt=0` / `_MAX_PRICE` / `_MAX_RENT`）
+  - **是确认不是硬拦截**：`market_hash_name` 只区分磨损档位，不区分档内 float 与图案
+    （蓝宝石、渐变、印花本），同名两件真实价值可差数倍。用一个已知会偏的基准做硬拦截
+    是错配，可点穿的确认才是相称的强度
+  - 沿用项目既有的原生 `confirm()` 范式，**不新增任何弹窗、不改动任何外观**
+
+### 修复 / Fixed
+- 出租改价分支此前连「日租金 > 0」都没校验，NaN 会被直接送到悠悠 / Lease reprice had no positivity check
+- 确认文案在英文界面下中英混排（字段名与基准来源是服务端硬编码中文）→ 服务端改发
+  机器可读键，文案完全在前端本地化 / Confirmation text is now fully localized
+- 请求在途时关掉改价弹窗（取消 / Esc 都不会中止在途请求），409 返回后仍会弹确认并真的
+  提交 → 提交前校验弹窗仍打开且仍是同一件 / Closing the modal mid-flight no longer submits
+- 浏览器「阻止此页面创建更多对话框」被勾选后 `confirm()` 直接返回 false，形成无提示的
+  死路（看起来像保存按钮坏了）→ 取消时给出回执 / Suppressed dialogs no longer dead-end silently
+- 响应非 JSON（502 网关 HTML 错误页）时 `r.json()` 的异常会盖住真实状态；422 的数组型
+  `detail` 会被拼成 `[object Object]` / Robust error surfacing on non-JSON and 422 responses
+
+### 测试 / Tests
+- 416 → **456** 用例。防线部分 40 例，含端点接线覆盖（此前所有用例只调内部 helper，
+  把四个端点的防线调用全删掉也照样全绿）。6 次破坏性验证全部精确打红，浏览器实测 7 个
+  交互场景零报错
+
 ## [0.13.3] - 2026-07-29
 
 四路审查（后端 / 前端移动端 / 数据口径 / 安全）的修复收口。这一版几乎全是**静默错误**：
