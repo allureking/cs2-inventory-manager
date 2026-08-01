@@ -107,6 +107,20 @@ class TestDirtyRows:
         ]
         assert mi.extract_daily_index(kl) == {"2026-07-26": 883.25}
 
+    def test_column_drift_rejected_not_silently_written(self):
+        """上游 K 线是无字段名的纯数组,列序一旦调整必须**拒绝**而不是静默写错列。
+
+        最坏情况:时间戳(约 1.78e9)落到指数列。它照样 > 0,光靠正数校验拦不住,
+        结果就是往「大盘指数」里写进 17 亿这种数,而且没有任何报错。
+        """
+        ts = int(datetime(2026, 7, 22, 7, tzinfo=timezone.utc).timestamp())
+        # 指数列变成时间戳
+        assert mi.extract_daily_index([[str(ts), 1.0, ts, 3.0, 4.0]]) == {}
+        # 第 0 列不再是时间戳(列序整体平移)
+        assert mi.extract_daily_index([[880.0, ts, 881.0, 882.0, 879.0]]) == {}
+        # 指数为荒谬大值
+        assert mi.extract_daily_index([[str(ts), 1.0, 999_999.0, 3.0, 4.0]]) == {}
+
     def test_empty_input(self):
         assert mi.extract_daily_index([]) == {}
         assert mi.extract_daily_index(None) == {}
@@ -208,6 +222,7 @@ class TestFailureHandling:
         async def boom():
             raise RuntimeError("4005 rate limited")
         monkeypatch.setattr("app.services.steamdt.fetch_broad_kline", boom)
+        monkeypatch.setattr(mi, "_RETRY_WAIT_S", 0)   # 别让重试等待拖慢测试
 
         async def body():
             async with memory_db() as Session:
@@ -228,3 +243,47 @@ class TestFailureHandling:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestRetry:
+    def test_retries_then_succeeds(self, monkeypatch):
+        """限流(4005)后重试应能拿到数据,而不是白白等一天。"""
+        d0 = (datetime.now(PT) - timedelta(days=1)).strftime("%Y-%m-%d")
+        calls = {"n": 0}
+
+        async def flaky():
+            calls["n"] += 1
+            if calls["n"] < 3:
+                raise RuntimeError("4005 当前接口请求已达到上限")
+            return [kline_row(d0, 0, 880.0)]
+
+        monkeypatch.setattr("app.services.steamdt.fetch_broad_kline", flaky)
+        monkeypatch.setattr(mi, "_RETRY_WAIT_S", 0)
+
+        async def body():
+            async with memory_db() as Session:
+                core_db.AsyncSessionLocal = Session
+                await _seed(Session, [(d0, None)])
+                r = await mi.sync_market_index()
+                assert r["ok"] and r["filled"] == 1
+                assert calls["n"] == 3
+        _run(body())
+
+    def test_retry_is_bounded(self, monkeypatch):
+        """一直失败也必须停下来,不能无限重试拖住调度链。"""
+        calls = {"n": 0}
+
+        async def always_fail():
+            calls["n"] += 1
+            raise RuntimeError("4005")
+
+        monkeypatch.setattr("app.services.steamdt.fetch_broad_kline", always_fail)
+        monkeypatch.setattr(mi, "_RETRY_WAIT_S", 0)
+
+        async def body():
+            async with memory_db() as Session:
+                core_db.AsyncSessionLocal = Session
+                r = await mi.sync_market_index()
+                assert r["ok"] is False
+                assert calls["n"] == mi._FETCH_ATTEMPTS
+        _run(body())

@@ -35,6 +35,7 @@ kline type=1 一次返回 90 天小时线，所以同一次调用既填当天、
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -52,6 +53,16 @@ PT = ZoneInfo("America/Los_Angeles")
 INDEX_PT_HOUR = 0
 # K 线各列：[时间戳, 开盘, 收盘, 最高, 最低]
 _CLOSE_IDX = 2
+
+# 上游返回的是**没有字段名的纯数组**，列序一旦调整，我们会把错误的列静默当成指数写进去
+# ——最坏情况是把时间戳(约 1.78e9)当指数入库，而它照样 > 0，光靠正数校验拦不住。
+# 因此两端都做合理性带：时间戳必须像时间戳，指数必须像指数。
+# 指数历史区间实测 600~1662（2025-10 崩盘前后），这里放得很宽，只用于拦列序错位。
+_TS_MIN, _TS_MAX = 1_000_000_000, 4_000_000_000      # 2001-09 ~ 2096
+_IDX_MIN, _IDX_MAX = 1.0, 100_000.0
+
+_FETCH_ATTEMPTS = 3
+_RETRY_WAIT_S = 65      # 该端点实测约 1 次/分钟
 
 
 def _pt_day_and_hour(ts) -> tuple[str, int]:
@@ -71,13 +82,16 @@ def extract_daily_index(kline: list[list]) -> dict[str, float]:
         if not isinstance(row, (list, tuple)) or len(row) <= _CLOSE_IDX:
             continue
         try:
-            day, hour = _pt_day_and_hour(row[0])
+            ts = int(row[0])
+            if not (_TS_MIN <= ts <= _TS_MAX):
+                continue          # 第 0 列不像时间戳 → 列序可能变了，不猜
+            day, hour = _pt_day_and_hour(ts)
             if hour != INDEX_PT_HOUR:
                 continue
             val = float(row[_CLOSE_IDX])
         except (TypeError, ValueError, OSError, OverflowError):
             continue
-        if val > 0:
+        if _IDX_MIN <= val <= _IDX_MAX:
             out[day] = val
     return out
 
@@ -98,11 +112,24 @@ async def sync_market_index(
     from app.services.steamdt import fetch_broad_kline
 
     if kline is None:
-        try:
-            kline = await fetch_broad_kline()
-        except Exception as e:
-            logger.error("market_index: 拉取大盘 K 线失败: %s", e)
-            return {"ok": False, "error": str(e), "filled": 0}
+        # 4005（限流）是这个平台的常态错误码，实测该端点约 1 次/分钟。每天只调一次
+        # 本来不该撞上，但 00:05 的 collect_prices 也在打同一个平台，留点余量。
+        # 重试是有界的：失败到底也只是今天没填上，明天那次会连着补回来。
+        last_err = None
+        for attempt in range(_FETCH_ATTEMPTS):
+            try:
+                kline = await fetch_broad_kline()
+                break
+            except Exception as e:
+                last_err = e
+                logger.warning("market_index: 第 %d/%d 次拉取失败: %s",
+                               attempt + 1, _FETCH_ATTEMPTS, e)
+                if attempt < _FETCH_ATTEMPTS - 1:
+                    await asyncio.sleep(_RETRY_WAIT_S)
+        if kline is None:
+            logger.error("market_index: 拉取大盘 K 线失败(已重试 %d 次): %s",
+                         _FETCH_ATTEMPTS, last_err)
+            return {"ok": False, "error": str(last_err), "filled": 0}
 
     by_day = extract_daily_index(kline)
     if not by_day:
