@@ -37,6 +37,22 @@
 
     const _CHANGELOG = Object.freeze([
           {
+            version: '0.13.5', date: '2026-08-01', major: true,
+            title_cn: '大盘指数自动填入(并自动补齐历史空缺)',
+            title_en: 'Market Index Auto-Fill (with Automatic Backfill)',
+            added: [
+              ['收益追踪表的「大盘指数」不再需要每天手动敲:每日 00:03 自动取值,并把此前所有空缺一并补上(此前已连空 10 天)', 'The market index column now fills itself daily and backfills every past gap'],
+              ['数据源一次返回 90 天小时线,所以任务哪天没跑成、服务停了几天,下次会自动追平,不用人工补录', 'The source returns 90 days of hourly data, so a missed run self-heals on the next one'],
+              ['手动触发接口:POST /api/tracker/market-index/sync', 'Manual trigger endpoint for immediate sync'],
+            ],
+            fixed: [],
+            changed: [
+              ['取值口径是拿你已有的 78 天手工值反推出来的(时区×字段×小时全组合比对),定为 PT 0 点收盘价 —— 其中 6 天与手工值完全精确匹配,且恰好与库存价值写入同一时刻', 'The exact timepoint was reverse-engineered from 78 days of your manual entries; 6 days match exactly'],
+              ['只填空、不覆盖:235 天手工数据原样保留,要覆盖必须显式指定', 'Fills only empty cells — 235 days of manual entries are left untouched'],
+            ],
+            commits: [],
+          },
+          {
             version: '0.13.4', date: '2026-07-31', major: true,
             title_cn: '手滑低价防线：价格明显低于市价时先问一句',
             title_en: 'Fat-Finger Guard: Confirm Before Listing Well Below Market',
