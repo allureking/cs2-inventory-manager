@@ -32,6 +32,7 @@ from app.services.collector import (
     snapshot_portfolio,
 )
 from app.services.csqaq import csqaq_daily_sync
+from app.services.market_index import run_market_index_sync
 from app.services.tracker import snapshot_daily
 
 scheduler = AsyncIOScheduler()
@@ -167,6 +168,11 @@ async def startup():
     # 00:02  CSQAQ 外部数据同步
     scheduler.add_job(csqaq_daily_sync, "cron", hour=0, minute=2, id="csqaq_sync",
                       timezone=_PDT, misfire_grace_time=600)
+    # 00:03  大盘指数：取 PT 0 点那根小时线的收盘价,与 snapshot_daily 写的库存价值同刻。
+    #        一次调用带 90 天历史,所以哪天没跑成、服务停了几天,下次会自动追平。
+    #        grace 放到 1 小时:错过窗口也照样补,反正取的是固定那根 K 线、与执行时刻无关。
+    scheduler.add_job(run_market_index_sync, "cron", hour=0, minute=3, id="market_index",
+                      timezone=_PDT, misfire_grace_time=3600, max_instances=1)
     # 00:05  SteamDT 采价（268品/3批，约5分钟完成）
     scheduler.add_job(collect_prices, "cron", hour=0, minute=5, id="price_collect",
                       timezone=_PDT, misfire_grace_time=600, max_instances=1)

@@ -132,6 +132,52 @@ async def fetch_batch_prices(
 
 
 # ------------------------------------------------------------------ #
+#  CS2 大盘指数                                                         #
+# ------------------------------------------------------------------ #
+
+# kline type 语义官方文档没写（description 为空）。实测 type=1 = 小时线，
+# 一次返回 2160 根 ≈ 90 天；type=2/3 未逐一确认（探测时撞 4005 限流）。
+BROAD_KLINE_HOURLY = 1
+
+
+async def fetch_broad_kline(kline_type: int = BROAD_KLINE_HOURLY) -> list[list]:
+    """
+    POST /open/cs2/broad/v1/kline —— CS2 大盘指数 K 线。
+
+    返回每根形如 [时间戳(秒, str), 开盘, 收盘, 最高, 最低]。
+    实测 type=1 为小时线、覆盖近 90 天，因此一次调用既能取当日值、也能回补历史空缺。
+    """
+    client = _get_steamdt_http()
+    r = await client.post(
+        f"{BASE_URL}/open/cs2/broad/v1/kline",
+        json={"type": kline_type},
+        headers=_auth_headers(),
+    )
+    r.raise_for_status()
+    resp = SteamDTResponse.model_validate(r.json())
+    _check_response(resp)
+    return list(resp.data or [])
+
+
+async def fetch_broad_index() -> dict:
+    """
+    GET /open/cs2/broad/v1/index —— 大盘最新指数（含近 24h 每小时序列）。
+
+    只给当前值，无法回补历史，因此仅作为 kline 失败时取「当下」的兜底。
+    注意首次调用可能返回 errorCode 4012「初始化权限中」，属暂态，重试即可。
+    """
+    client = _get_steamdt_http()
+    r = await client.get(
+        f"{BASE_URL}/open/cs2/broad/v1/index",
+        headers=_auth_headers(),
+    )
+    r.raise_for_status()
+    resp = SteamDTResponse.model_validate(r.json())
+    _check_response(resp)
+    return resp.data or {}
+
+
+# ------------------------------------------------------------------ #
 #  7 天均价查询                                                         #
 # ------------------------------------------------------------------ #
 

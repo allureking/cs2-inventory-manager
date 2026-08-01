@@ -140,3 +140,21 @@ async def export_excel(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=daily_tracker.xlsx"},
     )
+
+
+@router.post("/market-index/sync")
+async def sync_market_index_api(days: int = 90, overwrite: bool = False):
+    """
+    手动触发大盘指数同步（默认只补空缺，不覆盖手工填过的值）。
+
+    调度器每天 00:03 PT 会自动跑一次；这个端点用于首次回填、或某天想立刻补上。
+    overwrite=true 会连已有值一起覆盖 —— 会抹掉手工录入，默认关闭。
+    """
+    from app.services.market_index import sync_market_index
+
+    if days < 1 or days > 90:
+        raise HTTPException(status_code=422, detail="days 需在 1..90（K 线只给 90 天）")
+    result = await sync_market_index(days=days, overwrite=overwrite)
+    if not result.get("ok"):
+        raise HTTPException(status_code=502, detail=result.get("error") or "同步失败")
+    return result
