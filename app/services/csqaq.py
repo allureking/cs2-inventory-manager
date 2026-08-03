@@ -205,6 +205,8 @@ async def sync_all_items() -> int:
     csqaq_sync_state["status"] = "syncing"
     synced = 0
     errors = 0
+    # 六个 ATH 候选键全 miss 时只警告一次，避免 234 个品刷 234 条同样的日志
+    _ath_miss_warned = False
     signal_date = datetime.now(timezone.utc).strftime("%Y%m%d")
 
     async with AsyncSessionLocal() as db:
@@ -259,25 +261,43 @@ async def sync_all_items() -> int:
                     turnover = info.get("turnover_number")
                     supply = info.get("statistic")
 
-                    # ── Extract ATH from CSQAQ response ──
-                    # Try common field names for historical max price
+                    # ── Extract ATH from CSQAQ response（AUDIT H3 修正）──
+                    #
+                    # 这六个键是当初猜的，从生产 IP 实测真实响应（96 个字段）：**一个都不存在**。
+                    # 原先猜不中时会 fallback 去扫 sell_price_{1,7,15,30,90,180,365} 取 max
+                    # 当历史最高价 —— 但那批字段实测是「N 日涨跌额」而非价格，实际值形如
+                    # sell_price_15 = -328.0 / sell_price_365 = -20045.5，全是负数。
+                    # 于是 fallback 挑出的其实是「最大的正涨跌额」，被当成 ATH 写库：
+                    # 生产 quant_signal 已有 27,407 行这样的垃圾值（★ Nomad Knife 的
+                    # 「历史最高价」= ¥1.9，M4A1-S Printstream FN = ¥46）。
+                    #
+                    # 之所以一直没炸：下游 quant_engine.py:551 是
+                    # `final_ath = api_ath if api_ath > local_ath else local_ath`，
+                    # 垃圾值偏小时被本地 ATH 顶掉。但偏大时会赢并污染 ath_pct → near_ath 告警。
+                    #
+                    # 现在：只认真实存在的字段；六个键全 miss 时**记 warning 而非静默 fallback**，
+                    # 让字段名漂移可见。ATH 由本地 price_history 的 max(close_price) 提供
+                    # （quant_engine.py:620 已经在算，且那是真的历史收盘价）。
                     csqaq_ath = None
                     for ath_key in ("max_price", "highest_price", "history_max_price",
                                     "ath_price", "max_sell_price", "sell_price_max"):
                         val = info.get(ath_key)
-                        if val and float(val) > 0:
-                            csqaq_ath = float(val)
-                            break
-                    # Fallback: compute max from historical price snapshots in response
-                    if csqaq_ath is None:
-                        hist_prices = []
-                        for suffix in ("1", "7", "15", "30", "90", "180", "365"):
-                            for prefix in ("sell_price_", "buff_sell_price_", "steam_sell_price_"):
-                                hp = info.get(f"{prefix}{suffix}")
-                                if hp and float(hp) > 0:
-                                    hist_prices.append(float(hp))
-                        if hist_prices:
-                            csqaq_ath = max(hist_prices)
+                        try:
+                            if val is not None and float(val) > 0:
+                                csqaq_ath = float(val)
+                                break
+                        except (TypeError, ValueError):
+                            continue
+                    if csqaq_ath is None and not _ath_miss_warned:
+                        logger.warning(
+                            "csqaq: 响应里没有任何已知的 ATH 字段（试过 %s）；"
+                            "本次同步不写 csqaq_ath_price，ATH 回退到本地 price_history。"
+                            "若上游新增了历史最高价字段，请在此登记。样本字段: %s",
+                            "max_price/highest_price/history_max_price/ath_price/"
+                            "max_sell_price/sell_price_max",
+                            sorted(info.keys())[:25],
+                        )
+                        _ath_miss_warned = True
 
                     # Log response keys once per sync for field discovery
                     if synced == 0:

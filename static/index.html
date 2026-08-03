@@ -1444,10 +1444,22 @@
 
       <!-- Data freshness bar -->
       <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3 px-1 text-[10px] text-slate-700 freshness-bar">
+        <!-- AUDIT Q3：这里显示的是「最后一次真正算过分」的日期,而不是 max(signal_date)。
+             CSQAQ 每天都会 upsert 只含租金/存世量的行,用后者会天天显示「今天」,
+             把信号计算停摆掩盖掉(实际已停摆一个月没被发现)。超过 2 天变黄并标出天数。 -->
         <span x-show="ao.signal_date">
-          <span class="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 mr-1"></span>
+          <span class="inline-block w-1.5 h-1.5 rounded-full mr-1"
+            :style="'background:' + ((ao.signal_stale_days ?? 0) > 2 ? '#fbbf24' : '#3b82f6')"></span>
           <span x-text="t('ts_signal')"></span>
-          <span class="text-slate-500 font-mono" x-text="fmtDate(ao.signal_date)"></span>
+          <span class="font-mono" :class="(ao.signal_stale_days ?? 0) > 2 ? 'text-amber-300' : 'text-slate-500'"
+            x-text="fmtDate(ao.signal_date)"></span>
+          <span x-show="(ao.signal_stale_days ?? 0) > 2" class="text-amber-300"
+            x-text="(nameLang==='cn' ? '（已过期 ' + ao.signal_stale_days + ' 天）'
+                                     : ' (' + ao.signal_stale_days + 'd stale)')"></span>
+        </span>
+        <span x-show="ao.signal_date === null || ao.signal_date === undefined" class="text-amber-300">
+          <span class="inline-block w-1.5 h-1.5 rounded-full mr-1" style="background:#fbbf24"></span>
+          <span x-text="nameLang==='cn' ? '尚无任何评分信号' : 'No scored signals yet'"></span>
         </span>
         <span x-show="ao.collector">
           <span class="text-slate-800">|</span>

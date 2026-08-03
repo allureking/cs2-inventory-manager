@@ -1588,9 +1588,25 @@
           const n = items.length;
           const divisors = [];
           for (let c = 5; c <= n; c++) { if (n % c === 0) divisors.push(c); }
+          // AUDIT H5：原先 w<10 时无条件递归 requestAnimationFrame,没有任何终止条件。
+          // 切到别的 tab 后 #topGrid 被 x-show 置 display:none → offsetWidth 恒为 0 →
+          // 以 60fps 永久空转;而自动刷新每 5 分钟还会再调一次 renderOverviewCharts,
+          // 于是链会不断叠加(实测:切走后 2s 内 143 次,叠 3 条后 2s 内 422 次)。
+          //
+          // 双保险:
+          //  1) 概览页不可见 → 立刻放弃。这是实际发生的场景,再等也等不到宽度,
+          //     而切回概览时 renderOverviewCharts 会重新调用本函数,不会漏渲染。
+          //  2) 重试上限兜底 → 应对「概览可见但布局尚未定」等其它 w<10 的原因,
+          //     60 帧 ≈ 1 秒,足够首帧布局落定,且最坏情况也只是有限次。
+          let _tries = 0;
           const doLayout = () => {
             const w = el.offsetWidth || el.parentElement?.offsetWidth || 0;
-            if (w < 10) { requestAnimationFrame(doLayout); return; }
+            if (w < 10) {
+              if (this.activeTab !== 'overview') return;   // 不可见:不再续帧
+              if (++_tries > 60) return;                   // 兜底:最多等 ~1 秒
+              requestAnimationFrame(doLayout);
+              return;
+            }
             const ideal = Math.floor(w / 110);
             let cols = divisors.length ? divisors.reduce((best, d) => Math.abs(d - ideal) < Math.abs(best - ideal) ? d : best) : ideal;
             cols = Math.max(5, Math.min(n, cols));

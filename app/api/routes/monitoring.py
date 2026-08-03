@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -52,8 +52,16 @@ async def system_status(db: AsyncSession = Depends(get_db)):
     ).scalar()
 
     # Latest signal date
+    # AUDIT Q3：只认「真正算过分」的行。csqaq_daily_sync 每天都会 upsert 只含
+    # 租金/存世量的 quant_signal 行（技术指标列全 NULL），用裸 max(signal_date)
+    # 会天天显示「今天」，把信号计算停摆掩盖掉（实际已停摆一个月无人察觉）。
     latest_signal = (
-        await db.execute(select(func.max(QuantSignal.signal_date)))
+        await db.execute(
+            select(func.max(QuantSignal.signal_date)).where(
+                or_(QuantSignal.sell_score.isnot(None),
+                    QuantSignal.opportunity_score.isnot(None))
+            )
+        )
     ).scalar()
 
     # Latest portfolio snapshot
@@ -205,8 +213,16 @@ async def data_freshness(db: AsyncSession = Depends(get_db)):
     ).scalar()
 
     # Latest signal
+    # AUDIT Q3：只认「真正算过分」的行。csqaq_daily_sync 每天都会 upsert 只含
+    # 租金/存世量的 quant_signal 行（技术指标列全 NULL），用裸 max(signal_date)
+    # 会天天显示「今天」，把信号计算停摆掩盖掉（实际已停摆一个月无人察觉）。
     latest_signal = (
-        await db.execute(select(func.max(QuantSignal.signal_date)))
+        await db.execute(
+            select(func.max(QuantSignal.signal_date)).where(
+                or_(QuantSignal.sell_score.isnot(None),
+                    QuantSignal.opportunity_score.isnot(None))
+            )
+        )
     ).scalar()
 
     # Latest portfolio snapshot

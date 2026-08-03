@@ -25,6 +25,8 @@ import time
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from datetime import datetime, timezone
+
 from sqlalchemy import and_, func, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -61,11 +63,31 @@ async def analysis_overview(db: AsyncSession = Depends(get_db)):
     if _ao_cache["data"] is not None and time.monotonic() - _ao_cache["ts"] < _AO_TTL:
         return _ao_cache["data"]
 
-    # Latest signal_date
+    # 最新「有评分」的信号日（AUDIT Q3）
+    #
+    # 原先取的是 max(signal_date) 不带任何过滤。但 csqaq_daily_sync 每天 00:02 会为
+    # 244 个品 upsert quant_signal 行、只填租金/成交量/存世量，技术指标列全是 NULL。
+    # 于是 signal_date 每天都是"今天"，前端新鲜度条显示一个蓝点 + 今天的日期，
+    # 而实际上最后一次真正算分是 2026-07-02 —— 信号计算停摆整整一个月没被发现。
+    #
+    # 改为只认真正算过分的行。sell_score 与 opportunity_score 任一非空即算「已评分」，
+    # 这样将来只恢复其中一侧的计算也能正确反映。
     latest_date_r = await db.execute(
-        select(func.max(QuantSignal.signal_date))
+        select(func.max(QuantSignal.signal_date)).where(
+            or_(QuantSignal.sell_score.isnot(None),
+                QuantSignal.opportunity_score.isnot(None))
+        )
     )
     latest_date = latest_date_r.scalar()
+
+    # 距今多少天 —— 前端据此把蓝点变黄并提示「已过期 N 天」
+    signal_stale_days = None
+    if latest_date:
+        try:
+            _d = datetime.strptime(str(latest_date), "%Y%m%d").date()
+            signal_stale_days = (datetime.now(timezone.utc).date() - _d).days
+        except (TypeError, ValueError):
+            signal_stale_days = None
 
     # Unread alerts count
     unread_r = await db.execute(
@@ -76,6 +98,7 @@ async def analysis_overview(db: AsyncSession = Depends(get_db)):
     if not latest_date:
         return {
             "signal_date": None,
+            "signal_stale_days": None,
             "unread_alerts": unread_count,
             "avg_sell_score": None,
             "avg_momentum_30": None,
@@ -179,6 +202,7 @@ async def analysis_overview(db: AsyncSession = Depends(get_db)):
 
     result = {
         "signal_date": latest_date,
+        "signal_stale_days": signal_stale_days,
         "unread_alerts": unread_count,
         "avg_sell_score": avg_sell,
         "avg_momentum_30": avg_mom,
